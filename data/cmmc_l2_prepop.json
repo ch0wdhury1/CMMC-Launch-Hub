@@ -1,0 +1,49 @@
+{
+  "validationStatus": "PASS",
+  "normalizedRequirements": [
+    {
+      "requirementId": "SC.L2-3.13.11",
+      "domain": "SC",
+      "level": 2,
+      "requirementName": "CUI ENCRYPTION",
+      "requirementStatement": "Employ FIPS-validated cryptography when used to protect the confidentiality of CUI.",
+      "assessmentObjectives": [
+        {
+          "objectiveId": "SC.L2-3.13.11[a]",
+          "determinationStatement": "FIPS-validated cryptography is employed to protect the confidentiality of CUI.",
+          "assessmentMethods": [
+            "examine",
+            "interview",
+            "test"
+          ],
+          "assessmentObjects": [
+            "System and communications protection policy",
+            "procedures addressing cryptographic protection",
+            "system security plan",
+            "system design documentation",
+            "system configuration settings and associated documentation",
+            "cryptographic module validation certificates",
+            "list of FIPS-validated cryptographic modules",
+            "system audit logs and records",
+            "System or network administrators",
+            "personnel with information security responsibilities",
+            "system developers",
+            "personnel with responsibilities for cryptographic protection",
+            "Mechanisms supporting or implementing cryptographic protection"
+          ]
+        }
+      ],
+      "discussion": "Cryptography can be employed to support many security solutions including the protection of controlled unclassified information, the provision of digital signatures, and the enforcement of information separation when authorized individuals have the necessary clearances for such information but lack the necessary formal access approvals. Cryptography can also be used to support random number generation and hash generation. Cryptographic standards include FIPS-validated cryptography and/or NSA-approved cryptography.",
+      "furtherDiscussion": "FIPS-validated cryptography means the cryptographic module has to have been tested and validated to meet FIPS 140-2 requirements. Simply using an approved algorithm is not sufficient – the module (software and/or hardware) used to implement the algorithm must be separately validated under FIPS 140. Accordingly, FIPS-validated cryptography is required to protect CUI when transmitted or stored outside the protected environment of the covered OSA information system (including wireless/remote access). Encryption used for other purposes, such as within applications or devices within the protected environment of the covered OSA information system, would not need to use FIPS-validated cryptography. This requirement, SC.L2-3.13.11, complements AC.L2-3.1.19, MP.L2-3.8.6, SC.L2-3.13.8, and SC.L2-3.13.16 by specifying that FIPS-validated cryptography must be used. While FIPS-validated modules and algorithms are critical for protecting CUI, in limited cases Enduring Exceptions and temporary deficiencies may apply when implementing such cryptographic mechanisms.",
+      "examples": "You are a system administrator responsible for deploying encryption on all devices that contain CUI. You must ensure that the encryption you use on the devices is FIPS-validated cryptography [a]. An employee informs you of a need to carry a large volume of CUI offsite and asks for guidance on how to do so. You provide the user with disk encryption software that you have verified via the NIST website that uses a CMVP-validated encryption module [a]. Once the encryption software is active, the user copies the CUI data onto the drive for transport.",
+      "references": "NIST SP 800-171 Rev. 2 3.13.11",
+      "sourceTrace": {
+        "pdfVersion": "2.13",
+        "pageStart": 247,
+        "pageEnd": 248
+      },
+      "extractionConfidence": "HIGH"
+    }
+  ],
+  "issues": []
+}

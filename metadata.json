@@ -1,0 +1,5 @@
+{
+  "name": "CMMC Launch Hub (Level 1 & 2) V2.0",
+  "description": "A comprehensive self-assessment and compliance management tool for CMMC Level 1 and Level 2. Featuring AI-powered requirements extraction from official DoD Assessment Guides, evidence tracking, and a multi-stage validation pipeline for assessor-defensible reporting.",
+  "requestFramePermissions": []
+}

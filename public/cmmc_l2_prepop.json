@@ -1,0 +1,1141 @@
+
+{
+  "app_name": "CMMC Launch Hub",
+  "version": "1.0",
+  "level": "CMMC Level 2",
+  "domains": [
+    {
+      "domain_id": "AC",
+      "domain_name": "Access Control (AC)",
+      "practices": [
+        {
+          "requirementId": "AC.L2-3.1.3",
+          "requirementName": "CONTROL INFORMATION FLOW",
+          "requirementStatement": "Control the flow of CUI in accordance with approved authorizations.",
+          "assessmentObjectives": [
+            { "objectiveId": "AC.L2-3.1.3[a]", "determinationStatement": "authorizations for controlling the flow of CUI are defined;" },
+            { "objectiveId": "AC.L2-3.1.3[b]", "determinationStatement": "the flow of CUI is controlled in accordance with approved authorizations." }
+          ],
+          "discussion": "Information flow control regulates where information is allowed to travel within a system and between systems.",
+          "references": ["NIST SP 800-171 Rev. 2 3.1.3"]
+        },
+        {
+          "requirementId": "AC.L2-3.1.4",
+          "requirementName": "SEPARATION OF DUTIES",
+          "requirementStatement": "Separate the duties of individuals to reduce the risk of malevolent activity without collusion.",
+          "assessmentObjectives": [
+            { "objectiveId": "AC.L2-3.1.4[a]", "determinationStatement": "duties of individuals that create a risk of malevolent activity without collusion are defined;" },
+            { "objectiveId": "AC.L2-3.1.4[b]", "determinationStatement": "the duties of individuals are separated in accordance with the definitions." }
+          ],
+          "discussion": "Separation of duties is a key internal control concept that involves dividing tasks and associated privileges among multiple people.",
+          "references": ["NIST SP 800-171 Rev. 2 3.1.4"]
+        },
+        {
+          "requirementId": "AC.L2-3.1.5",
+          "requirementName": "LEAST PRIVILEGE",
+          "requirementStatement": "Employ the principle of least privilege, including for specific security functions and privileged accounts.",
+          "assessmentObjectives": [
+            { "objectiveId": "AC.L2-3.1.5[a]", "determinationStatement": "privileged accounts are identified;" },
+            { "objectiveId": "AC.L2-3.1.5[b]", "determinationStatement": "access to privileged accounts is authorized in accordance with the principle of least privilege;" },
+            { "objectiveId": "AC.L2-3.1.5[c]", "determinationStatement": "security functions are identified; and" },
+            { "objectiveId": "AC.L2-3.1.5[d]", "determinationStatement": "access to security functions is authorized in accordance with the principle of least privilege." }
+          ],
+          "discussion": "Organizations employ the principle of least privilege for specific duties and authorized accesses for users and processes. The principle of least privilege is applied with the goal of authorized privileges no higher than necessary to accomplish required organizational missions or business functions. Organizations consider the creation of additional processes, roles, and system accounts as necessary, to achieve least privilege. Organizations also apply least privilege to the development, implementation, and operation of organizational systems. Security functions include establishing system accounts, setting events to be logged, setting intrusion detection parameters, and configuring access authorizations (i.e., permissions, privileges).",
+          "furtherDiscussion": "The principle of least privilege applies to all users and processes on all systems, but it is critical to systems containing or accessing CUI. Least privilege: restricts user access to only the machines and information needed to fulfill job responsibilities; and limits what system configuration settings users can change, only allowing individuals with a business need to change them.",
+          "references": ["NIST SP 800-171 Rev. 2 3.1.5"]
+        },
+        {
+          "requirementId": "AC.L2-3.1.6",
+          "requirementName": "NON-PRIVILEGED USERS",
+          "requirementStatement": "Use non-privileged accounts or roles when accessing non-security functions.",
+          "assessmentObjectives": [
+            { "objectiveId": "AC.L2-3.1.6[a]", "determinationStatement": "non-privileged accounts or roles are used when accessing non-security functions." }
+          ],
+          "discussion": "Using non-privileged accounts for daily activities reduces the impact of an account compromise.",
+          "references": ["NIST SP 800-171 Rev. 2 3.1.6"]
+        },
+        {
+          "requirementId": "AC.L2-3.1.7",
+          "requirementName": "UNSUCCESSFUL LOGON ATTEMPTS",
+          "requirementStatement": "Prevent non-privileged users from executing privileged functions and, for privileged users and functions, capture the execution of such functions in audit logs.",
+          "assessmentObjectives": [
+            { "objectiveId": "AC.L2-3.1.7[a]", "determinationStatement": "non-privileged users are prevented from executing privileged functions;" },
+            { "objectiveId": "AC.L2-3.1.7[b]", "determinationStatement": "execution of privileged functions is captured in audit logs." }
+          ],
+          "discussion": "This practice ensures that administrative power is controlled and that actions taken by administrators are recorded for review.",
+          "references": ["NIST SP 800-171 Rev. 2 3.1.7"]
+        },
+        {
+          "requirementId": "AC.L2-3.1.8",
+          "requirementName": "SYSTEM USE NOTIFICATION",
+          "requirementStatement": "Limit unsuccessful logon attempts.",
+          "assessmentObjectives": [
+            { "objectiveId": "AC.L2-3.1.8[a]", "determinationStatement": "the number of consecutive unsuccessful logon attempts is defined;" },
+            { "objectiveId": "AC.L2-3.1.8[b]", "determinationStatement": "unsuccessful logon attempts are limited to the defined number." }
+          ],
+          "discussion": "Limiting logon attempts protects against brute-force password guessing attacks.",
+          "references": ["NIST SP 800-171 Rev. 2 3.1.8"]
+        },
+        {
+          "requirementId": "AC.L2-3.1.9",
+          "requirementName": "SESSION LOCK",
+          "requirementStatement": "Provide privacy and security notices that are consistent with applicable policies and procedures.",
+          "assessmentObjectives": [
+            { "objectiveId": "AC.L2-3.1.9[a]", "determinationStatement": "privacy and security notices are provided;" },
+            { "objectiveId": "AC.L2-3.1.9[b]", "determinationStatement": "the notices are consistent with applicable policies and procedures." }
+          ],
+          "discussion": "Notices warn users that the system is for authorized use and that activity may be monitored.",
+          "references": ["NIST SP 800-171 Rev. 2 3.1.9"]
+        },
+        {
+          "requirementId": "AC.L2-3.1.10",
+          "requirementName": "SESSION TERMINATION",
+          "requirementStatement": "Use session lock with contextual-sensitive information to prevent access and viewing of data after a period of inactivity.",
+          "assessmentObjectives": [
+            { "objectiveId": "AC.L2-3.1.10[a]", "determinationStatement": "the period of inactivity after which a session lock is required is defined;" },
+            { "objectiveId": "AC.L2-3.1.10[b]", "determinationStatement": "a session lock is used after the defined period of inactivity." }
+          ],
+          "discussion": "Session locks prevent unauthorized users from accessing an unattended computer or session.",
+          "references": ["NIST SP 800-171 Rev. 2 3.1.10"]
+        },
+        {
+          "requirementId": "AC.L2-3.1.11",
+          "requirementName": "TERMINATE NETWORK CONNECTIONS",
+          "requirementStatement": "Terminate (automatically) a user session after a defined condition.",
+          "assessmentObjectives": [
+            { "objectiveId": "AC.L2-3.1.11[a]", "determinationStatement": "conditions for automatically terminating a user session are defined;" },
+            { "objectiveId": "AC.L2-3.1.11[b]", "determinationStatement": "a user session is automatically terminated after the defined conditions." }
+          ],
+          "discussion": "Automatic termination of inactive sessions helps clear system resources and reduces the risk of session hijacking.",
+          "references": ["NIST SP 800-171 Rev. 2 3.1.11"]
+        },
+        {
+          "requirementId": "AC.L2-3.1.12",
+          "requirementName": "MONITOR AND CONTROL REMOTE ACCESS",
+          "requirementStatement": "Monitor and control remote access sessions.",
+          "assessmentObjectives": [
+            { "objectiveId": "AC.L2-3.1.12[a]", "determinationStatement": "remote access sessions are monitored;" },
+            { "objectiveId": "AC.L2-3.1.12[b]", "determinationStatement": "remote access sessions are controlled." }
+          ],
+          "discussion": "Remote access is any access to an organizational system by a user communicating through an external network.",
+          "references": ["NIST SP 800-171 Rev. 2 3.1.12"]
+        },
+        {
+          "requirementId": "AC.L2-3.1.13",
+          "requirementName": "USE CRYPTOGRAPHY FOR REMOTE SESSIONS",
+          "requirementStatement": "Employ cryptographic mechanisms to protect the confidentiality of remote access sessions.",
+          "assessmentObjectives": [
+            { "objectiveId": "AC.L2-3.1.13[a]", "determinationStatement": "cryptographic mechanisms are employed to protect the confidentiality of remote access sessions." }
+          ],
+          "discussion": "Encryption ensures that data transmitted during a remote session cannot be intercepted and read by unauthorized parties.",
+          "references": ["NIST SP 800-171 Rev. 2 3.1.13"]
+        },
+        {
+          "requirementId": "AC.L2-3.1.14",
+          "requirementName": "ROUTE REMOTE ACCESS THROUGH MANAGED POINTS",
+          "requirementStatement": "Route remote access through managed access control points.",
+          "assessmentObjectives": [
+            { "objectiveId": "AC.L2-3.1.14[a]", "determinationStatement": "managed access control points are defined;" },
+            { "objectiveId": "AC.L2-3.1.14[b]", "determinationStatement": "remote access is routed through the defined managed access control points." }
+          ],
+          "discussion": "Centralizing remote access through specific points allows for consistent application of security controls and monitoring.",
+          "references": ["NIST SP 800-171 Rev. 2 3.1.14"]
+        },
+        {
+          "requirementId": "AC.L2-3.1.15",
+          "requirementName": "AUTHORIZE REMOTE ACCESS FOR PRIVILEGED FUNCTIONS",
+          "requirementStatement": "Authorize remote access for privileged functions and security-relevant information.",
+          "assessmentObjectives": [
+            { "objectiveId": "AC.L2-3.1.15[a]", "determinationStatement": "remote access for privileged functions is authorized;" },
+            { "objectiveId": "AC.L2-3.1.15[b]", "determinationStatement": "remote access for security-relevant information is authorized." }
+          ],
+          "discussion": "Performing administrative tasks remotely requires explicit authorization due to the higher risk associated with those functions.",
+          "references": ["NIST SP 800-171 Rev. 2 3.1.15"]
+        },
+        {
+          "requirementId": "AC.L2-3.1.16",
+          "requirementName": "WIRELESS ACCESS AUTHORIZATION",
+          "requirementStatement": "Authorize wireless access prior to allowing such connections.",
+          "assessmentObjectives": [
+            { "objectiveId": "AC.L2-3.1.16[a]", "determinationStatement": "wireless access points are identified; and" },
+            { "objectiveId": "AC.L2-3.1.16[b]", "determinationStatement": "wireless access is authorized prior to allowing such connections." }
+          ],
+          "discussion": "Establishing usage restrictions and configuration/connection requirements for wireless access provides criteria for authorization decisions.",
+          "references": ["NIST SP 800-171 Rev. 2 3.1.16"]
+        },
+        {
+          "requirementId": "AC.L2-3.1.17",
+          "requirementName": "WIRELESS ACCESS PROTECTION",
+          "requirementStatement": "Protect wireless access using authentication and encryption.",
+          "assessmentObjectives": [
+            { "objectiveId": "AC.L2-3.1.17[a]", "determinationStatement": "wireless access to the system is protected using authentication; and" },
+            { "objectiveId": "AC.L2-3.1.17[b]", "determinationStatement": "wireless access to the system is protected using encryption." }
+          ],
+          "discussion": "Organizations authenticate individuals and devices to help protect wireless access to the system.",
+          "references": ["NIST SP 800-171 Rev. 2 3.1.17"]
+        },
+        {
+          "requirementId": "AC.L2-3.1.18",
+          "requirementName": "MOBILE DEVICE CONNECTION",
+          "requirementStatement": "Control connection of mobile devices.",
+          "assessmentObjectives": [
+            { "objectiveId": "AC.L2-3.1.18[a]", "determinationStatement": "mobile devices that process, store, or transmit CUI are identified;" },
+            { "objectiveId": "AC.L2-3.1.18[b]", "determinationStatement": "mobile device connections are authorized; and" },
+            { "objectiveId": "AC.L2-3.1.18[c]", "determinationStatement": "mobile device connections are monitored and logged." }
+          ],
+          "discussion": "A mobile device is a computing device that has a small form factor such that it can easily be carried by a single individual.",
+          "references": ["NIST SP 800-171 Rev. 2 3.1.18"]
+        },
+        {
+          "requirementId": "AC.L2-3.1.19",
+          "requirementName": "ENCRYPT CUI ON MOBILE",
+          "requirementStatement": "Encrypt CUI on mobile devices and mobile computing platforms.",
+          "assessmentObjectives": [
+            { "objectiveId": "AC.L2-3.1.19[a]", "determinationStatement": "mobile devices and mobile computing platforms that process, store, or transmit CUI are identified; and" },
+            { "objectiveId": "AC.L2-3.1.19[b]", "determinationStatement": "encryption is employed to protect CUI on identified mobile devices and mobile computing platforms." }
+          ],
+          "discussion": "Organizations can employ full-device encryption or container-based encryption to protect the confidentiality of CUI.",
+          "references": ["NIST SP 800-171 Rev. 2 3.1.19"]
+        }
+      ]
+    },
+    {
+      "domain_id": "AU",
+      "domain_name": "Audit and Accountability (AU)",
+      "practices": [
+        {
+          "requirementId": "AU.L2-3.3.1",
+          "requirementName": "SYSTEM AUDIT LOGS",
+          "requirementStatement": "Create and retain system audit logs and records to the extent needed to enable the monitoring, analysis, investigation, and reporting of unlawful or unauthorized system activity.",
+          "assessmentObjectives": [
+            { "objectiveId": "AU.L2-3.3.1[a]", "determinationStatement": "system audit logs and records are created to enable monitoring, analysis, investigation, and reporting of unlawful or unauthorized activity;" },
+            { "objectiveId": "AU.L2-3.3.1[b]", "determinationStatement": "system audit logs and records are retained to enable monitoring, analysis, investigation, and reporting of unlawful or unauthorized activity." }
+          ],
+          "discussion": "Audit logging involves recording significant events within the system to provide a trail for investigation.",
+          "references": ["NIST SP 800-171 Rev. 2 3.3.1"]
+        },
+        {
+          "requirementId": "AU.L2-3.3.2",
+          "requirementName": "USER ACCOUNTABILITY",
+          "requirementStatement": "Ensure that actions of individual system users can be uniquely traced to those users so they can be held accountable for their actions.",
+          "assessmentObjectives": [
+            { "objectiveId": "AU.L2-3.3.2[a]", "determinationStatement": "actions of individual system users are uniquely traced to those users." }
+          ],
+          "discussion": "This practice supports non-repudiation and ensures that users know their actions are being recorded and can be attributed back to them.",
+          "references": ["NIST SP 800-171 Rev. 2 3.3.2"]
+        },
+        {
+          "requirementId": "AU.L2-3.3.3",
+          "requirementName": "AUDIT REVIEW AND UPDATE",
+          "requirementStatement": "Review and update logged events.",
+          "assessmentObjectives": [
+            { "objectiveId": "AU.L2-3.3.3[a]", "determinationStatement": "logged events are reviewed;" },
+            { "objectiveId": "AU.L2-3.3.3[b]", "determinationStatement": "logged events are updated." }
+          ],
+          "discussion": "Reviewing audit logs helps identify anomalies and security incidents.",
+          "references": ["NIST SP 800-171 Rev. 2 3.3.3"]
+        },
+        {
+          "requirementId": "AU.L2-3.3.4",
+          "requirementName": "AUDIT FAILURE ALERT",
+          "requirementStatement": "Alert in the event of an audit logging process failure.",
+          "assessmentObjectives": [
+            { "objectiveId": "AU.L2-3.3.4[a]", "determinationStatement": "an alert is provided in the event of an audit logging process failure." }
+          ],
+          "discussion": "Audit logging failures must be detected and reported immediately.",
+          "references": ["NIST SP 800-171 Rev. 2 3.3.4"]
+        },
+        {
+          "requirementId": "AU.L2-3.3.5",
+          "requirementName": "AUDIT CORRELATION",
+          "requirementStatement": "Correlate audit record review, analysis, and reporting processes for investigation and response to indications of unlawful, unauthorized, suspicious, or unusual activity.",
+          "assessmentObjectives": [
+            { "objectiveId": "AU.L2-3.3.5[a]", "determinationStatement": "audit record review, analysis, and reporting processes are correlated for investigation and response to indications of unlawful, unauthorized, suspicious, or unusual activity." }
+          ],
+          "discussion": "Correlation involves looking for patterns across different logs.",
+          "references": ["NIST SP 800-171 Rev. 2 3.3.5"]
+        },
+        {
+          "requirementId": "AU.L2-3.3.6",
+          "requirementName": "AUDIT REDUCTION",
+          "requirementStatement": "Provide a system-wide (logical or physical) audit capability that reduces the amount of information needed for investigation and response to anomalies.",
+          "assessmentObjectives": [
+            { "objectiveId": "AU.L2-3.3.6[a]", "determinationStatement": "a system-wide (logical or physical) audit capability is provided;" },
+            { "objectiveId": "AU.L2-3.3.6[b]", "determinationStatement": "the audit capability reduces the amount of information needed for investigation and response to anomalies." }
+          ],
+          "discussion": "Audit reduction involves filtering out non-essential log data.",
+          "references": ["NIST SP 800-171 Rev. 2 3.3.6"]
+        },
+        {
+          "requirementId": "AU.L2-3.3.7",
+          "requirementName": "AUDIT AGGREGATION",
+          "requirementStatement": "Provide a system capability that allows for the correlation of audit records from multiple systems and components.",
+          "assessmentObjectives": [
+            { "objectiveId": "AU.L2-3.3.7[a]", "determinationStatement": "a system capability that allows for the correlation of audit records from multiple systems and components is provided." }
+          ],
+          "discussion": "This is typically achieved via centralized log management.",
+          "references": ["NIST SP 800-171 Rev. 2 3.3.7"]
+        },
+        {
+          "requirementId": "AU.L2-3.3.8",
+          "requirementName": "AUDIT DATA PROTECTION",
+          "requirementStatement": "Protect audit information and audit tools from unauthorized access, modification, and deletion.",
+          "assessmentObjectives": [
+            { "objectiveId": "AU.L2-3.3.8[a]", "determinationStatement": "audit information is protected from unauthorized access;" },
+            { "objectiveId": "AU.L2-3.3.8[b]", "determinationStatement": "audit information is protected from unauthorized modification;" },
+            { "objectiveId": "AU.L2-3.3.8[c]", "determinationStatement": "audit information is protected from unauthorized deletion; and" },
+            { "objectiveId": "AU.L2-3.3.8[d]", "determinationStatement": "audit tools are protected from unauthorized access, modification, and deletion." }
+          ],
+          "discussion": "Audit logs are prime targets for attackers trying to hide their tracks.",
+          "references": ["NIST SP 800-171 Rev. 2 3.3.8"]
+        },
+        {
+          "requirementId": "AU.L2-3.3.9",
+          "requirementName": "AUDIT MANAGEMENT LIMITATION",
+          "requirementStatement": "Limit management of audit logging functionality to a subset of privileged users.",
+          "assessmentObjectives": [
+            { "objectiveId": "AU.L2-3.3.9[a]", "determinationStatement": "privileged users authorized to manage audit logging functionality are identified; and" },
+            { "objectiveId": "AU.L2-3.3.9[b]", "determinationStatement": "management of audit logging functionality is limited to the identified subset of privileged users." }
+          ],
+          "discussion": "Only specific security administrators should be able to manage logging.",
+          "references": ["NIST SP 800-171 Rev. 2 3.3.9"]
+        }
+      ]
+    },
+    {
+      "domain_id": "AT",
+      "domain_name": "Awareness and Training (AT)",
+      "practices": [
+        {
+          "requirementId": "AT.L2-3.2.1",
+          "requirementName": "ROLE-BASED RISK AWARENESS",
+          "requirementStatement": "Ensure that managers, systems administrators, and users of organizational systems are made aware of the security risks associated with their activities and of the applicable policies, standards, and procedures related to the security of those systems.",
+          "assessmentObjectives": [
+            { "objectiveId": "AT.L2-3.2.1[a]", "determinationStatement": "security risks associated with organizational activities involving CUI are identified;" },
+            { "objectiveId": "AT.L2-3.2.1[b]", "determinationStatement": "policies, standards, and procedures related to the security of the system are identified;" },
+            { "objectiveId": "AT.L2-3.2.1[c]", "determinationStatement": "managers, systems administrators, and users of the system are made aware of the security risks associated with their activities; and" },
+            { "objectiveId": "AT.L2-3.2.1[d]", "determinationStatement": "managers, systems administrators, and users of the system are made aware of the applicable policies, standards, and procedures related to the security of the system." }
+          ],
+          "discussion": "Organizations determine the content and frequency of security awareness training.",
+          "references": ["NIST SP 800-171 Rev. 2 3.2.1"]
+        },
+        {
+          "requirementId": "AT.L2-3.2.2",
+          "requirementName": "ROLE-BASED TRAINING",
+          "requirementStatement": "Ensure that personnel are trained to carry out their assigned information security-related duties and responsibilities.",
+          "assessmentObjectives": [
+            { "objectiveId": "AT.L2-3.2.2[a]", "determinationStatement": "information security-related duties, roles, and responsibilities are defined;" },
+            { "objectiveId": "AT.L2-3.2.2[b]", "determinationStatement": "information security-related duties, roles, and responsibilities are assigned to designated personnel; and" },
+            { "objectiveId": "AT.L2-3.2.2[c]", "determinationStatement": "personnel are adequately trained to carry out their assigned information security-related duties and responsibilities." }
+          ],
+          "discussion": "Comprehensive role-based training addresses management, operational, and technical roles.",
+          "references": ["NIST SP 800-171 Rev. 2 3.2.2"]
+        },
+        {
+          "requirementId": "AT.L2-3.2.3",
+          "requirementName": "INSIDER THREAT AWARENESS",
+          "requirementStatement": "Provide security awareness training on recognizing and reporting potential indicators of insider threat.",
+          "assessmentObjectives": [
+            { "objectiveId": "AT.L2-3.2.3[a]", "determinationStatement": "potential indicators associated with insider threats are identified; and" },
+            { "objectiveId": "AT.L2-3.2.3[b]", "determinationStatement": "security awareness training on recognizing and reporting potential indicators of insider threat is provided to managers and employees." }
+          ],
+          "discussion": "Insider threat training focuses on recognizing employee behaviors.",
+          "references": ["NIST SP 800-171 Rev. 2 3.2.3"]
+        }
+      ]
+    },
+    {
+      "domain_id": "CM",
+      "domain_name": "Configuration Management (CM)",
+      "practices": [
+        {
+          "requirementId": "CM.L2-3.4.1",
+          "requirementName": "BASELINE CONFIGURATIONS",
+          "requirementStatement": "Establish and maintain baseline configurations and inventories of organizational systems (including hardware, software, firmware, and documentation) throughout the respective system development life cycles.",
+          "assessmentObjectives": [
+            { "objectiveId": "CM.L2-3.4.1[a]", "determinationStatement": "baseline configurations are established;" },
+            { "objectiveId": "CM.L2-3.4.1[b]", "determinationStatement": "baseline configurations are maintained;" },
+            { "objectiveId": "CM.L2-3.4.1[c]", "determinationStatement": "inventories of organizational systems are established;" },
+            { "objectiveId": "CM.L2-3.4.1[d]", "determinationStatement": "inventories of organizational systems are maintained." }
+          ],
+          "discussion": "Baseline configurations are specifications for a system.",
+          "references": ["NIST SP 800-171 Rev. 2 3.4.1"]
+        },
+        {
+          "requirementId": "CM.L2-3.4.2",
+          "requirementName": "SECURITY CONFIGURATION SETTINGS",
+          "requirementStatement": "Establish and enforce security configuration settings for information technology products employed in organizational systems.",
+          "assessmentObjectives": [
+            { "objectiveId": "CM.L2-3.4.2[a]", "determinationStatement": "security configuration settings for information technology products employed in organizational systems are established; and" },
+            { "objectiveId": "CM.L2-3.4.2[b]", "determinationStatement": "security configuration settings for information technology products employed in organizational systems are enforced." }
+          ],
+          "discussion": "Security configuration settings are parameters that affect security posture.",
+          "references": ["NIST SP 800-171 Rev. 2 3.4.2"]
+        },
+        {
+          "requirementId": "CM.L2-3.4.3",
+          "requirementName": "TRACK, REVIEW, APPROVE, AND LOG CHANGES",
+          "requirementStatement": "Track, review, approve, and log changes to organizational systems.",
+          "assessmentObjectives": [
+            { "objectiveId": "CM.L2-3.4.3[a]", "determinationStatement": "changes to organizational systems are tracked;" },
+            { "objectiveId": "CM.L2-3.4.3[b]", "determinationStatement": "changes to organizational systems are reviewed;" },
+            { "objectiveId": "CM.L2-3.4.3[c]", "determinationStatement": "changes to organizational systems are approved; and" },
+            { "objectiveId": "CM.L2-3.4.3[d]", "determinationStatement": "changes to organizational systems are logged." }
+          ],
+          "discussion": "Tracking changes ensures only authorized changes are made.",
+          "references": ["NIST SP 800-171 Rev. 2 3.4.3"]
+        },
+        {
+          "requirementId": "CM.L2-3.4.4",
+          "requirementName": "ANALYZE SECURITY IMPACT OF CHANGES",
+          "requirementStatement": "Analyze the security impact of changes prior to implementation.",
+          "assessmentObjectives": [
+            { "objectiveId": "CM.L2-3.4.4[a]", "determinationStatement": "the security impact of changes is analyzed prior to implementation." }
+          ],
+          "discussion": "Security impact analysis ensures changes don't cause unintended consequences.",
+          "references": ["NIST SP 800-171 Rev. 2 3.4.4"]
+        },
+        {
+          "requirementId": "CM.L2-3.4.5",
+          "requirementName": "ACCESS RESTRICTIONS FOR CHANGE",
+          "requirementStatement": "Define, document, approve, and enforce physical and logical access restrictions associated with changes to organizational systems.",
+          "assessmentObjectives": [
+            { "objectiveId": "CM.L2-3.4.5[a]", "determinationStatement": "physical access restrictions associated with changes to organizational systems are defined;" },
+            { "objectiveId": "CM.L2-3.4.5[b]", "determinationStatement": "physical access restrictions associated with changes to organizational systems are documented;" },
+            { "objectiveId": "CM.L2-3.4.5[c]", "determinationStatement": "physical access restrictions associated with changes to organizational systems are approved;" },
+            { "objectiveId": "CM.L2-3.4.5[d]", "determinationStatement": "physical access restrictions associated with changes to organizational systems are enforced;" },
+            { "objectiveId": "CM.L2-3.4.5[e]", "determinationStatement": "logical access restrictions associated with changes to organizational systems are defined;" },
+            { "objectiveId": "CM.L2-3.4.5[f]", "determinationStatement": "logical access restrictions associated with changes to organizational systems are documented;" },
+            { "objectiveId": "CM.L2-3.4.5[g]", "determinationStatement": "logical access restrictions associated with changes to organizational systems are approved; and" },
+            { "objectiveId": "CM.L2-3.4.5[h]", "determinationStatement": "logical access restrictions associated with changes to organizational systems are enforced." }
+          ],
+          "discussion": "Access restrictions ensure only authorized personnel make changes.",
+          "references": ["NIST SP 800-171 Rev. 2 3.4.5"]
+        },
+        {
+          "requirementId": "CM.L2-3.4.6",
+          "requirementName": "LEAST FUNCTIONALITY",
+          "requirementStatement": "Employ the principle of least functionality by configuring organizational systems to provide only essential capabilities.",
+          "assessmentObjectives": [
+            { "objectiveId": "CM.L2-3.4.6[a]", "determinationStatement": "organizational systems are configured to provide only essential capabilities." }
+          ],
+          "discussion": "Least functionality is the principle of allowing only required functions.",
+          "references": ["NIST SP 800-171 Rev. 2 3.4.6"]
+        },
+        {
+          "requirementId": "CM.L2-3.4.7",
+          "requirementName": "RESTRICT, DISABLE, AND PREVENT UNNECESSARY SERVICES",
+          "requirementStatement": "Restrict, disable, or prevent the use of nonessential programs, functions, ports, protocols, and services.",
+          "assessmentObjectives": [
+            { "objectiveId": "CM.L2-3.4.7[a]", "determinationStatement": "nonessential programs, functions, ports, protocols, and services are identified; and" },
+            { "objectiveId": "CM.L2-3.4.7[b]", "determinationStatement": "the use of nonessential programs, functions, ports, protocols, and services is restricted, disabled, or prevented." }
+          ],
+          "discussion": "This reduces the attack surface of the system.",
+          "references": ["NIST SP 800-171 Rev. 2 3.4.7"]
+        },
+        {
+          "requirementId": "CM.L2-3.4.8",
+          "requirementName": "APPLY DENY-BY-EXCEPTION (BLACKLISTING)",
+          "requirementStatement": "Apply deny-by-exception (blacklisting) policy to prevent the use of unauthorized software or deny-all, permit-by-exception (whitelisting) policy to allow the use of authorized software.",
+          "assessmentObjectives": [
+            { "objectiveId": "CM.L2-3.4.8[a]", "determinationStatement": "deny-by-exception policy is applied to prevent the use of unauthorized software; or" },
+            { "objectiveId": "CM.L2-3.4.8[b]", "determinationStatement": "deny-all, permit-by-exception policy is applied to allow the use of authorized software." }
+          ],
+          "discussion": "Prevents the execution of unauthorized software.",
+          "references": ["NIST SP 800-171 Rev. 2 3.4.8"]
+        },
+        {
+          "requirementId": "CM.L2-3.4.9",
+          "requirementName": "CONTROL AND MONITOR USER-INSTALLED SOFTWARE",
+          "requirementStatement": "Control and monitor user-installed software.",
+          "assessmentObjectives": [
+            { "objectiveId": "CM.L2-3.4.9[a]", "determinationStatement": "user-installed software is controlled; and" },
+            { "objectiveId": "CM.L2-3.4.9[b]", "determinationStatement": "user-installed software is monitored." }
+          ],
+          "discussion": "Controlling software helps ensure users don't install compromised apps.",
+          "references": ["NIST SP 800-171 Rev. 2 3.4.9"]
+        }
+      ]
+    },
+    {
+      "domain_id": "IA",
+      "domain_name": "Identification and Authentication (IA)",
+      "practices": [
+        {
+          "requirementId": "IA.L2-3.5.3",
+          "requirementName": "MULTI-FACTOR AUTHENTICATION",
+          "requirementStatement": "Use multi-factor authentication (MFA) for local and network access to privileged accounts and for network access to non-privileged accounts.",
+          "assessmentObjectives": [
+            { "objectiveId": "IA.L2-3.5.3[a]", "determinationStatement": "multi-factor authentication is used for local access to privileged accounts;" },
+            { "objectiveId": "IA.L2-3.5.3[b]", "determinationStatement": "multi-factor authentication is used for network access to privileged accounts; and" },
+            { "objectiveId": "IA.L2-3.5.3[c]", "determinationStatement": "multi-factor authentication is used for network access to non-privileged accounts." }
+          ],
+          "discussion": "MFA requires at least two factors.",
+          "references": ["NIST SP 800-171 Rev. 2 3.5.3"]
+        },
+        {
+          "requirementId": "IA.L2-3.5.4",
+          "requirementName": "IDENTIFIER REUSE",
+          "requirementStatement": "Prevent reuse of identifiers for a defined period.",
+          "assessmentObjectives": [
+            { "objectiveId": "IA.L2-3.5.4[a]", "determinationStatement": "the period for which identifier reuse is prohibited is defined; and" },
+            { "objectiveId": "IA.L2-3.5.4[b]", "determinationStatement": "reuse of identifiers is prevented for the defined period." }
+          ],
+          "discussion": "This prevents a new user from being associated with the actions of a former user.",
+          "references": ["NIST SP 800-171 Rev. 2 3.5.4"]
+        },
+        {
+          "requirementId": "IA.L2-3.5.5",
+          "requirementName": "IDENTIFIER INACTIVITY",
+          "requirementStatement": "Disable identifiers after a defined period of inactivity.",
+          "assessmentObjectives": [
+            { "objectiveId": "IA.L2-3.5.5[a]", "determinationStatement": "the period of inactivity after which identifiers are disabled is defined; and" },
+            { "objectiveId": "IA.L2-3.5.5[b]", "determinationStatement": "identifiers are disabled after the defined period of inactivity." }
+          ],
+          "discussion": "Disabling inactive accounts reduces the risk of unauthorized access via stale credentials.",
+          "references": ["NIST SP 800-171 Rev. 2 3.5.5"]
+        },
+        {
+          "requirementId": "IA.L2-3.5.6",
+          "requirementName": "AUTHENTICATOR MANAGEMENT",
+          "requirementStatement": "Enforce a minimum password complexity and change of characters when new passwords are created.",
+          "assessmentObjectives": [
+            { "objectiveId": "IA.L2-3.5.6[a]", "determinationStatement": "minimum password complexity is defined;" },
+            { "objectiveId": "IA.L2-3.5.6[b]", "determinationStatement": "the number of characters that must be changed when new passwords are created is defined; and" },
+            { "objectiveId": "IA.L2-3.5.6[c]", "determinationStatement": "defined password complexity and character changes are enforced." }
+          ],
+          "discussion": "Complexity includes use of upper/lower case, numbers, and special characters.",
+          "references": ["NIST SP 800-171 Rev. 2 3.5.6"]
+        },
+        {
+          "requirementId": "IA.L2-3.5.7",
+          "requirementName": "PASSWORD REUSE",
+          "requirementStatement": "Prohibit password reuse for a specified number of generations.",
+          "assessmentObjectives": [
+            { "objectiveId": "IA.L2-3.5.7[a]", "determinationStatement": "the number of password generations for which password reuse is prohibited is defined; and" },
+            { "objectiveId": "IA.L2-3.5.7[b]", "determinationStatement": "password reuse is prohibited for the defined number of generations." }
+          ],
+          "discussion": "Prevents users from cycling through a small set of simple passwords.",
+          "references": ["NIST SP 800-171 Rev. 2 3.5.7"]
+        },
+        {
+          "requirementId": "IA.L2-3.5.8",
+          "requirementName": "TEMPORARY PASSWORDS",
+          "requirementStatement": "Allow temporary password use for system logons with an immediate change to a permanent password.",
+          "assessmentObjectives": [
+            { "objectiveId": "IA.L2-3.5.8[a]", "determinationStatement": "temporary password use for system logons is allowed; and" },
+            { "objectiveId": "IA.L2-3.5.8[b]", "determinationStatement": "an immediate change to a permanent password is required when a temporary password is used." }
+          ],
+          "discussion": "Ensures that temporary credentials (e.g., during onboarding or resets) are not used long-term.",
+          "references": ["NIST SP 800-171 Rev. 2 3.5.8"]
+        },
+        {
+          "requirementId": "IA.L2-3.5.9",
+          "requirementName": "PASSWORD STORAGE",
+          "requirementStatement": "Store and transmit only cryptographically-protected passwords.",
+          "assessmentObjectives": [
+            { "objectiveId": "IA.L2-3.5.9[a]", "determinationStatement": "passwords are cryptographically protected when stored; and" },
+            { "objectiveId": "IA.L2-3.5.9[b]", "determinationStatement": "passwords are cryptographically protected when transmitted." }
+          ],
+          "discussion": "Passwords must never be stored or sent in clear text (plain text).",
+          "references": ["NIST SP 800-171 Rev. 2 3.5.9"]
+        },
+        {
+          "requirementId": "IA.L2-3.5.10",
+          "requirementName": "OBSCURE FEEDBACK",
+          "requirementStatement": "Obscure feedback of authentication information.",
+          "assessmentObjectives": [
+            { "objectiveId": "IA.L2-3.5.10[a]", "determinationStatement": "feedback of authentication information is obscured during the authentication process." }
+          ],
+          "discussion": "For example, displaying asterisks instead of characters when typing a password.",
+          "references": ["NIST SP 800-171 Rev. 2 3.5.10"]
+        },
+        {
+          "requirementId": "IA.L2-3.5.11",
+          "requirementName": "MFA FOR NETWORK ACCESS",
+          "requirementStatement": "Terminate network connections associated with communications sessions at the end of the sessions or after a defined period of inactivity.",
+          "assessmentObjectives": [
+            { "objectiveId": "IA.L2-3.5.11[a]", "determinationStatement": "network connections are terminated at the end of the session; or" },
+            { "objectiveId": "IA.L2-3.5.11[b]", "determinationStatement": "network connections are terminated after the defined period of inactivity." }
+          ],
+          "discussion": "This is related to session management and protecting against hijacked connections.",
+          "references": ["NIST SP 800-171 Rev. 2 3.5.11"]
+        }
+      ]
+    },
+    {
+      "domain_id": "IR",
+      "domain_name": "Incident Response (IR)",
+      "practices": [
+        {
+          "requirementId": "IR.L2-3.6.1",
+          "requirementName": "INCIDENT HANDLING CAPABILITY",
+          "requirementStatement": "Establish an operational incident-handling capability for organizational systems that includes preparation, detection, analysis, containment, recovery, and user response activities.",
+          "assessmentObjectives": [
+            { "objectiveId": "IR.L2-3.6.1[a]", "determinationStatement": "an operational incident-handling capability is established;" },
+            { "objectiveId": "IR.L2-3.6.1[b]", "determinationStatement": "the capability includes preparation;" },
+            { "objectiveId": "IR.L2-3.6.1[c]", "determinationStatement": "the capability includes detection;" },
+            { "objectiveId": "IR.L2-3.6.1[d]", "determinationStatement": "the capability includes analysis;" },
+            { "objectiveId": "IR.L2-3.6.1[e]", "determinationStatement": "the capability includes containment;" },
+            { "objectiveId": "IR.L2-3.6.1[f]", "determinationStatement": "the capability includes recovery; and" },
+            { "objectiveId": "IR.L2-3.6.1[g]", "determinationStatement": "the capability includes user response activities." }
+          ],
+          "discussion": "Incident response capabilities enable detection and rapid response.",
+          "references": ["NIST SP 800-171 Rev. 2 3.6.1"]
+        },
+        {
+          "requirementId": "IR.L2-3.6.2",
+          "requirementName": "INCIDENT TRACKING",
+          "requirementStatement": "Track, document, and report incidents to appropriate officials and/or authorities both internal and external to the organization.",
+          "assessmentObjectives": [
+            { "objectiveId": "IR.L2-3.6.2[a]", "determinationStatement": "incidents are tracked;" },
+            { "objectiveId": "IR.L2-3.6.2[b]", "determinationStatement": "incidents are documented; and" },
+            { "objectiveId": "IR.L2-3.6.2[c]", "determinationStatement": "incidents are reported to appropriate officials and/or authorities (internal and external)." }
+          ],
+          "discussion": "Organizations determine officials for reporting.",
+          "references": ["NIST SP 800-171 Rev. 2 3.6.2"]
+        },
+        {
+          "requirementId": "IR.L2-3.6.3",
+          "requirementName": "INCIDENT TESTING",
+          "requirementStatement": "Test the organizational incident response capability.",
+          "assessmentObjectives": [
+            { "objectiveId": "IR.L2-3.6.3[a]", "determinationStatement": "the organizational incident response capability is tested." }
+          ],
+          "discussion": "Testing includes tabletop exercises or simulations.",
+          "references": ["NIST SP 800-171 Rev. 2 3.6.3"]
+        }
+      ]
+    },
+    {
+      "domain_id": "MA",
+      "domain_name": "Maintenance (MA)",
+      "practices": [
+        {
+          "requirementId": "MA.L2-3.7.1",
+          "requirementName": "SYSTEM MAINTENANCE",
+          "requirementStatement": "Perform maintenance on organizational systems.",
+          "assessmentObjectives": [
+            { "objectiveId": "MA.L2-3.7.1[a]", "determinationStatement": "maintenance on organizational systems is performed." }
+          ],
+          "discussion": "Maintenance includes scheduled repairs.",
+          "references": ["NIST SP 800-171 Rev. 2 3.7.1"]
+        },
+        {
+          "requirementId": "MA.L2-3.7.2",
+          "requirementName": "MAINTENANCE TOOLS",
+          "requirementStatement": "Provide controls on the tools, techniques, mechanisms, and personnel used to conduct system maintenance.",
+          "assessmentObjectives": [
+            { "objectiveId": "MA.L2-3.7.2[a]", "determinationStatement": "controls on the tools used to conduct system maintenance are provided;" },
+            { "objectiveId": "MA.L2-3.7.2[b]", "determinationStatement": "controls on the techniques used to conduct system maintenance are provided;" },
+            { "objectiveId": "MA.L2-3.7.2[c]", "determinationStatement": "controls on the mechanisms used to conduct system maintenance are provided; and" },
+            { "objectiveId": "MA.L2-3.7.2[d]", "determinationStatement": "controls on the personnel used to conduct system maintenance are provided." }
+          ],
+          "discussion": "Applies to all tools used for maintenance.",
+          "references": ["NIST SP 800-171 Rev. 2 3.7.2"]
+        },
+        {
+          "requirementId": "MA.L2-3.7.3",
+          "requirementName": "NONLOCAL MAINTENANCE",
+          "requirementStatement": "Ensure equipment, techniques, and procedures for nonlocal maintenance are approved and monitored.",
+          "assessmentObjectives": [
+            { "objectiveId": "MA.L2-3.7.3[a]", "determinationStatement": "equipment for nonlocal maintenance is approved;" },
+            { "objectiveId": "MA.L2-3.7.3[b]", "determinationStatement": "equipment for nonlocal maintenance is monitored;" },
+            { "objectiveId": "MA.L2-3.7.3[c]", "determinationStatement": "techniques for nonlocal maintenance are approved;" },
+            { "objectiveId": "MA.L2-3.7.3[d]", "determinationStatement": "techniques for nonlocal maintenance are monitored;" },
+            { "objectiveId": "MA.L2-3.7.3[e]", "determinationStatement": "procedures for nonlocal maintenance are approved; and" },
+            { "objectiveId": "MA.L2-3.7.3[f]", "determinationStatement": "procedures for nonlocal maintenance are monitored." }
+          ],
+          "discussion": "Nonlocal maintenance is conducted via a network.",
+          "references": ["NIST SP 800-171 Rev. 2 3.7.3"]
+        },
+        {
+          "requirementId": "MA.L2-3.7.4",
+          "requirementName": "NONLOCAL MAINTENANCE SESSIONS",
+          "requirementStatement": "Require multifactor authentication to establish nonlocal maintenance sessions via external networks and terminate such sessions when nonlocal maintenance is completed.",
+          "assessmentObjectives": [
+            { "objectiveId": "MA.L2-3.7.4[a]", "determinationStatement": "multifactor authentication is required to establish nonlocal maintenance sessions via external networks; and" },
+            { "objectiveId": "MA.L2-3.7.4[b]", "determinationStatement": "nonlocal maintenance sessions are terminated when nonlocal maintenance is completed." }
+          ],
+          "discussion": "MFA requires at least two factors.",
+          "references": ["NIST SP 800-171 Rev. 2 3.7.4"]
+        },
+        {
+          "requirementId": "MA.L2-3.7.5",
+          "requirementName": "SUPERVISE MAINTENANCE",
+          "requirementStatement": "Supervise the maintenance activities of personnel without required access authorizations.",
+          "assessmentObjectives": [
+            { "objectiveId": "MA.L2-3.7.5[a]", "determinationStatement": "personnel without required access authorizations are identified; and" },
+            { "objectiveId": "MA.L2-3.7.5[b]", "determinationStatement": "maintenance activities of personnel without required access authorizations are supervised." }
+          ],
+          "discussion": "Applies to individuals without necessary clearances.",
+          "references": ["NIST SP 800-171 Rev. 2 3.7.5"]
+        },
+        {
+          "requirementId": "MA.L2-3.7.6",
+          "requirementName": "EQUIPMENT SANITIZATION",
+          "requirementStatement": "Sanitize equipment, both on and off site, for the removal of CUI from contaminated media prior to release for repair or replacement.",
+          "assessmentObjectives": [
+            { "objectiveId": "MA.L2-3.7.6[a]", "determinationStatement": "equipment is sanitized to remove CUI from contaminated media prior to release for repair or replacement." }
+          ],
+          "discussion": "Sanitization removes information from media.",
+          "references": ["NIST SP 800-171 Rev. 2 3.7.6"]
+        }
+      ]
+    },
+    {
+      "domain_id": "MP",
+      "domain_name": "Media Protection (MP)",
+      "practices": [
+        {
+          "requirementId": "MP.L2-3.8.1",
+          "requirementName": "PROTECT SYSTEM MEDIA",
+          "requirementStatement": "Protect (i.e., physically control and securely store) system media containing CUI, both paper and digital.",
+          "assessmentObjectives": [
+            { "objectiveId": "MP.L2-3.8.1[a]", "determinationStatement": "system media containing CUI is physically controlled;" },
+            { "objectiveId": "MP.L2-3.8.1[b]", "determinationStatement": "system media containing CUI is securely stored." }
+          ],
+          "discussion": "Media protection includes limiting access and secure storage.",
+          "references": ["NIST SP 800-171 Rev. 2 3.8.1"]
+        },
+        {
+          "requirementId": "MP.L2-3.8.2",
+          "requirementName": "LIMIT MEDIA ACCESS",
+          "requirementStatement": "Limit information system media access to authorized users.",
+          "assessmentObjectives": [
+            { "objectiveId": "MP.L2-3.8.2[a]", "determinationStatement": "system media containing CUI is identified; and" },
+            { "objectiveId": "MP.L2-3.8.2[b]", "determinationStatement": "access to system media containing CUI is limited to authorized users." }
+          ],
+          "discussion": "This requirement includes both digital and paper media.",
+          "references": ["NIST SP 800-171 Rev. 2 3.8.2"]
+        },
+        {
+          "requirementId": "MP.L2-3.8.3",
+          "requirementName": "SANITIZE OR DESTROY MEDIA",
+          "requirementStatement": "Sanitize or destroy system media containing CUI before disposal or release for reuse.",
+          "assessmentObjectives": [
+            { "objectiveId": "MP.L2-3.8.3[a]", "determinationStatement": "system media containing CUI is sanitized or destroyed before disposal; and" },
+            { "objectiveId": "MP.L2-3.8.3[b]", "determinationStatement": "system media containing CUI is sanitized before reuse." }
+          ],
+          "discussion": "Follow organization-defined standards for sanitization.",
+          "references": ["NIST SP 800-171 Rev. 2 3.8.3"]
+        },
+        {
+          "requirementId": "MP.L2-3.8.4",
+          "requirementName": "MARK MEDIA",
+          "requirementStatement": "Mark media with necessary CUI markings and distribution limitations.",
+          "assessmentObjectives": [
+            { "objectiveId": "MP.L2-3.8.4[a]", "determinationStatement": "system media containing CUI is identified;" },
+            { "objectiveId": "MP.L2-3.8.4[b]", "determinationStatement": "system media containing CUI is marked with applicable CUI markings; and" },
+            { "objectiveId": "MP.L2-3.8.4[c]", "determinationStatement": "system media containing CUI is marked with applicable distribution limitations." }
+          ],
+          "discussion": "Media markings provide notice to users of the presence of CUI.",
+          "references": ["NIST SP 800-171 Rev. 2 3.8.4"]
+        },
+        {
+          "requirementId": "MP.L2-3.8.5",
+          "requirementName": "CONTROL MEDIA DURING TRANSPORT",
+          "requirementStatement": "Control access to media containing CUI and maintain accountability for such media during transport outside of controlled areas.",
+          "assessmentObjectives": [
+            { "objectiveId": "MP.L2-3.8.5[a]", "determinationStatement": "access to media containing CUI is controlled; and" },
+            { "objectiveId": "MP.L2-3.8.5[b]", "determinationStatement": "accountability for media containing CUI is maintained during transport outside of controlled areas." }
+          ],
+          "discussion": "Controlled areas are physical areas where organizations provide security.",
+          "references": ["NIST SP 800-171 Rev. 2 3.8.5"]
+        },
+        {
+          "requirementId": "MP.L2-3.8.6",
+          "requirementName": "PROTECT MEDIA CONFIDENTIALITY",
+          "requirementStatement": "Implement cryptographic mechanisms to protect the confidentiality of CUI stored on digital media during transport unless otherwise protected by alternative physical safeguards.",
+          "assessmentObjectives": [
+            { "objectiveId": "MP.L2-3.8.6[a]", "determinationStatement": "digital media containing CUI is identified;" },
+            { "objectiveId": "MP.L2-3.8.6[b]", "determinationStatement": "cryptographic mechanisms are implemented to protect the confidentiality of CUI on digital media during transport outside of controlled areas; or" },
+            { "objectiveId": "MP.L2-3.8.6[c]", "determinationStatement": "alternative physical safeguards are implemented to protect the confidentiality of CUI on digital media during transport outside of controlled areas." }
+          ],
+          "discussion": "Transport of digital media occurs via various methods including common carriers.",
+          "references": ["NIST SP 800-171 Rev. 2 3.8.6"]
+        },
+        {
+          "requirementId": "MP.L2-3.8.7",
+          "requirementName": "CONTROL REMOVABLE MEDIA",
+          "requirementStatement": "Control the use of removable media on organizational systems.",
+          "assessmentObjectives": [
+            { "objectiveId": "MP.L2-3.8.7[a]", "determinationStatement": "usage of removable media on organizational systems is controlled." }
+          ],
+          "discussion": "Organizations can restrict or prohibit the use of removable media.",
+          "references": ["NIST SP 800-171 Rev. 2 3.8.7"]
+        },
+        {
+          "requirementId": "MP.L2-3.8.8",
+          "requirementName": "PROHIBIT UNIDENTIFIED PORTABLE DEVICES",
+          "requirementStatement": "Prohibit the use of portable storage devices when such devices have no identifiable owner.",
+          "assessmentObjectives": [
+            { "objectiveId": "MP.L2-3.8.8[a]", "determinationStatement": "portable storage devices with no identifiable owner are prohibited." }
+          ],
+          "discussion": "Identifiable owners can be individuals or organizational entities.",
+          "references": ["NIST SP 800-171 Rev. 2 3.8.8"]
+        },
+        {
+          "requirementId": "MP.L2-3.8.9",
+          "requirementName": "PROTECT BACKUP CUI",
+          "requirementStatement": "Protect the confidentiality of backup CUI at storage locations.",
+          "assessmentObjectives": [
+            { "objectiveId": "MP.L2-3.8.9[a]", "determinationStatement": "backup CUI is identified; and" },
+            { "objectiveId": "MP.L2-3.8.9[b]", "determinationStatement": "the confidentiality of backup CUI is protected at storage locations." }
+          ],
+          "discussion": "Backup storage locations may be internal or external.",
+          "references": ["NIST SP 800-171 Rev. 2 3.8.9"]
+        }
+      ]
+    },
+    {
+      "domain_id": "PS",
+      "domain_name": "Personnel Security (PS)",
+      "practices": [
+        {
+          "requirementId": "PS.L2-3.9.1",
+          "requirementName": "SCREEN INDIVIDUALS",
+          "requirementStatement": "Screen individuals prior to authorizing access to organizational systems containing CUI.",
+          "assessmentObjectives": [
+            { "objectiveId": "PS.L2-3.9.1[a]", "determinationStatement": "individuals are screened prior to authorizing access to organizational systems containing CUI." }
+          ],
+          "discussion": "Personnel screening includes background checks.",
+          "references": ["NIST SP 800-171 Rev. 2 3.9.1"]
+        },
+        {
+          "requirementId": "PS.L2-3.9.2",
+          "requirementName": "PERSONNEL ACTIONS",
+          "requirementStatement": "Ensure that organizational systems containing CUI are protected during and after personnel actions such as terminations and transfers.",
+          "assessmentObjectives": [
+            { "objectiveId": "PS.L2-3.9.2[a]", "determinationStatement": "organizational systems containing CUI are protected during and after personnel actions." }
+          ],
+          "discussion": "Involves revoking access when employees leave.",
+          "references": ["NIST SP 800-171 Rev. 2 3.9.2"]
+        }
+      ]
+    },
+    {
+      "domain_id": "PE",
+      "domain_name": "Physical Protection (PE)",
+      "practices": [
+        {
+          "requirementId": "PE.L2-3.10.2",
+          "requirementName": "PROTECT PHYSICAL FACILITY",
+          "requirementStatement": "Protect and monitor the physical facility and support infrastructure for organizational systems.",
+          "assessmentObjectives": [
+            { "objectiveId": "PE.L2-3.10.2[a]", "determinationStatement": "the physical facility is protected;" },
+            { "objectiveId": "PE.L2-3.10.2[b]", "determinationStatement": "the physical facility is monitored;" },
+            { "objectiveId": "PE.L2-3.10.2[c]", "determinationStatement": "support infrastructure is protected; and" },
+            { "objectiveId": "PE.L2-3.10.2[d]", "determinationStatement": "support infrastructure is monitored." }
+          ],
+          "discussion": "Physical protection includes locks and cameras.",
+          "references": ["NIST SP 800-171 Rev. 2 3.10.2"]
+        },
+        {
+          "requirementId": "PE.L2-3.10.6",
+          "requirementName": "ALTERNATE WORK SITES",
+          "requirementStatement": "Enforce safeguarding measures for CUI at alternate work sites.",
+          "assessmentObjectives": [
+            { "objectiveId": "PE.L2-3.10.6[a]", "determinationStatement": "alternate work sites are defined;" },
+            { "objectiveId": "PE.L2-3.10.6[b]", "determinationStatement": "safeguarding measures for CUI at defined alternate work sites are identified; and" },
+            { "objectiveId": "PE.L2-3.10.6[c]", "determinationStatement": "identified safeguarding measures are enforced at defined alternate work sites." }
+          ],
+          "discussion": "Alternate work sites include Government facilities, offices in residence, hotel rooms, and conference rooms.",
+          "references": ["NIST SP 800-171 Rev. 2 3.10.6"]
+        }
+      ]
+    },
+    {
+      "domain_id": "RA",
+      "domain_name": "Risk Assessment (RA)",
+      "practices": [
+        {
+          "requirementId": "RA.L2-3.11.1",
+          "requirementName": "ASSESS RISK",
+          "requirementStatement": "Periodically assess the risk to organizational operations resulting from the operation of organizational systems and the associated processing, storage, or transmission of CUI.",
+          "assessmentObjectives": [
+            { "objectiveId": "RA.L2-3.11.1[a]", "determinationStatement": "the frequency of risk assessments is defined;" },
+            { "objectiveId": "RA.L2-3.11.1[b]", "determinationStatement": "risk assessments are performed at the defined frequency; and" },
+            { "objectiveId": "RA.L2-3.11.1[c]", "determinationStatement": "risk assessments consider risk to organizational operations, assets, and individuals." }
+          ],
+          "discussion": "Risk assessment identifies risks to organization operations.",
+          "references": ["NIST SP 800-171 Rev. 2 3.11.1"]
+        },
+        {
+          "requirementId": "RA.L2-3.11.2",
+          "requirementName": "VULNERABILITY SCANNING",
+          "requirementStatement": "Scan for vulnerabilities in organizational systems and applications periodically.",
+          "assessmentObjectives": [
+            { "objectiveId": "RA.L2-3.11.2[a]", "determinationStatement": "the frequency of vulnerability scans is defined;" },
+            { "objectiveId": "RA.L2-3.11.2[b]", "determinationStatement": "vulnerability scans are performed at the defined frequency;" },
+            { "objectiveId": "RA.L2-3.11.2[c]", "determinationStatement": "vulnerability scans are performed when new vulnerabilities are identified; and" },
+            { "objectiveId": "RA.L2-3.11.2[d]", "determinationStatement": "vulnerability scans of the system and applications are performed." }
+          ],
+          "discussion": "Proactive identification of security gaps.",
+          "references": ["NIST SP 800-171 Rev. 2 3.11.2"]
+        },
+        {
+          "requirementId": "RA.L2-3.11.3",
+          "requirementName": "REMEDIATE VULNERABILITIES",
+          "requirementStatement": "Remediate vulnerabilities in accordance with risk assessments.",
+          "assessmentObjectives": [
+            { "objectiveId": "RA.L2-3.11.3[a]", "determinationStatement": "vulnerabilities are remediated in accordance with risk assessments." }
+          ],
+          "discussion": "Remediation fixing identified security holes.",
+          "references": ["NIST SP 800-171 Rev. 2 3.11.3"]
+        }
+      ]
+    },
+    {
+      "domain_id": "CA",
+      "domain_name": "Security Assessment (CA)",
+      "practices": [
+        {
+          "requirementId": "CA.L2-3.12.1",
+          "requirementName": "ASSESS SECURITY CONTROLS",
+          "requirementStatement": "Periodically assess the security controls in organizational systems.",
+          "assessmentObjectives": [
+            { "objectiveId": "CA.L2-3.12.1[a]", "determinationStatement": "the frequency of security control assessments is defined;" },
+            { "objectiveId": "CA.L2-3.12.1[b]", "determinationStatement": "security control assessments are performed at the defined frequency; and" },
+            { "objectiveId": "CA.L2-3.12.1[c]", "determinationStatement": "assessments determine if the controls are effective." }
+          ],
+          "discussion": "Assessments verify controls are implemented correctly.",
+          "references": ["NIST SP 800-171 Rev. 2 3.12.1"]
+        },
+        {
+          "requirementId": "CA.L2-3.12.2",
+          "requirementName": "PLAN OF ACTION",
+          "requirementStatement": "Develop and implement plans of action designed to correct deficiencies.",
+          "assessmentObjectives": [
+            { "objectiveId": "CA.L2-3.12.2[a]", "determinationStatement": "plans of action are developed;" },
+            { "objectiveId": "CA.L2-3.12.2[b]", "determinationStatement": "plans of action are implemented." }
+          ],
+          "discussion": "POA&Ms track remediation.",
+          "references": ["NIST SP 800-171 Rev. 2 3.12.2"]
+        },
+        {
+          "requirementId": "CA.L2-3.12.3",
+          "requirementName": "MONITOR CONTROLS",
+          "requirementStatement": "Monitor security controls on an ongoing basis.",
+          "assessmentObjectives": [
+            { "objectiveId": "CA.L2-3.12.3[a]", "determinationStatement": "security controls are monitored on an ongoing basis;" },
+            { "objectiveId": "CA.L2-3.12.3[b]", "determinationStatement": "continued effectiveness of controls is ensured." }
+          ],
+          "discussion": "Continuous monitoring ensures ongoing effectiveness.",
+          "references": ["NIST SP 800-171 Rev. 2 3.12.3"]
+        },
+        {
+          "requirementId": "CA.L2-3.12.4",
+          "requirementName": "SYSTEM SECURITY PLAN",
+          "requirementStatement": "Develop, document, and periodically update system security plans.",
+          "assessmentObjectives": [
+            { "objectiveId": "CA.L2-3.12.4[a]", "determinationStatement": "a system security plan is developed;" },
+            { "objectiveId": "CA.L2-3.12.4[b]", "determinationStatement": "system security plan is documented;" },
+            { "objectiveId": "CA.L2-3.12.4[c]", "determinationStatement": "system security plan is periodically updated;" },
+            { "objectiveId": "CA.L2-3.12.4[d]", "determinationStatement": "SSP describes system boundaries;" },
+            { "objectiveId": "CA.L2-3.12.4[e]", "determinationStatement": "SSP describes environment of operation;" },
+            { "objectiveId": "CA.L2-3.12.4[f]", "determinationStatement": "SSP describes how requirements are implemented; and" },
+            { "objectiveId": "CA.L2-3.12.4[g]", "determinationStatement": "SSP describes relationships with other systems." }
+          ],
+          "discussion": "The SSP is the core compliance document.",
+          "references": ["NIST SP 800-171 Rev. 2 3.12.4"]
+        }
+      ]
+    },
+    {
+      "domain_id": "SC",
+      "domain_name": "System and Communications Protection (SC)",
+      "practices": [
+        {
+          "requirementId": "SC.L2-3.13.2",
+          "requirementName": "SECURITY ENGINEERING",
+          "requirementStatement": "Employ architectural designs, software development techniques, and systems engineering principles that promote effective information security within organizational systems.",
+          "assessmentObjectives": [
+            { "objectiveId": "SC.L2-3.13.2[a]", "determinationStatement": "architectural designs that promote effective information security are employed;" },
+            { "objectiveId": "SC.L2-3.13.2[b]", "determinationStatement": "software development techniques that promote effective information security are employed; and" },
+            { "objectiveId": "SC.L2-3.13.2[c]", "determinationStatement": "systems engineering principles that promote effective information security are employed." }
+          ],
+          "discussion": "Security engineering involves applying engineering principles to the design and implementation of systems to meet security requirements.",
+          "references": ["NIST SP 800-171 Rev. 2 3.13.2"]
+        },
+        {
+          "requirementId": "SC.L2-3.13.3",
+          "requirementName": "ROLE SEPARATION",
+          "requirementStatement": "Separate user functionality from system management functionality.",
+          "assessmentObjectives": [
+            { "objectiveId": "SC.L2-3.13.3[a]", "determinationStatement": "user functionality is separated from system management functionality." }
+          ],
+          "discussion": "Separating user functions from management functions reduces the risk of accidental or intentional misuse of administrative privileges.",
+          "references": ["NIST SP 800-171 Rev. 2 3.13.3"]
+        },
+        {
+          "requirementId": "SC.L2-3.13.4",
+          "requirementName": "SHARED RESOURCES",
+          "requirementStatement": "Prevent unauthorized and unintended information transfer via shared system resources.",
+          "assessmentObjectives": [
+            { "objectiveId": "SC.L2-3.13.4[a]", "determinationStatement": "unauthorized information transfer via shared system resources is prevented; and" },
+            { "objectiveId": "SC.L2-3.13.4[b]", "determinationStatement": "unintended information transfer via shared system resources is prevented." }
+          ],
+          "discussion": "Shared resources (like memory or storage) must be cleared or isolated to prevent data leakage between users or processes.",
+          "references": ["NIST SP 800-171 Rev. 2 3.13.4"]
+        },
+        {
+          "requirementId": "SC.L2-3.13.6",
+          "requirementName": "NETWORK COMMUNICATION",
+          "requirementStatement": "Deny network communications traffic by default and allow network communications traffic by exception (i.e., split tunneling, services, and applications).",
+          "assessmentObjectives": [
+            { "objectiveId": "SC.L2-3.13.6[a]", "determinationStatement": "network communications traffic is denied by default; and" },
+            { "objectiveId": "SC.L2-3.13.6[b]", "determinationStatement": "network communications traffic is allowed by exception." }
+          ],
+          "discussion": "Implementing a 'deny-all' policy for network traffic ensures only explicitly authorized communications are permitted.",
+          "references": ["NIST SP 800-171 Rev. 2 3.13.6"]
+        },
+        {
+          "requirementId": "SC.L2-3.13.7",
+          "requirementName": "SPLIT TUNNELING",
+          "requirementStatement": "Prevent remote devices from simultaneously establishing non-remote connections with organizational systems and communicating via some other connection to resources in external networks (i.e., split tunneling).",
+          "assessmentObjectives": [
+            { "objectiveId": "SC.L2-3.13.7[a]", "determinationStatement": "split tunneling is prevented for remote devices." }
+          ],
+          "discussion": "Split tunneling can allow a remote device to act as a bridge between the secure organizational network and an insecure external network.",
+          "references": ["NIST SP 800-171 Rev. 2 3.13.7"]
+        },
+        {
+          "requirementId": "SC.L2-3.13.8",
+          "requirementName": "DATA IN TRANSIT",
+          "requirementStatement": "Implement cryptographic mechanisms to prevent unauthorized disclosure of CUI during transmission unless otherwise protected by alternative physical safeguards.",
+          "assessmentObjectives": [
+            { "objectiveId": "SC.L2-3.13.8[a]", "determinationStatement": "cryptographic mechanisms are implemented to prevent unauthorized disclosure of CUI during transmission; or" },
+            { "objectiveId": "SC.L2-3.13.8[b]", "determinationStatement": "alternative physical safeguards are implemented to prevent unauthorized disclosure of CUI during transmission." }
+          ],
+          "discussion": "CUI must be encrypted when transmitted over any network that is not physically protected by the organization.",
+          "references": ["NIST SP 800-171 Rev. 2 3.13.8"]
+        },
+        {
+          "requirementId": "SC.L2-3.13.9",
+          "requirementName": "TERMINATE SESSIONS",
+          "requirementStatement": "Terminate network connections associated with communications sessions at the end of the sessions or after a defined period of inactivity.",
+          "assessmentObjectives": [
+            { "objectiveId": "SC.L2-3.13.9[a]", "determinationStatement": "network connections are terminated at the end of the sessions; or" },
+            { "objectiveId": "SC.L2-3.13.9[b]", "determinationStatement": "network connections are terminated after a defined period of inactivity." }
+          ],
+          "discussion": "Terminating sessions reduces the window of opportunity for an attacker to hijack an active connection.",
+          "references": ["NIST SP 800-171 Rev. 2 3.13.9"]
+        },
+        {
+          "requirementId": "SC.L2-3.13.10",
+          "requirementName": "CRYPTOGRAPHIC KEYS",
+          "requirementStatement": "Establish and manage cryptographic keys for cryptography employed in organizational systems.",
+          "assessmentObjectives": [
+            { "objectiveId": "SC.L2-3.13.10[a]", "determinationStatement": "cryptographic keys are established; and" },
+            { "objectiveId": "SC.L2-3.13.10[b]", "determinationStatement": "cryptographic keys are managed." }
+          ],
+          "discussion": "Proper key management is essential for the security of any cryptographic system.",
+          "references": ["NIST SP 800-171 Rev. 2 3.13.10"]
+        },
+        {
+          "requirementId": "SC.L2-3.13.11",
+          "requirementName": "CUI ENCRYPTION",
+          "requirementStatement": "Employ FIPS-validated cryptography when used to protect the confidentiality of CUI.",
+          "assessmentObjectives": [
+            { "objectiveId": "SC.L2-3.13.11[a]", "determinationStatement": "FIPS-validated cryptography is employed to protect the confidentiality of CUI." }
+          ],
+          "discussion": "FIPS-validated cryptography ensures module testing by NIST.",
+          "references": ["NIST SP 800-171 Rev. 2 3.13.11"]
+        },
+        {
+          "requirementId": "SC.L2-3.13.12",
+          "requirementName": "COLLABORATIVE COMPUTING",
+          "requirementStatement": "Prohibit remote activation of collaborative computing devices and provide indication of devices in use to users physically present at the devices.",
+          "assessmentObjectives": [
+            { "objectiveId": "SC.L2-3.13.12[a]", "determinationStatement": "remote activation of collaborative computing devices is prohibited; and" },
+            { "objectiveId": "SC.L2-3.13.12[b]", "determinationStatement": "indication of devices in use is provided to users physically present at the devices." }
+          ],
+          "discussion": "Collaborative computing devices (like cameras and microphones) should not be activated without the knowledge of those physically present.",
+          "references": ["NIST SP 800-171 Rev. 2 3.13.12"]
+        },
+        {
+          "requirementId": "SC.L2-3.13.13",
+          "requirementName": "MOBILE CODE",
+          "requirementStatement": "Control and monitor the use of mobile code.",
+          "assessmentObjectives": [
+            { "objectiveId": "SC.L2-3.13.13[a]", "determinationStatement": "usage of mobile code is controlled; and" },
+            { "objectiveId": "SC.L2-3.13.13[b]", "determinationStatement": "usage of mobile code is monitored." }
+          ],
+          "discussion": "Mobile code (like JavaScript or ActiveX) can pose a security risk if not properly managed.",
+          "references": ["NIST SP 800-171 Rev. 2 3.13.13"]
+        },
+        {
+          "requirementId": "SC.L2-3.13.14",
+          "requirementName": "VOIP",
+          "requirementStatement": "Control and monitor the use of Voice over Internet Protocol (VoIP) technologies.",
+          "assessmentObjectives": [
+            { "objectiveId": "SC.L2-3.13.14[a]", "determinationStatement": "usage of VoIP technologies is controlled; and" },
+            { "objectiveId": "SC.L2-3.13.14[b]", "determinationStatement": "usage of VoIP technologies is monitored." }
+          ],
+          "discussion": "VoIP communications can be susceptible to eavesdropping and other attacks if not secured.",
+          "references": ["NIST SP 800-171 Rev. 2 3.13.14"]
+        },
+        {
+          "requirementId": "SC.L2-3.13.15",
+          "requirementName": "COMMUNICATIONS AUTHENTICITY",
+          "requirementStatement": "Protect the authenticity of communications sessions.",
+          "assessmentObjectives": [
+            { "objectiveId": "SC.L2-3.13.15[a]", "determinationStatement": "the authenticity of communications sessions is protected." }
+          ],
+          "discussion": "Protecting session authenticity ensures that the parties involved in a communication are who they claim to be.",
+          "references": ["NIST SP 800-171 Rev. 2 3.13.15"]
+        },
+        {
+          "requirementId": "SC.L2-3.13.16",
+          "requirementName": "CUI AT REST",
+          "requirementStatement": "Protect the confidentiality of CUI at rest.",
+          "assessmentObjectives": [
+            { "objectiveId": "SC.L2-3.13.16[a]", "determinationStatement": "the confidentiality of CUI at rest is protected." }
+          ],
+          "discussion": "CUI must be protected while it is stored on any media (disk, tape, etc.).",
+          "references": ["NIST SP 800-171 Rev. 2 3.13.16"]
+        }
+      ]
+    },
+    {
+      "domain_id": "SI",
+      "domain_name": "System and Information Integrity (SI)",
+      "practices": [
+        {
+          "requirementId": "SI.L2-3.14.3",
+          "requirementName": "SECURITY ALERTS AND ADVISORIES",
+          "requirementStatement": "Monitor system security alerts and advisories and take action in response.",
+          "assessmentObjectives": [
+            { "objectiveId": "SI.L2-3.14.3[a]", "determinationStatement": "response actions to alerts are identified;" },
+            { "objectiveId": "SI.L2-3.14.3[b]", "determinationStatement": "security alerts and advisories are monitored; and" },
+            { "objectiveId": "SI.L2-3.14.3[c]", "determinationStatement": "actions in response to alerts are taken." }
+          ],
+          "discussion": "Monitoring ensures timely receipt of threat info.",
+          "references": ["NIST SP 800-171 Rev. 2 3.14.3"]
+        },
+        {
+          "requirementId": "SI.L2-3.14.6",
+          "requirementName": "MONITOR SYSTEM AND UNUSUAL ACTIVITY",
+          "requirementStatement": "Monitor the system for unauthorized use and unusual activity.",
+          "assessmentObjectives": [
+            { "objectiveId": "SI.L2-3.14.6[a]", "determinationStatement": "unauthorized use of the system is identified; and" },
+            { "objectiveId": "SI.L2-3.14.6[b]", "determinationStatement": "unusual activity of the system is identified." }
+          ],
+          "discussion": "Ongoing monitoring allows for the detection of unauthorized actions and patterns of activity that may indicate a compromise or internal threat.",
+          "references": ["NIST SP 800-171 Rev. 2 3.14.6"]
+        },
+        {
+          "requirementId": "SI.L2-3.14.7",
+          "requirementName": "IDENTIFY UNAUTHORIZED USE",
+          "requirementStatement": "Identify unauthorized use of the system.",
+          "assessmentObjectives": [
+            { "objectiveId": "SI.L2-3.14.7[a]", "determinationStatement": "unauthorized use of the system is identified." }
+          ],
+          "discussion": "Identification of unauthorized use is a prerequisite for incident response and accountability.",
+          "references": ["NIST SP 800-171 Rev. 2 3.14.7"]
+        }
+      ]
+    }
+  ]
+}

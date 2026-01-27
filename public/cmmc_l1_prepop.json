@@ -1,0 +1,298 @@
+
+{
+  "app_name": "CMMC Launch Hub",
+  "version": "1.0",
+  "level": "CMMC Level 1",
+  "domains": [
+    {
+      "domain_id": "AC",
+      "domain_name": "Access Control (AC)",
+      "practices": [
+        {
+          "id": "AC.L1-3.1.1",
+          "name": "AC.L1-3.1.1 – AUTHORIZED ACCESS CONTROL",
+          "brief_description": "Limit information system access to authorized users, processes acting on behalf of authorized users, or devices.",
+          "assessment_objectives": [
+            {"id":"a","text":"authorized users are identified","status":"Pending","note":"","artifacts":[]},
+            {"id":"b","text":"processes acting on behalf of authorized users are identified","status":"Pending","note":"","artifacts":[]},
+            {"id":"c","text":"devices authorized to connect to the system are identified","status":"Pending","note":"","artifacts":[]},
+            {"id":"d","text":"system access is limited to authorized users","status":"Pending","note":"","artifacts":[]},
+            {"id":"e","text":"system access is limited to processes acting on behalf of authorized users","status":"Pending","note":"","artifacts":[]},
+            {"id":"f","text":"system access is limited to authorized devices","status":"Pending","note":"","artifacts":[]}
+          ],
+          "potential_assessment_methods_and_objects": "Examine: access control policy, account lists, audit logs; Interview: account managers, admins; Test: account management processes.",
+          "discussion": "Access control policies, account management, and enforcement mechanisms limit access between users/processes and objects. (See PDF Level 1 guide.)",
+          "further_discussion": "Maintain lists of authorized users, processes, and devices; approve account requests before granting access; limit devices like printers; coordinate with IA practices.",
+          "key_references": ["FAR 52.204-21 b.1.i","NIST SP 800-171 Rev 2 3.1.1"]
+        },
+        {
+          "id": "AC.L1-3.1.2",
+          "name": "AC.L1-3.1.2 – TRANSACTION & FUNCTION CONTROL",
+          "brief_description": "Limit system access to the types of transactions and functions authorized users are permitted to execute.",
+          "assessment_objectives": [
+            {"id":"a","text":"types of transactions and functions for users are defined","status":"Pending","note":"","artifacts":[]},
+            {"id":"b","text":"system access is limited to defined transactions/functions","status":"Pending","note":"","artifacts":[]}
+          ],
+          "potential_assessment_methods_and_objects": "Examine: access control lists/policies; Interview: administrators; Test: enforcement mechanisms.",
+          "discussion": "Define role-based privileges and restrict functions (create/read/update/delete) to necessary roles.",
+          "further_discussion": "Consider time-of-day, point-of-origin, and account types when defining privileges.",
+          "key_references": ["FAR 52.204-21 b.1.ii","NIST SP 800-171 Rev 2 3.1.2"]
+        },
+        {
+          "id": "AC.L1-3.1.20",
+          "name": "AC.L1-3.1.20 – EXTERNAL CONNECTIONS",
+          "brief_description": "Verify and control/limit connections to and use of external information systems.",
+          "assessment_objectives": [
+            {"id":"a","text":"connections to external systems are identified","status":"Pending","note":"","artifacts":[]},
+            {"id":"b","text":"use of external systems is identified","status":"Pending","note":"","artifacts":[]},
+            {"id":"c","text":"connections are verified","status":"Pending","note":"","artifacts":[]},
+            {"id":"d","text":"use of external systems is verified","status":"Pending","note":"","artifacts":[]},
+            {"id":"e","text":"connections are controlled/limited","status":"Pending","note":"","artifacts":[]},
+            {"id":"f","text":"use of external systems is controlled/limited","status":"Pending","note":"","artifacts":[]}
+          ],
+          "potential_assessment_methods_and_objects": "Examine: connection inventories, contracts; Interview: system owners; Test: connection controls.",
+          "discussion": "Control connections to personal devices, partner systems, and cloud services; use firewalls and access controls.",
+          "further_discussion": "Establish terms for external systems; restrict access from unmanaged devices.",
+          "key_references": ["FAR 52.204-21 b.1.iii","NIST SP 800-171 Rev 2 3.1.20"]
+        },
+        {
+          "id": "AC.L1-3.1.22",
+          "name": "AC.L1-3.1.22 – CONTROL PUBLIC INFORMATION",
+          "brief_description": "Control information posted or processed on publicly accessible systems to avoid posting FCI.",
+          "assessment_objectives": [
+            {"id":"a","text":"authorized individuals to post/process public info are identified","status":"Pending","note":"","artifacts":[]},
+            {"id":"b","text":"procedures ensure FCI is not posted publicly","status":"Pending","note":"","artifacts":[]},
+            {"id":"c","text":"a review process exists prior to posting","status":"Pending","note":"","artifacts":[]},
+            {"id":"d","text":"public content reviewed to ensure no FCI","status":"Pending","note":"","artifacts":[]},
+            {"id":"e","text":"mechanisms to remove improper posting exist","status":"Pending","note":"","artifacts":[]}
+          ],
+          "potential_assessment_methods_and_objects": "Examine: posting approval records, training; Interview: content managers; Test: removal procedures.",
+          "discussion": "Define an approval chain and review processes for public content to prevent inadvertent disclosure of FCI.",
+          "further_discussion": "Assign only designated staff to post publicly and maintain review logs.",
+          "key_references": ["FAR 52.204-21 b.1.iv","NIST SP 800-171 Rev 2 3.1.22"]
+        }
+      ]
+    },
+    {
+      "domain_id": "IA",
+      "domain_name": "Identification and Authentication (IA)",
+      "practices": [
+        {
+          "id": "IA.L1-3.5.1",
+          "name": "IA.L1-3.5.1 – IDENTIFICATION",
+          "brief_description": "Identify system users, processes acting on behalf of users, and devices.",
+          "assessment_objectives": [
+            {"id":"a","text":"system users are identified","status":"Pending","note":"","artifacts":[]},
+            {"id":"b","text":"processes acting on behalf of users are identified","status":"Pending","note":"","artifacts":[]},
+            {"id":"c","text":"devices accessing the system are identified","status":"Pending","note":"","artifacts":[]}
+          ],
+          "potential_assessment_methods_and_objects": "Examine: ID policy, system account lists, audit logs; Interview: ops/admins; Test: identification mechanisms.",
+          "discussion": "Assign unique identifiers (usernames) to users and identify devices by MAC/IP/certificates where necessary.",
+          "further_discussion": "Unique identifiers help with accountability and supporting AC practices.",
+          "key_references": ["FAR 52.204-21 b.1.v","NIST SP 800-171 Rev 2 3.5.1"]
+        },
+        {
+          "id": "IA.L1-3.5.2",
+          "name": "IA.L1-3.5.2 – AUTHENTICATION",
+          "brief_description": "Authenticate (verify) identities of users, processes, and devices before granting access.",
+          "assessment_objectives": [
+            {"id":"a","text":"user identities are authenticated before access","status":"Pending","note":"","artifacts":[]},
+            {"id":"b","text":"process identities authenticated before access","status":"Pending","note":"","artifacts":[]},
+            {"id":"c","text":"device identities authenticated before access","status":"Pending","note":"","artifacts":[]}
+          ],
+          "potential_assessment_methods_and_objects": "Examine: authenticator records, policies; Interview: admins; Test: authenticator mechanisms.",
+          "discussion": "Use strong authenticators (passwords, tokens, certs) and avoid factory defaults; manage authenticators lifecycle.",
+          "further_discussion": "Consider token lifetimes, password rules, and revocation for temporary authenticators.",
+          "key_references": ["FAR 52.204-21 b.1.vi","NIST SP 800-171 Rev 2 3.5.2"]
+        }
+      ]
+    },
+    {
+      "domain_id": "MP",
+      "domain_name": "Media Protection (MP)",
+      "practices": [
+        {
+          "id": "MP.L1-3.8.3",
+          "name": "MP.L1-3.8.3 – MEDIA DISPOSAL",
+          "brief_description": "Sanitize or destroy system media containing Federal Contract Information before disposal or reuse.",
+          "assessment_objectives": [
+            {"id":"a","text":"media containing FCI is sanitized or destroyed before disposal","status":"Pending","note":"","artifacts":[]},
+            {"id":"b","text":"media containing FCI is sanitized before reuse","status":"Pending","note":"","artifacts":[]}
+          ],
+          "potential_assessment_methods_and_objects": "Examine: media sanitization policy, sanitization records; Interview: custodians; Test: sanitization procedures.",
+          "discussion": "Sanitization methods include clearing, purging, cryptographic erase, and destruction; for paper use shredding or secure destruction.",
+          "further_discussion": "Follow NIST SP 800-88 guidance when selecting sanitization techniques.",
+          "key_references": ["FAR 52.204-21 b.1.vii","NIST SP 800-171 Rev 2 3.8.3"]
+        }
+      ]
+    },
+    {
+      "domain_id": "PE",
+      "domain_name": "Physical Protection (PE)",
+      "practices": [
+        {
+          "id": "PE.L1-3.10.1",
+          "name": "PE.L1-3.10.1 – LIMIT PHYSICAL ACCESS",
+          "brief_description": "Limit physical access to information systems, equipment, and operating environments to authorized individuals.",
+          "assessment_objectives": [
+            {"id":"a","text":"authorized individuals allowed physical access are identified","status":"Pending","note":"","artifacts":[]},
+            {"id":"b","text":"physical access to systems is limited to authorized individuals","status":"Pending","note":"","artifacts":[]},
+            {"id":"c","text":"physical access to equipment is limited to authorized individuals","status":"Pending","note":"","artifacts":[]},
+            {"id":"d","text":"physical access to operating environments is limited to authorized individuals","status":"Pending","note":"","artifacts":[]}
+          ],
+          "potential_assessment_methods_and_objects": "Examine: access lists, policies; Interview: facility managers; Test: access controls like badges/locks.",
+          "discussion": "Use locks, badge readers, and lists to limit access; designate sensitive areas.",
+          "further_discussion": "Place output devices to avoid exposure and maintain access records per retention policy.",
+          "key_references": ["FAR 52.204-21 b.1.viii","NIST SP 800-171 Rev 2 3.10.1"]
+        },
+        {
+          "id": "PE.L1-3.10.3",
+          "name": "PE.L1-3.10.3 – ESCORT VISITORS",
+          "brief_description": "Escort visitors and monitor visitor activity in areas with physical access to organizational systems.",
+          "assessment_objectives": [
+            {"id":"a","text":"visitors are escorted","status":"Pending","note":"","artifacts":[]},
+            {"id":"b","text":"visitor activity is monitored","status":"Pending","note":"","artifacts":[]}
+          ],
+          "potential_assessment_methods_and_objects": "Examine: visitor logs, escort procedures; Interview: reception/facilities staff; Test: escort enforcement.",
+          "discussion": "Require visitor badges and escorts in sensitive areas; monitor via cameras or logs.",
+          "further_discussion": "Ensure visitor sign-in/out records are retained as required.",
+          "key_references": ["FAR 52.204-21 Partial b.1.ix","NIST SP 800-171 Rev 2 3.10.3"]
+        },
+        {
+          "id": "PE.L1-3.10.4",
+          "name": "PE.L1-3.10.4 – PHYSICAL ACCESS LOGS",
+          "brief_description": "Maintain audit logs of physical access.",
+          "assessment_objectives": [
+            {"id":"a","text":"physical access audit logs are maintained","status":"Pending","note":"","artifacts":[]}
+          ],
+          "potential_assessment_methods_and_objects": "Examine: physical access logs, retention records; Interview: security staff; Test: record retrieval.",
+          "discussion": "Logs may be procedural or automated; retain per organizational policy.",
+          "further_discussion": "Use badge readers or sign-in logs and store in secure location.",
+          "key_references": ["FAR 52.204-21 Partial b.1.ix","NIST SP 800-171 Rev 2 3.10.4"]
+        },
+        {
+          "id": "PE.L1-3.10.5",
+          "name": "PE.L1-3.10.5 – MANAGE PHYSICAL ACCESS",
+          "brief_description": "Control and manage physical access devices (keys, badges, locks).",
+          "assessment_objectives": [
+            {"id":"a","text":"physical access devices are identified","status":"Pending","note":"","artifacts":[]},
+            {"id":"b","text":"physical access devices are controlled","status":"Pending","note":"","artifacts":[]},
+            {"id":"c","text":"physical access devices are managed","status":"Pending","note":"","artifacts":[]}
+          ],
+          "potential_assessment_methods_and_objects": "Examine: inventories, change logs; Interview: facilities; Test: revocation procedures.",
+          "discussion": "Inventory keys/badges, revoke access on role change, and maintain records.",
+          "further_discussion": "Document device assignments and update badge system as personnel change.",
+          "key_references": ["FAR 52.204-21 Partial b.1.ix","NIST SP 800-171 Rev 2 3.10.5"]
+        }
+      ]
+    },
+    {
+      "domain_id": "SC",
+      "domain_name": "System and Communications Protection (SC)",
+      "practices": [
+        {
+          "id": "SC.L1-3.13.1",
+          "name": "SC.L1-3.13.1 – BOUNDARY PROTECTION",
+          "brief_description": "Monitor, control, and protect communications at external boundaries and key internal boundaries.",
+          "assessment_objectives": [
+            {"id":"a","text":"external system boundary is defined","status":"Pending","note":"","artifacts":[]},
+            {"id":"b","text":"key internal boundaries are defined","status":"Pending","note":"","artifacts":[]},
+            {"id":"c","text":"communications are monitored at external boundary","status":"Pending","note":"","artifacts":[]},
+            {"id":"d","text":"communications are monitored at key internal boundaries","status":"Pending","note":"","artifacts":[]},
+            {"id":"e","text":"communications are controlled at external boundary","status":"Pending","note":"","artifacts":[]},
+            {"id":"f","text":"communications are controlled at key internal boundaries","status":"Pending","note":"","artifacts":[]},
+            {"id":"g","text":"communications are protected at external boundary","status":"Pending","note":"","artifacts":[]},
+            {"id":"h","text":"communications are protected at key internal boundaries","status":"Pending","note":"","artifacts":[]}
+          ],
+          "potential_assessment_methods_and_objects": "Examine: network diagrams, firewall configs, logs; Interview: network admins; Test: monitoring and control mechanisms.",
+          "discussion": "Protect boundaries with firewalls, proxies, and monitoring; log and review traffic for anomalies.",
+          "further_discussion": "Define DMZs and use segmentation to isolate public systems from internal systems.",
+          "key_references": ["FAR 52.204-21 b.1.x","NIST SP 800-171 Rev 2 3.13.1"]
+        },
+        {
+          "id": "SC.L1-3.13.5",
+          "name": "SC.L1-3.13.5 – PUBLIC-ACCESS SYSTEM SEPARATION",
+          "brief_description": "Implement subnetworks for publicly accessible system components separated from internal networks.",
+          "assessment_objectives": [
+            {"id":"a","text":"publicly accessible components are identified","status":"Pending","note":"","artifacts":[]},
+            {"id":"b","text":"subnetworks for public components are separated","status":"Pending","note":"","artifacts":[]}
+          ],
+          "potential_assessment_methods_and_objects": "Examine: network segmentation docs, DMZ configs; Interview: network admins; Test: isolation mechanisms.",
+          "discussion": "Use DMZs/VLANs or separated cloud environments to keep public systems isolated.",
+          "further_discussion": "Block default traffic and allow only authorized flows between DMZ and internal networks.",
+          "key_references": ["FAR 52.204-21 b.1.xi","NIST SP 800-171 Rev 2 3.13.5"]
+        }
+      ]
+    },
+    {
+      "domain_id": "SI",
+      "domain_name": "System and Information Integrity (SI)",
+      "practices": [
+        {
+          "id": "SI.L1-3.14.1",
+          "name": "SI.L1-3.14.1 – FLAW REMEDIATION",
+          "brief_description": "Identify, report, and correct information and information system flaws in a timely manner.",
+          "assessment_objectives": [
+            {"id":"a","text":"time to identify system flaws is specified","status":"Pending","note":"","artifacts":[]},
+            {"id":"b","text":"system flaws are identified within the specified time","status":"Pending","note":"","artifacts":[]}
+          ],
+          "potential_assessment_methods_and_objects": "Examine: vulnerability records, patch logs; Interview: IT/security; Test: scanning and remediation processes.",
+          "discussion": "Track vulnerabilities and schedule remediation within defined timeframes.",
+          "further_discussion": "Use scans, change control, and configuration management to reduce risk of unresolved flaws.",
+          "key_references": ["FAR 52.204-21 b.1.xii","NIST SP 800-171 Rev 2 3.14.1"]
+        },
+        {
+          "id": "SI.L1-3.14.2",
+          "name": "SI.L1-3.14.2 – MALICIOUS CODE PROTECTION",
+          "brief_description": "Employ malicious code protection mechanisms to detect and protect against malware.",
+          "assessment_objectives": [
+            {"id":"a","text":"malicious code protection is deployed to relevant components","status":"Pending","note":"","artifacts":[]},
+            {"id":"b","text":"malicious code detection and handling processes exist","status":"Pending","note":"","artifacts":[]}
+          ],
+          "potential_assessment_methods_and_objects": "Examine: anti-malware configs, scan logs; Interview: admins; Test: scanning and quarantine processes.",
+          "discussion": "Use anti-malware (real-time and scheduled scans) and quarantine suspicious files.",
+          "further_discussion": "Consider reputation-based and signature mechanisms and update definitions regularly.",
+          "key_references": ["FAR 52.204-21 b.1.xiii","NIST SP 800-171 Rev 2 3.14.2"]
+        },
+        {
+          "id": "SI.L1-3.14.4",
+          "name": "SI.L1-3.14.4 – UPDATE MALICIOUS CODE PROTECTION",
+          "brief_description": "Update malicious code protection mechanisms when new releases are available.",
+          "assessment_objectives": [
+            {"id":"a","text":"malicious code protection mechanisms are updated when new releases are available","status":"Pending","note":"","artifacts":[]}
+          ],
+          "potential_assessment_methods_and_objects": "Examine: update logs, policies; Interview: administrators; Test: update automation.",
+          "discussion": "Automate or schedule frequent updates to keep malware detection current.",
+          "further_discussion": "Track update frequency and test post-update behavior.",
+          "key_references": ["FAR 52.204-21 b.1.xiv","NIST SP 800-171 Rev 2 3.14.4"]
+        },
+        {
+          "id": "SI.L1-3.14.5",
+          "name": "SI.L1-3.14.5 – SYSTEM & FILE SCANNING",
+          "brief_description": "Perform system and file scanning for malicious code and vulnerabilities.",
+          "assessment_objectives": [
+            {"id":"a","text":"system and file scanning is performed and results reviewed","status":"Pending","note":"","artifacts":[]}
+          ],
+          "potential_assessment_methods_and_objects": "Examine: scan reports; Interview: admins; Test: scanning tools and remediation actions.",
+          "discussion": "Include endpoints, servers, email gateways and removable media in scanning policies.",
+          "further_discussion": "Document scanning frequency and response actions for detected issues.",
+          "key_references": ["FAR 52.204-21 b.1.xv","NIST SP 800-171 Rev 2 3.14.5"]
+        }
+      ]
+    }
+  ],
+  "high_risk_practices": [
+    "AC.L1-3.1.1",
+    "AC.L1-3.1.2",
+    "IA.L1-3.5.1",
+    "IA.L1-3.5.2",
+    "MP.L1-3.8.3",
+    "PE.L1-3.10.1",
+    "SC.L1-3.13.1",
+    "SC.L1-3.13.5",
+    "SI.L1-3.14.1",
+    "SI.L1-3.14.2",
+    "SI.L1-3.14.4"
+  ],
+  "notes": "Data summarized from CMMC Level 1 Self-Assessment Guide (uploaded PDF). See source for full descriptions and examples."
+}

@@ -1,0 +1,194 @@
+[
+  {
+    "requirementId": "AT.L2-3.2.1",
+    "domain": "AT",
+    "level": 2,
+    "requirementName": "ROLE-BASED RISK AWARENESS",
+    "requirementStatement": "Ensure that managers, systems administrators, and users of organizational systems are made aware of the security risks associated with their activities and of the applicable policies, standards, and procedures related to the security of those systems.",
+    "assessmentObjectives": [
+      {
+        "objectiveId": "AT.L2-3.2.1[a]",
+        "determinationStatement": "security risks associated with organizational activities involving CUI are identified;",
+        "assessmentMethods": [
+          "examine",
+          "interview",
+          "test"
+        ],
+        "assessmentObjects": [
+          "specifications",
+          "mechanisms",
+          "activities",
+          "individuals"
+        ]
+      },
+      {
+        "objectiveId": "AT.L2-3.2.1[b]",
+        "determinationStatement": "policies, standards, and procedures related to the security of the system are identified;",
+        "assessmentMethods": [
+          "examine",
+          "interview",
+          "test"
+        ],
+        "assessmentObjects": [
+          "specifications",
+          "mechanisms",
+          "activities",
+          "individuals"
+        ]
+      },
+      {
+        "objectiveId": "AT.L2-3.2.1[c]",
+        "determinationStatement": "managers, systems administrators, and users of the system are made aware of the security risks associated with their activities; and",
+        "assessmentMethods": [
+          "examine",
+          "interview",
+          "test"
+        ],
+        "assessmentObjects": [
+          "specifications",
+          "mechanisms",
+          "activities",
+          "individuals"
+        ]
+      },
+      {
+        "objectiveId": "AT.L2-3.2.1[d]",
+        "determinationStatement": "managers, systems administrators, and users of the system are made aware of the applicable policies, standards, and procedures related to the security of the system.",
+        "assessmentMethods": [
+          "examine",
+          "interview",
+          "test"
+        ],
+        "assessmentObjects": [
+          "specifications",
+          "mechanisms",
+          "activities",
+          "individuals"
+        ]
+      }
+    ],
+    "discussion": "Organizations determine the content and frequency of security awareness training and security awareness techniques based on the specific organizational requirements and the systems to which personnel have authorized access. The content includes a basic understanding of the need for information security and user actions to maintain security and to respond to suspected security incidents. The content also addresses awareness of the need for operations security. Security awareness techniques include: formal training; offering supplies inscribed with security reminders; generating email advisories or notices from organizational officials; displaying logon screen messages; displaying security awareness posters; and conducting information security awareness events.",
+    "furtherDiscussion": "Awareness training focuses user attention on security. Several techniques can be used, such as:\n\n● synchronous or asynchronous training;\n● simulations (e.g., simulated phishing emails);\n● security awareness campaigns (posters, reminders, group discussions); and\n● communicating regular email advisories and notices to employees.\n\nAwareness training and role-based training are different. This requirement, AT.L2-3.2.1, covers awareness training, which provides general security training to influence user behavior. This training can apply broadly or be tailored to a specific role. Role-based training focuses on the knowledge, skills, and abilities needed to complete a specific job and is covered by AT.L2-3.2.2.",
+    "examples": "Your organization holds a DoD contract which requires the use of CUI. You want to provide information to employees so they can identify phishing emails. To do this, you prepare a presentation that highlights basic traits, including:\n\n● suspicious-looking email address or domain name;\n● a message that contains an attachment or URL; and\n● a message that is poorly written and often contains obvious misspelled words.\n\nYou encourage everyone to not click on attachments or links in a suspicious email [c]. You tell employees to forward such a message immediately to IT security [d]. You download free security awareness posters to hang in the office [c,d]. You send regular emails and tips to all employees to ensure your message is not forgotten over time [c,d].",
+    "references": "NIST SP 800-171 Rev. 2 3.2.1",
+    "sourceTrace": {
+      "pdfVersion": "2.13",
+      "pageStart": 75,
+      "pageEnd": 77
+    },
+    "extractionConfidence": "HIGH"
+  },
+  {
+    "requirementId": "AT.L2-3.2.2",
+    "domain": "AT",
+    "level": 2,
+    "requirementName": "ROLE-BASED TRAINING",
+    "requirementStatement": "Ensure that personnel are trained to carry out their assigned information security-related duties and responsibilities.",
+    "assessmentObjectives": [
+      {
+        "objectiveId": "AT.L2-3.2.2[a]",
+        "determinationStatement": "information security-related duties, roles, and responsibilities are defined;",
+        "assessmentMethods": [
+          "examine",
+          "interview",
+          "test"
+        ],
+        "assessmentObjects": [
+          "specifications",
+          "mechanisms",
+          "activities",
+          "individuals"
+        ]
+      },
+      {
+        "objectiveId": "AT.L2-3.2.2[b]",
+        "determinationStatement": "information security-related duties, roles, and responsibilities are assigned to designated personnel; and",
+        "assessmentMethods": [
+          "examine",
+          "interview",
+          "test"
+        ],
+        "assessmentObjects": [
+          "specifications",
+          "mechanisms",
+          "activities",
+          "individuals"
+        ]
+      },
+      {
+        "objectiveId": "AT.L2-3.2.2[c]",
+        "determinationStatement": "personnel are adequately trained to carry out their assigned information security-related duties, roles, and responsibilities.",
+        "assessmentMethods": [
+          "examine",
+          "interview",
+          "test"
+        ],
+        "assessmentObjects": [
+          "specifications",
+          "mechanisms",
+          "activities",
+          "individuals"
+        ]
+      }
+    ],
+    "discussion": "Organizations determine the content and frequency of security training based on the assigned duties, roles, and responsibilities of individuals and the security requirements of organizations and the systems to which personnel have authorized access. In addition, organizations provide system developers, enterprise architects, security architects, acquisition/procurement officials, software developers, system developers, systems integrators, system/network administrators, personnel conducting configuration management and auditing activities, personnel performing independent verification and validation, security assessors, and other personnel having access to system-level software, security-related technical training specifically tailored for their assigned duties. Comprehensive role-based training addresses management, operational, and technical roles and responsibilities covering physical, personnel, and technical controls. Such training can include policies, procedures, tools, and artifacts for the security roles defined. Organizations also provide the training necessary for individuals to carry out their responsibilities related to operations and supply chain security within the context of organizational information security programs.",
+    "furtherDiscussion": "Training imparts skills and knowledge to enable staff to perform a specific job function. Training should be available to all employees for all organizational roles to accommodate role changes without being constrained by the training schedule. Awareness training and role-based training are different. Awareness training provides general security training to influence user behavior and is covered by AT.L2-3.2.1. This requirement, AT.L2-3.2.2, covers role-based training that focuses on the knowledge, skills, and abilities needed to complete a specific job. Role-based training may include awareness topics specific to individual roles such as ensuring systems administrators understand the risk associated with using an administrative account.",
+    "examples": "Your company upgraded the firewall to a newer, more advanced system to protect the CUI it stores. You have been identified as an employee who needs training on the new device [a,b,c]. This will enable you to use the firewall effectively and efficiently. Your company considered training resources when it planned for the upgrade and ensured that training funds were available as part of the upgrade project [c].",
+    "references": "NIST SP 800-171 Rev. 2 3.2.2",
+    "sourceTrace": {
+      "pdfVersion": "2.13",
+      "pageStart": 78,
+      "pageEnd": 79
+    },
+    "extractionConfidence": "HIGH"
+  },
+  {
+    "requirementId": "AT.L2-3.2.3",
+    "domain": "AT",
+    "level": 2,
+    "requirementName": "INSIDER THREAT AWARENESS",
+    "requirementStatement": "Provide security awareness training on recognizing and reporting potential indicators of insider threat.",
+    "assessmentObjectives": [
+      {
+        "objectiveId": "AT.L2-3.2.3[a]",
+        "determinationStatement": "potential indicators associated with insider threats are identified; and",
+        "assessmentMethods": [
+          "examine",
+          "interview",
+          "test"
+        ],
+        "assessmentObjects": [
+          "specifications",
+          "mechanisms",
+          "activities",
+          "individuals"
+        ]
+      },
+      {
+        "objectiveId": "AT.L2-3.2.3[b]",
+        "determinationStatement": "security awareness training on recognizing and reporting potential indicators of insider threat is provided to managers and employees.",
+        "assessmentMethods": [
+          "examine",
+          "interview",
+          "test"
+        ],
+        "assessmentObjects": [
+          "specifications",
+          "mechanisms",
+          "activities",
+          "individuals"
+        ]
+      }
+    ],
+    "discussion": "Potential indicators and possible precursors of insider threat include behaviors such as: inordinate, long-term job dissatisfaction; attempts to gain access to information that is not required for job performance; unexplained access to financial resources; bullying or sexual harassment of fellow employees; workplace violence; and other serious violations of the policies, procedures, directives, rules, or practices of organizations. Security awareness training includes how to communicate employee and management concerns regarding potential indicators of insider threat through appropriate organizational channels in accordance with established organizational policies and procedures. Organizations may consider tailoring insider threat awareness topics to the role (e.g., training for managers may be focused on specific changes in behavior of team members, while training for employees may be focused on more general observations).",
+    "furtherDiscussion": "An insider threat is the threat that an insider will use their authorized access, wittingly or unwittingly, to do harm. Insider threat security awareness training focuses on recognizing employee behaviors and characteristics that might be indicators of an insider threat and the guidelines and procedures to handle and report it. Training for managers will provide guidance on observing team members to identify all potential threat indicators, while training for general employees will provide guidance for focusing on a smaller number of indicators. Employee behaviors will vary depending on roles, team membership, and associated information needs. The person responsible for specifying insider threat indicators must be cognizant of these factors. Because of this, organizations may choose to tailor the training for specific roles. This requirement does not require separate training regarding insider threat. Organizations may choose to integrate these topics into their standard security awareness training programs.",
+    "examples": "You are responsible for training all employees on the awareness of high-risk behaviors that can indicate a potential insider threat [b]. You educate yourself on the latest research on insider threat indicators by reviewing a number of law enforcement bulletins [a]. You then add the following example to the training package: A baseline of normal behavior for work schedules has been created. One employee’s normal work schedule is 8:00 AM–5:00 PM, but another employee noticed that the employee has been working until 9:00 PM every day even though no projects requiring additional hours have been assigned [b]. The observing employee reports the abnormal work schedule using the established reporting guidelines.",
+    "references": "NIST SP 800-171 Rev. 2 3.2.3",
+    "sourceTrace": {
+      "pdfVersion": "2.13",
+      "pageStart": 81,
+      "pageEnd": 82
+    },
+    "extractionConfidence": "HIGH"
+  }
+]
