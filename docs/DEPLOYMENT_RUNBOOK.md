@@ -22,10 +22,18 @@ Deploy current MVP to Firebase Hosting and keep Firestore rules aligned.
 
 4) Deploy hosting
    - firebase use
-   - firebase deploy --only "hosting"
+   - firebase deploy --only hosting
 
 5) Deploy Firestore rules
-   - firebase deploy --only "firestore:rules"
+   - firebase deploy --only firestore:rules
+
+6) Store a copy in GitHub
+git status
+git add -A
+git commit -m "Version name"
+git push
+
+EXAMPLE (Version name): "Sidebar: tier-based access matrix (SPONSORED/COMM_L1/COMM_L2)"
 
 ## Troubleshooting
 ### firebase not recognized

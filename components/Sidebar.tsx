@@ -1,9 +1,9 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Domain, SubscriptionLevel } from "../types";
-import type { ActiveViewInfo } from "../App";
 
-// Core App Shell entitlements (org-based)
-// NOTE: your Sidebar lives in /components, so the relative path points into /src
+import type { ActiveViewInfo } from '../App';
+
+
 import {
   Archive,
   BarChart3,
@@ -19,7 +19,6 @@ import {
 } from "lucide-react";
 
 interface SidebarProps {
-  /** Legacy dataset (often Level-1 only). We'll gracefully fall back to static prepop JSON for Level 2. */
   domains: Domain[];
   onNavClick: (view: string) => void;
   onDashboardClick: () => void;
@@ -39,51 +38,6 @@ interface SidebarProps {
 
   subscriptionLevel: SubscriptionLevel;
   onLockedClick: () => void;
-}
-
-// --- Static prepop parsing (public/cmmc_l1_prepop.json, public/cmmc_l2_prepop.json) ---
-type PrepopDomain = { domain_id: string; domain_name: string; practices: any[] };
-
-function mapPrepopToDomains(prepop: any, level: 1 | 2): Domain[] {
-  const rawDomains: PrepopDomain[] = Array.isArray(prepop?.domains) ? prepop.domains : [];
-  return rawDomains.map((d) => {
-    const practices = (Array.isArray(d.practices) ? d.practices : []).map((p: any) => {
-      // Make a "Practice-like" object with a `level` property so existing filters work.
-      const id = p.id ?? p.requirementId ?? p.requirement_id ?? p.practiceId ?? "";
-      const name =
-        p.name ??
-        p.requirementName ??
-        p.requirement_name ??
-        p.title ??
-        p.requirementId ??
-        "Practice";
-
-      return {
-        id,
-        name,
-        title: name,
-        level,
-        // keep raw for later pages if needed
-        _raw: p,
-      } as any;
-    });
-
-    return {
-      id: d.domain_id,
-      name: d.domain_name,
-      practices,
-    } as any as Domain;
-  });
-}
-
-async function fetchPrepop(path: string): Promise<any | null> {
-  try {
-    const res = await fetch(path, { cache: "no-store" });
-    if (!res.ok) return null;
-    return await res.json();
-  } catch {
-    return null;
-  }
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -111,54 +65,87 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [isToolsOpen, setIsToolsOpen] = useState(false);
   const [isReportingOpen, setIsReportingOpen] = useState(false);
 
-  // Source of truth for MVP: ORG tier (passed in as subscriptionLevel)
-  const canL2 = subscriptionLevel === "COMM_L2";
-  const l2Locked = !canL2;
+  // -------------------------------
+  // Tier-based sidebar entitlements
+  // -------------------------------
+  const normalizedTier =
+    subscriptionLevel === "CT_SPONSORED" ? "SPONSORED" : subscriptionLevel;
 
+  const SIDEBAR_ENTITLEMENTS = {
+    SPONSORED: {
+      navL1: true,
+      navL2: false,
+      training: { interactive: true, updates: false },
+      tools: {
+        readinessAnalyzer: true,
+        responsibilityMatrix: false,
+        starterKits: true,
+        templateAssist: false,
+      },
+      reporting: {
+        executiveNarrative: false,
+        readinessVault: false,
+        sprs: true,
+        ssp: false,
+        poam: false,
+      },
+    },
+    COMM_L1: {
+      navL1: true,
+      navL2: false,
+      training: { interactive: true, updates: false },
+      tools: {
+        readinessAnalyzer: true,
+        responsibilityMatrix: false,
+        starterKits: true,
+        templateAssist: true,
+      },
+      reporting: {
+        executiveNarrative: false,
+        readinessVault: false,
+        sprs: true,
+        ssp: true,
+        poam: false,
+      },
+    },
+    COMM_L2: {
+      navL1: true,
+      navL2: true,
+      training: { interactive: true, updates: true },
+      tools: {
+        readinessAnalyzer: true,
+        responsibilityMatrix: true,
+        starterKits: true,
+        templateAssist: true,
+      },
+      reporting: {
+        executiveNarrative: true,
+        readinessVault: true,
+        sprs: true,
+        ssp: true,
+        poam: true,
+      },
+    },
+  } as const;
 
-  // --- Static dataset fallback state ---
-  const [l2StaticDomains, setL2StaticDomains] = useState<Domain[] | null>(null);
-  const [l2StaticLoading, setL2StaticLoading] = useState(false);
+  const ent =
+    (SIDEBAR_ENTITLEMENTS as any)[normalizedTier] ??
+    SIDEBAR_ENTITLEMENTS.SPONSORED;
+
+  // Primary gating flag for Level 2 nav
+  const canL2 = Boolean(ent.navL2);
+
+  const gated = (allowed: boolean, onClick: () => void) =>
+    allowed ? onClick : () => onLockedClick();
 
   const l1Domains = useMemo(() => {
-    // Prefer the live dataset for Level 1 (it already works for you)
-    return domains.filter((d: any) => d?.practices?.some((p: any) => p?.level === 1));
+    return domains.filter((d) => d.practices.some((p) => p.level === 1));
   }, [domains]);
 
-  const l2DomainsFromProp = useMemo(() => {
-    return domains.filter((d: any) => d?.practices?.some((p: any) => p?.level === 2));
+  const l2Domains = useMemo(() => {
+    // Only show domains that actually contain Level 2 practices
+    return domains.filter((d) => d.practices.some((p) => p.level === 2));
   }, [domains]);
-
-  const effectiveL2Domains = useMemo(() => {
-    if (l2DomainsFromProp.length > 0) return l2DomainsFromProp;
-    if (Array.isArray(l2StaticDomains) && l2StaticDomains.length > 0) return l2StaticDomains;
-    return [];
-  }, [l2DomainsFromProp, l2StaticDomains]);
-
-  // If L2 is unlocked but the current dataset contains no L2 practices, load the static prepop JSON.
-  useEffect(() => {
-    let cancelled = false;
-
-    async function ensureL2Domains() {
-      if (!canL2) return;
-      if (l2DomainsFromProp.length > 0) return;
-      if (l2StaticDomains && l2StaticDomains.length > 0) return;
-
-      setL2StaticLoading(true);
-      const prepop = await fetchPrepop("/cmmc_l2_prepop.json");
-      const mapped = prepop ? mapPrepopToDomains(prepop, 2) : [];
-      if (!cancelled) {
-        setL2StaticDomains(mapped);
-        setL2StaticLoading(false);
-      }
-    }
-
-    ensureL2Domains();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [canL2, l2DomainsFromProp.length, l2StaticDomains]);
 
   const isActive = (type: ActiveViewInfo["type"], name?: string) => {
     if (activeViewInfo.type !== type) return false;
@@ -184,50 +171,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const collapsibleHeaderClass =
     "w-full flex justify-between items-center text-sm font-black text-gray-400 px-3 py-2 rounded-md hover:bg-gray-700 cursor-pointer tracking-widest uppercase";
 
-  const handleL2HeaderClick = () => {
-    if (l2Locked) {
+  const handleL2DomainClick = (domainName: string) => {
+    if (!canL2) {
       onLockedClick();
       return;
     }
-    setIsL2Open((v) => !v);
+    onNavClick(domainName);
   };
-
-
-
-const handleL2DomainClick = (domainId: string) => {
-  if (!canL2) {
-    onLockedClick();
-    return;
-  }
-
-  const token = "__L2__:" + domainId;
-  console.log("L2_HANDLER_FIRED", { domainId, token, canL2 });
-
-  onNavClick(token);
-};
-
-
-
-  // Use a token so App can render L2 practices even if the base dataset is L1-filtered
-  // const token = "__L2__:" + domainId;
-
-  // 👇 ADD THIS LINE (TEMPORARY)
-  // console.log("NAV_DEBUG", token); // TEMP: enable when debugging navigation  onNavClick(token);
-
-
-  const getL2DomainId = (domain: any) => {
-    // Parse "Access Control (AC)" -> "AC"
-    const name = String(domain?.name ?? "");
-    const match = name.match(/\(([^)]+)\)\s*$/);
-    if (match?.[1]) return match[1];
-
-    // Fallback: derive from first practice id: "AC.L2-..." -> "AC"
-    const firstPracticeId = String(domain?.practices?.[0]?.id ?? "");
-    if (firstPracticeId.includes(".")) return firstPracticeId.split(".")[0];
-
-    return "";
-  };
-
 
   return (
     <aside className="w-[352px] bg-gray-800 text-white flex flex-col flex-shrink-0 overflow-y-auto border-r border-gray-700 shadow-xl">
@@ -253,15 +203,17 @@ const handleL2DomainClick = (domainId: string) => {
             CMMC Level 1
           </span>
           <ChevronRight
-            className={`h-3 w-3 transition-transform ${isL1Open ? "rotate-90" : ""}`}
+            className={`h-3 w-3 transition-transform ${
+              isL1Open ? "rotate-90" : ""
+            }`}
           />
         </button>
 
         {isL1Open && (
           <div className="pt-1 pl-2 space-y-0.5 animate-fadeIn">
-            {l1Domains.map((domain: any) => (
+            {l1Domains.map((domain) => (
               <button
-                key={String(getL2DomainId(domain) || domain.id || domain.name)}
+                key={domain.name}
                 onClick={() => onNavClick(domain.name)}
                 className={navButtonClass(isActive("domain", domain.name))}
               >
@@ -277,23 +229,37 @@ const handleL2DomainClick = (domainId: string) => {
 
       {/* LEVEL 2 SECTION */}
       <div className="p-3 space-y-1">
-        <button onClick={handleL2HeaderClick} className={collapsibleHeaderClass}>
+        <button
+          onClick={() => setIsL2Open(!isL2Open)}
+          className={collapsibleHeaderClass}
+        >
           <span className="flex items-center">
-            <ShieldCheck className={`h-4 w-4 mr-2 ${canL2 ? "text-blue-400" : "text-gray-500"}`} />
+            <ShieldCheck
+              className={`h-4 w-4 mr-2 ${
+                canL2 ? "text-blue-400" : "text-gray-500"
+              }`}
+            />
             CMMC Level 2
             {!canL2 && <Lock className="h-3 w-3 ml-2 text-gray-500" />}
           </span>
-          <ChevronRight className={`h-3 w-3 transition-transform ${isL2Open ? "rotate-90" : ""}`} />
+          <ChevronRight
+            className={`h-3 w-3 transition-transform ${
+              isL2Open ? "rotate-90" : ""
+            }`}
+          />
         </button>
-
-
 
         {isL2Open && (
           <div className="pt-1 pl-2 space-y-0.5 animate-fadeIn">
-            {!canL2 ? (
+            {false ? (
+              <div className="px-3 py-2 text-[11px] text-gray-400">
+                Loading access…
+              </div>
+            ) : !canL2 ? (
               <div className="p-4 bg-gray-900/50 rounded-lg border border-gray-700 mx-2 mb-2">
                 <p className="text-[10px] text-gray-400 leading-relaxed mb-3">
-                  Level 2 adds support for 110 practices including CUI protection and incident response.
+                  Level 2 adds support for 110 practices including CUI protection
+                  and incident response.
                 </p>
                 <button
                   onClick={onLockedClick}
@@ -302,37 +268,19 @@ const handleL2DomainClick = (domainId: string) => {
                   Unlock Level 2
                 </button>
               </div>
-            ) : l2StaticLoading && effectiveL2Domains.length === 0 ? (
-              <div className="px-3 py-2 text-[11px] text-gray-400">Loading Level 2 domains…</div>
-            ) : effectiveL2Domains.length === 0 ? (
-              <div className="px-3 py-2 text-[11px] text-gray-400">
-                Level 2 is enabled, but no Level 2 dataset is available.
-                <div className="mt-1 text-[10px] text-gray-500">
-                  Expected: <span className="font-mono">/public/cmmc_l2_prepop.json</span>
-                </div>
-              </div>
             ) : (
-effectiveL2Domains.map((domain: any) => {
-  const domainId = getL2DomainId(domain);
-  const token = "__L2__:" + domainId;
-
-//  console.log("L2_CLICK", { domain, domainId, token, disabled: !domainId });
-
-  return (
-    <button
-      key={token}
-      onClick={() => handleL2DomainClick(domainId)}
-      className={navButtonClass(isActive("domain", token))}
-      disabled={!domainId}
-      title={!domainId ? "Missing domain id" : undefined}
-    >
-      <div className="h-1 w-1 bg-blue-400 rounded-full mr-3 flex-shrink-0" />
-      <span className="text-left w-full whitespace-normal break-words truncate">
-        {domain.name}
-      </span>
-    </button>
-  );
-})
+              l2Domains.map((domain) => (
+                <button
+                  key={domain.name}
+                  onClick={() => handleL2DomainClick(domain.name)}
+                  className={navButtonClass(isActive("domain", domain.name))}
+                >
+                  <div className="h-1 w-1 bg-blue-400 rounded-full mr-3 flex-shrink-0" />
+                  <span className="text-left w-full whitespace-normal break-words truncate">
+                    {domain.name}
+                  </span>
+                </button>
+              ))
             )}
           </div>
         )}
@@ -347,18 +295,28 @@ effectiveL2Domains.map((domain: any) => {
           className={collapsibleHeaderClass}
         >
           <span>AWARENESS & TRAINING</span>
-          <ChevronRight className={`h-3 w-3 transition-transform ${isAwarenessOpen ? "rotate-90" : ""}`} />
+          <ChevronRight
+            className={`h-3 w-3 transition-transform ${
+              isAwarenessOpen ? "rotate-90" : ""
+            }`}
+          />
         </button>
 
         {isAwarenessOpen && (
           <div className="pt-1 pl-2 space-y-0.5 animate-fadeIn">
-            <button onClick={onTrainingClick} className={navButtonClass(isActive("training"))}>
+            <button
+              onClick={gated(ent.training.interactive, onTrainingClick)}
+              className={navButtonClass(isActive("training"), !ent.training.interactive)}
+            >
               <GraduationCap className="h-4 w-4 mr-3" />
-              Interactive Modules
+              Interactive Modules {!ent.training.interactive && <Lock className="h-3 w-3 ml-auto text-gray-500" />}
             </button>
-            <button onClick={onNewsUpdatesClick} className={navButtonClass(isActive("newsUpdates"))}>
+            <button
+              onClick={gated(ent.training.updates, onNewsUpdatesClick)}
+              className={navButtonClass(isActive("newsUpdates"), !ent.training.updates)}
+            >
               <FileText className="h-4 w-4 mr-3" />
-              Verified Updates
+              Verified Updates {!ent.training.updates && <Lock className="h-3 w-3 ml-auto text-gray-500" />}
             </button>
           </div>
         )}
@@ -366,28 +324,47 @@ effectiveL2Domains.map((domain: any) => {
 
       {/* TOOLS SECTION */}
       <div className="p-3 space-y-1">
-        <button onClick={() => setIsToolsOpen(!isToolsOpen)} className={collapsibleHeaderClass}>
+        <button
+          onClick={() => setIsToolsOpen(!isToolsOpen)}
+          className={collapsibleHeaderClass}
+        >
           <span>SYSTEM TOOLS</span>
-          <ChevronRight className={`h-3 w-3 transition-transform ${isToolsOpen ? "rotate-90" : ""}`} />
+          <ChevronRight
+            className={`h-3 w-3 transition-transform ${
+              isToolsOpen ? "rotate-90" : ""
+            }`}
+          />
         </button>
 
         {isToolsOpen && (
           <div className="pt-1 pl-2 space-y-0.5 animate-fadeIn">
-            <button onClick={onSecurityAnalyzerClick} className={navButtonClass(isActive("readinessAnalyzer"))}>
+            <button
+              onClick={gated(ent.tools.readinessAnalyzer, onSecurityAnalyzerClick)}
+              className={navButtonClass(isActive("readinessAnalyzer"), !ent.tools.readinessAnalyzer)}
+            >
               <ClipboardCheck className="h-4 w-4 mr-3" />
-              Readiness Analyzer
+              Readiness Analyzer {!ent.tools.readinessAnalyzer && <Lock className="h-3 w-3 ml-auto text-gray-500" />}
             </button>
-            <button onClick={onResponsibilityMatrixClick} className={navButtonClass(isActive("responsibilityMatrix"))}>
+            <button
+              onClick={gated(ent.tools.responsibilityMatrix, onResponsibilityMatrixClick)}
+              className={navButtonClass(isActive("responsibilityMatrix"), !ent.tools.responsibilityMatrix)}
+            >
               <ShieldCheck className="h-4 w-4 mr-3" />
-              Shared Responsibility
+              Shared Responsibility {!ent.tools.responsibilityMatrix && <Lock className="h-3 w-3 ml-auto text-gray-500" />}
             </button>
-            <button onClick={onSolutionsClick} className={navButtonClass(isActive("solutions"))}>
+            <button
+              onClick={gated(ent.tools.starterKits, onSolutionsClick)}
+              className={navButtonClass(isActive("solutions"), !ent.tools.starterKits)}
+            >
               <Zap className="h-4 w-4 mr-3" />
-              Starter Kits
+              Starter Kits {!ent.tools.starterKits && <Lock className="h-3 w-3 ml-auto text-gray-500" />}
             </button>
-            <button onClick={onTemplateAssistClick} className={navButtonClass(isActive("templateAssist"))}>
+            <button
+              onClick={gated(ent.tools.templateAssist, onTemplateAssistClick)}
+              className={navButtonClass(isActive("templateAssist"), !ent.tools.templateAssist)}
+            >
               <Wand2 className="h-4 w-4 mr-3" />
-              Template Assist
+              Template Assist {!ent.tools.templateAssist && <Lock className="h-3 w-3 ml-auto text-gray-500" />}
             </button>
           </div>
         )}
@@ -395,32 +372,54 @@ effectiveL2Domains.map((domain: any) => {
 
       {/* REPORTING SECTION */}
       <div className="p-3 space-y-1">
-        <button onClick={() => setIsReportingOpen(!isReportingOpen)} className={collapsibleHeaderClass}>
+        <button
+          onClick={() => setIsReportingOpen(!isReportingOpen)}
+          className={collapsibleHeaderClass}
+        >
           <span>COMPLIANCE REPORTING</span>
-          <ChevronRight className={`h-3 w-3 transition-transform ${isReportingOpen ? "rotate-90" : ""}`} />
+          <ChevronRight
+            className={`h-3 w-3 transition-transform ${
+              isReportingOpen ? "rotate-90" : ""
+            }`}
+          />
         </button>
 
         {isReportingOpen && (
           <div className="pt-1 pl-2 space-y-0.5 animate-fadeIn">
-            <button onClick={onExecutiveSummaryClick} className={navButtonClass(isActive("executive"))}>
+            <button
+              onClick={gated(ent.reporting.executiveNarrative, onExecutiveSummaryClick)}
+              className={navButtonClass(isActive("executive"), !ent.reporting.executiveNarrative)}
+            >
               <FileText className="h-4 w-4 mr-3" />
-              Executive Narrative
+              Executive Narrative {!ent.reporting.executiveNarrative && <Lock className="h-3 w-3 ml-auto text-gray-500" />}
             </button>
-            <button onClick={onReadinessReportsClick} className={navButtonClass(isActive("readinessReports"))}>
+            <button
+              onClick={gated(ent.reporting.readinessVault, onReadinessReportsClick)}
+              className={navButtonClass(isActive("readinessReports"), !ent.reporting.readinessVault)}
+            >
               <Archive className="h-4 w-4 mr-3" />
-              Readiness Vault
+              Readiness Vault {!ent.reporting.readinessVault && <Lock className="h-3 w-3 ml-auto text-gray-500" />}
             </button>
-            <button onClick={onSprsClick} className={navButtonClass(isActive("sprs"))}>
+            <button
+              onClick={gated(ent.reporting.sprs, onSprsClick)}
+              className={navButtonClass(isActive("sprs"), !ent.reporting.sprs)}
+            >
               <BarChart3 className="h-4 w-4 mr-3" />
-              SPRS Scorecard
+              SPRS Scorecard {!ent.reporting.sprs && <Lock className="h-3 w-3 ml-auto text-gray-500" />}
             </button>
-            <button onClick={onSystemSecurityPlanClick} className={navButtonClass(isActive("systemSecurityPlan"))}>
+            <button
+              onClick={gated(ent.reporting.ssp, onSystemSecurityPlanClick)}
+              className={navButtonClass(isActive("systemSecurityPlan"), !ent.reporting.ssp)}
+            >
               <FileText className="h-4 w-4 mr-3" />
-              System Security Plan
+              System Security Plan {!ent.reporting.ssp && <Lock className="h-3 w-3 ml-auto text-gray-500" />}
             </button>
-            <button onClick={onPoamClick} className={navButtonClass(isActive("poam"))}>
+            <button
+              onClick={gated(ent.reporting.poam, onPoamClick)}
+              className={navButtonClass(isActive("poam"), !ent.reporting.poam)}
+            >
               <ClipboardCheck className="h-4 w-4 mr-3" />
-              Remediation (POA&M)
+              Remediation (POA&M) {!ent.reporting.poam && <Lock className="h-3 w-3 ml-auto text-gray-500" />}
             </button>
           </div>
         )}
@@ -430,9 +429,11 @@ effectiveL2Domains.map((domain: any) => {
       <div className="mt-auto p-4 bg-gray-900/30 border-t border-gray-700/50">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
-            <ShieldCheck className={`h-4 w-4 ${canL2 ? "text-blue-400" : "text-gray-400"}`} />
+            <ShieldCheck
+              className={`h-4 w-4 ${canL2 ? "text-blue-400" : "text-gray-400"}`}
+            />
             <span className="text-[10px] font-black uppercase tracking-widest text-gray-500">
-              Plan: {canL2 ? "L2" : subscriptionLevel}
+              Plan: {normalizedTier}
             </span>
           </div>
 

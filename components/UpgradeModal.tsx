@@ -26,26 +26,32 @@ export const UpgradeModal: React.FC<UpgradeModalProps> = ({ isOpen, onClose, onU
                     <ShieldCheck className="h-10 w-10 text-white" />
                 </div>
                 <div>
-                    <h2 className="text-2xl font-bold">Unlock CMMC Level 2</h2>
-                    <p className="text-blue-200 text-sm">Comprehensive CUI Readiness</p>
+                    <h2 className="text-2xl font-bold">Upgrade</h2>
+                    <p className="text-blue-200 text-sm">Comprehensive AI POWERED Readiness</p>
                 </div>
             </div>
         </header>
 
         <div className="p-8 space-y-6">
-            <div className="bg-blue-50 border border-blue-100 p-4 rounded-xl flex items-start space-x-3">
+            <div className="bg-red-50 border border-yellow-100 p-4 rounded-xl flex items-start space-x-3">
+                <Zap className="h-6 w-6 text-yellow-600 flex-shrink-0 mt-0.5" />
+                <p className="text-gray-800 text-sm leading-relaxed">
+                    <strong>CMMC LEVEL 1</strong> (Self Assessment) requires defense contractors to implement <strong>15</strong> basic cyber hygiene practices to protect FCI.
+                </p>
+            </div>
+
+	    <div className="bg-blue-50 border border-blue-100 p-4 rounded-xl flex items-start space-x-3">
                 <Zap className="h-6 w-6 text-blue-600 flex-shrink-0 mt-0.5" />
                 <p className="text-blue-800 text-sm leading-relaxed">
-                    Level 2 expands your assessment to include <strong>110 required practices</strong> (89 additional controls) covering Incident Response, Risk Assessment, and Audit Management.
+                    <strong>CMMC LEVEL 1</strong> expands your assessment to include <strong>110 practices</strong> (89 additional controls) covering Incident Response, Risk Assessment, and Audit Management.
                 </p>
             </div>
 
             <div className="space-y-3">
-                <h3 className="font-bold text-gray-800 text-sm uppercase tracking-wider">What you get:</h3>
+                <h3 className="font-bold text-gray-800 text-sm uppercase tracking-wider">FEATURE HIGHLIGHTS:</h3>
                 <ul className="space-y-3">
                     {[
-                        "All 110 NIST SP 800-171 Rev 2 controls",
-                        "AI-Powered Level 2 Evidence Miner",
+                        "AI-Powered Evidence Miner",
                         "Granular Objective-Level Tracking",
                         "Assessor-Defensible SSP Generation",
                         "Shared Responsibility (SRM) Exports"
