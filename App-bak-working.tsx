@@ -10,6 +10,10 @@ import {
 } from "firebase/auth";
 import { auth, db } from "./src/firebase";
 
+import { can, isSuperAdmin as isSuperAdminRole } from "./src/access";
+
+import { AdminPanel } from "./components/AdminPanel";
+
 import { Sidebar } from "./components/Sidebar";
 import { Dashboard } from "./components/Dashboard";
 import { DomainView } from "./components/DomainView";
@@ -99,6 +103,7 @@ async function bootstrapUser() {
 }
 
 type ViewState =
+  | { type: "admin" }
   | { type: "dashboard" }
   | { type: "domain"; domainName: string }
   | { type: "practice"; practiceId: string }
@@ -117,6 +122,7 @@ type ViewState =
   | { type: "newsUpdates" };
 
 export type ActiveViewInfo =
+  | { type: "admin"; name: "admin" }
   | { type: "dashboard"; name: "dashboard" }
   | { type: "domain"; name: string }
   | { type: "practice"; name: string; domainName: string }
@@ -142,6 +148,11 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(true);
 
   useEffect(() => {
+    // TEMP: Firestore connection debug
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      console.log("🔥 Firestore host/ssl =", (db as any)?._settings?.host, (db as any)?._settings?.ssl);
+    } catch {}
     const unsub = onAuthStateChanged(auth, (u) => {
       setAuthUser(u);
       setAuthLoading(false);
@@ -195,8 +206,86 @@ export default function App() {
  * Your existing full app, only rendered AFTER login.
  */
 function AuthedApp({ onLogout }: { onLogout: () => void }) {
-  // Firestore-backed user tier/track
-  const { loading: userLoading, tier } = useUserProfile();
+  // Firestore-backed user profile (users/{uid})
+  const { loading: userLoading, tier, profile } = useUserProfile();
+
+  // Org lookup (orgs/{orgId}) is the source of truth for tiering
+  const [orgTier, setOrgTier] = useState<string | null>(null);
+  const [orgStatus, setOrgStatus] = useState<string | null>(null);
+  const [orgLoading, setOrgLoading] = useState(false);
+
+  useEffect(() => {
+    const orgId = (profile as any)?.orgId; // user doc has top-level orgId
+    if (!orgId) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        setOrgLoading(true);
+        const snap = await getDoc(doc(db, "orgs", orgId));
+        if (!snap.exists()) {
+          if (!cancelled) {
+            setOrgTier(null);
+            setOrgStatus(null);
+          }
+          return;
+        }
+        const o = snap.data() as any;
+        if (!cancelled) {
+          setOrgTier(o?.tier ?? null); // e.g. "COMM_L2"
+          setOrgStatus(o?.subscriptionStatus ?? "active");
+        }
+      } catch (e) {
+        console.error("org load failed", e);
+        if (!cancelled) {
+          setOrgTier(null);
+          setOrgStatus(null);
+        }
+      } finally {
+        if (!cancelled) setOrgLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [profile]);
+
+  const ent = profile?.entitlements;
+  const roles = profile?.roles;
+
+  // Admin access = super admin role + entitlement flag
+  const canAdmin = isSuperAdminRole(roles) && can(ent, "admin_panel");
+
+  const isSuperAdmin = !!profile?.roles?.superAdmin;
+  const isDev = import.meta.env.DEV;
+
+  // ✅ Effective subscription level for Sidebar gating
+  // Priority: org tier -> (optional) user tier -> default COMM_L1
+  const effectiveSubscriptionLevel =
+    orgStatus === "active" ? (orgTier ?? (tier as any) ?? "COMM_L1") : "COMM_L1";
+
+  const hasL2 = effectiveSubscriptionLevel === "COMM_L2";
+
+
+
+const getDomainDisplayLabel = (domainKey: string) => {
+  // L2 token: "__L2__:AC"
+  if (domainKey.startsWith("__L2__:")) {
+    const id = domainKey.replace("__L2__:", "").trim();
+    const match = l2DomainsMap.get(id);
+    return match?.name ?? `Level 2 (${id})`;
+  }
+
+  // L1 (your current path uses domain.name as the key)
+  const d = domains.find((x: any) => x?.name === domainKey);
+  return d?.name ?? domainKey;
+};
+
+
+
+
+
 
   // Existing data hooks
   const {
@@ -237,10 +326,79 @@ function AuthedApp({ onLogout }: { onLogout: () => void }) {
 
   const sspData = useSspData();
 
-  // Tier mapping: only TIER_2 gets L2 access (for now)
-  const effectiveSubscriptionLevel = tier === "TIER_2" ? "L2" : "L1";
+  // Build L2 domain/practice maps (for L2 navigation + PracticeView)
 
-  const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
+  // ---- Static Level 2 dataset (from public/cmmc_l2_prepop.json) ----
+  const [l2Static, setL2Static] = useState<any | null>(null);
+
+  const l2DomainById = useMemo(() => {
+    const map: Record<string, any> = {};
+    const domains = l2Static?.domains ?? [];
+    for (const d of domains) map[d.domain_id] = d;
+    return map;
+  }, [l2Static]);
+
+  const l2PracticeMap = useMemo(() => {
+    const map = new Map<string, any>();
+    const domains = l2Static?.domains ?? [];
+    for (const d of domains) {
+      for (const p of d.practices ?? []) {
+        if (p?.requirementId) map.set(String(p.requirementId), p);
+      }
+    }
+    return map;
+  }, [l2Static]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/cmmc_l2_prepop.json", { cache: "no-cache" });
+        if (!res.ok) return;
+        const json = await res.json();
+        if (!cancelled) setL2Static(json);
+      } catch {
+        // ignore
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+
+  const l2Domains = useMemo(() => {
+    const raw = l2Static?.domains;
+    if (!Array.isArray(raw)) return [];
+    return raw.map((d: any) => ({
+      id: d.domain_id,
+      name: `${d.domain_name} (${d.domain_id})`,
+      description: d.domain_description,
+      practices: Array.isArray(d.objectives)
+        ? d.objectives.map((o: any) => ({
+            id: o.objective_id,
+            title: o.objective_name,
+            description: o.objective_statement,
+            statement: o.objective_statement,
+            domainId: d.domain_id,
+          }))
+        : [],
+    }));
+  }, [l2Static]);
+
+
+const l2DomainsMap = useMemo(() => {
+  const m = new Map<string, { id: string; name: string }>();
+  l2Domains.forEach((d: any) => {
+    if (d?.id) m.set(String(d.id), { id: String(d.id), name: String(d.name ?? d.id) });
+  });
+  return m;
+}, [l2Domains]);
+
+
+
+
+const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
   const [isDiagnosticsOpen, setIsDiagnosticsOpen] = useState(false);
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
 
@@ -265,6 +423,9 @@ function AuthedApp({ onLogout }: { onLogout: () => void }) {
 
   const [view, setView] = useState<ViewState>({ type: "dashboard" });
 
+  // Load Level 2 static dataset (from /public)
+
+
   const [isAssistPanelOpen, setIsAssistPanelOpen] = useState(false);
   const [selectedPracticeForAssist, setSelectedPracticeForAssist] = useState<Practice | null>(null);
 
@@ -280,10 +441,19 @@ function AuthedApp({ onLogout }: { onLogout: () => void }) {
   );
 
   const activeViewInfo = useMemo((): ActiveViewInfo => {
+    if (view.type === "admin") return { type: "admin", name: "admin" };
     if (view.type === "dashboard") return { type: "dashboard", name: "dashboard" };
-    if (view.type === "domain") return { type: "domain", name: view.domainName };
+
+    // if (view.type === "domain") return { type: "domain", name: view.domainName };
+
+if (view.type === "domain") {
+  return { type: "domain", label: getDomainDisplayLabel(view.domainName) };
+}
+
     if (view.type === "practice") {
-      const practice = practiceMap.get(view.practiceId);
+      const practice = (typeof view.practiceId === "string" && view.practiceId.includes(".L2-")
+          ? l2PracticeMap.get(view.practiceId)
+          : practiceMap.get(view.practiceId));
       return { type: "practice", name: view.practiceId, domainName: practice?.domainName || "" };
     }
     if (view.type === "executive") return { type: "executive", name: "executive" };
@@ -325,6 +495,7 @@ function AuthedApp({ onLogout }: { onLogout: () => void }) {
   }, [practiceRecordMap]);
 
   const pageTitle = useMemo(() => {
+    if (view.type === "admin") return "Admin Panel";
     if (view.type === "dashboard") return "Command Dashboard";
     if (view.type === "domain") return view.domainName;
     if (view.type === "practice") {
@@ -372,7 +543,9 @@ function AuthedApp({ onLogout }: { onLogout: () => void }) {
             <ChevronRight className="h-4 w-4 mx-1" />
             <button
               onClick={() => {
-                const practice = practiceMap.get(view.practiceId);
+                const practice = (typeof view.practiceId === "string" && view.practiceId.includes(".L2-")
+          ? l2PracticeMap.get(view.practiceId)
+          : practiceMap.get(view.practiceId));
                 if (practice) setView({ type: "domain", domainName: practice.domainName });
               }}
               className="hover:underline"
@@ -409,10 +582,20 @@ function AuthedApp({ onLogout }: { onLogout: () => void }) {
   };
 
   const handleNavClick = (domainName: string) => {
-    const domain = rawDomains.find((d) => d.name === domainName);
-    const isLevel2OnlyDomain = domain && domain.practices.every((p) => !p.id.includes(".L1-"));
 
-    if (effectiveSubscriptionLevel === "L1" && isLevel2OnlyDomain) {
+    console.log("APP_NAV", { domainName, hasL2 });
+
+    const isL2Key = domainName.startsWith("__L2__:");
+    if (isL2Key) {
+      if (!hasL2) setIsUpgradeModalOpen(true);
+      else setView({ type: "domain", domainName });
+      return;
+    }
+
+    const domain = rawDomains.find((d) => d.name === domainName);
+    const isLevel2OnlyDomain = domain && domain.practices.every((p) => !String(p.id ?? "").includes(".L1-"));
+
+    if (!hasL2 && isLevel2OnlyDomain) {
       setIsUpgradeModalOpen(true);
     } else {
       setView({ type: "domain", domainName });
@@ -440,6 +623,8 @@ function AuthedApp({ onLogout }: { onLogout: () => void }) {
     }
 
     switch (view.type) {
+      case "admin":
+        return <AdminPanel />;
       case "dashboard":
         return (
           <Dashboard
@@ -455,29 +640,82 @@ function AuthedApp({ onLogout }: { onLogout: () => void }) {
           />
         );
 
-      case "domain": {
-        const domain = domains.find((d) => d.name === view.domainName);
-        return domain ? (
-          <DomainView
-            domain={domain}
-            practiceRecords={practiceRecords}
-            getDomainCompletion={getDomainCompletion}
-            onPracticeClick={(id) => {
-              const practice = practiceMap.get(id);
-              if (effectiveSubscriptionLevel === "L1" && practice && !practice.id.includes(".L1-")) {
-                setIsUpgradeModalOpen(true);
-              } else {
-                setView({ type: "practice", practiceId: id });
-              }
-            }}
-          />
-        ) : (
-          <div>Domain not found.</div>
-        );
-      }
+
+
+
+
+case "domain": {
+  console.log("APP_VIEW_DOMAIN", view.domainName);
+
+  // ✅ L2 token path: "__L2__:AC"
+  const isL2Key = view.domainName.startsWith("__L2__:");
+  if (isL2Key) {
+    const domainId = view.domainName.replace("__L2__:", "").trim();
+
+    // If you haven't loaded /cmmc_l2_prepop.json yet, show a loader
+    if (!l2Static) return <div className="p-6">Loading Level 2 dataset...</div>;
+
+    // Find the L2 domain in the static JSON
+    const rawL2 =
+      (l2Static?.domains ?? []).find((d: any) => String(d?.domain_id ?? "") === domainId);
+
+    if (!rawL2) return <div>Domain not found.</div>;
+
+    // Normalize to the same domain shape DomainView expects
+    const l2Domain = {
+      id: String(rawL2.domain_id ?? domainId),
+      name: String(rawL2.domain_name ?? domainId),
+      description: "",
+      practices: (rawL2.practices ?? []).map((p: any) => ({
+        id: String(p?.requirementId ?? ""),
+        title: String(p?.requirementName ?? ""),
+        description: String(p?.requirementStatement ?? ""),
+        statement: String(p?.requirementStatement ?? ""),
+        domainId: String(rawL2.domain_id ?? domainId),
+        domainName: String(rawL2.domain_name ?? domainId),
+      })),
+    };
+
+    return (
+      <DomainView
+        domain={l2Domain as any}
+        practiceRecords={practiceRecords}
+        getDomainCompletion={getDomainCompletion}
+        onPracticeClick={(id) => setView({ type: "practice", practiceId: id })}
+      />
+    );
+  }
+
+  // ✅ Default L1 path (unchanged)
+  const domain = domains.find((d) => d.name === view.domainName);
+  return domain ? (
+    <DomainView
+      domain={domain}
+      practiceRecords={practiceRecords}
+      getDomainCompletion={getDomainCompletion}
+      onPracticeClick={(id) => {
+        const practice = practiceMap.get(id);
+        if (effectiveSubscriptionLevel === "L1" && practice && !practice.id.includes(".L1-")) {
+          setIsUpgradeModalOpen(true);
+        } else {
+          setView({ type: "practice", practiceId: id });
+        }
+      }}
+    />
+  ) : (
+    <div>Domain not found.</div>
+  );
+}
+
+
+
+
+
 
       case "practice": {
-        const practice = practiceMap.get(view.practiceId);
+        const practice = (typeof view.practiceId === "string" && view.practiceId.includes(".L2-")
+          ? l2PracticeMap.get(view.practiceId)
+          : practiceMap.get(view.practiceId));
         const practiceRecord = practiceRecordMap.get(view.practiceId);
         return practice && practiceRecord ? (
           <PracticeView
@@ -495,13 +733,15 @@ function AuthedApp({ onLogout }: { onLogout: () => void }) {
       }
 
       case "profile":
-        return (
-          <ProfilePage
-            companyProfile={companyProfile}
-            updateCompanyProfile={updateCompanyProfile}
-            addUserToCompany={addUserToCompany}
-          />
-        );
+	return <ProfilePage />;
+
+        // return (
+        //   <ProfilePage
+        //     companyProfile={companyProfile}
+        //     updateCompanyProfile={updateCompanyProfile}
+        //     addUserToCompany={addUserToCompany}
+       //    />
+       //  );
 
       case "executive":
         return (
@@ -593,6 +833,10 @@ function AuthedApp({ onLogout }: { onLogout: () => void }) {
     }
   };
 
+  if (orgLoading) {
+    return <div className="p-6">Loading access...</div>;
+  }
+
   if (userLoading) {
     return (
       <div className="flex items-center justify-center h-screen bg-gray-900 text-white font-bold">
@@ -613,14 +857,18 @@ function AuthedApp({ onLogout }: { onLogout: () => void }) {
   return (
     <div className="flex flex-col h-screen bg-gray-50">
       <AppHeader
-        onSave={() => {}}
+        onAdminClick={isSuperAdmin ? () => setView({ type: "admin" }) : undefined}
+	onSave={() => {}}
         onSavedTemplatesClick={() => setView({ type: "savedTemplates" })}
         onProfileClick={() => setView({ type: "profile" })}
-        onDiagnosticsClick={() => setIsDiagnosticsOpen(true)}
+onDiagnosticsClick={isDev ? () => setIsDiagnosticsOpen(true) : undefined}
         overallCompletion={scores.practiceCompletionScore}
         sprsScore={sprsScore}
         onLogout={onLogout}
       />
+
+
+
 
       <div className="flex flex-1 overflow-hidden">
         <Sidebar

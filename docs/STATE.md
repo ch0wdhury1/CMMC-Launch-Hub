@@ -9,10 +9,14 @@
 - Firebase project id: cmmc-launch-hub
 - Hosting URL: https://cmmc-launch-hub.web.app
 
-## Repo
-- Repo: <paste url>
-- Branch: <paste>
-- Last commit: <paste>
+## Repo State
+- Repo: https://github.com/ch0wdhury1/CMMC-Launch-Hub
+- Branch: main
+- Last commit: e575cf3 – Initial MVP baseline (hosting + firestore rules stable)
+- Repo root: C:\Users\chowd\Sync\AI APPLICATIONS\CMMC LAUNCH PAD\DEPLOYMENT\CMMC-Launch-Hub
+- Node: 22.22.0 (.nvmrc)
+- Deploy command: npm run deploy:all
+
 
 ## Known Good Deployment
 - npm run deploy:all ✅ (hosting + firestore:rules only)

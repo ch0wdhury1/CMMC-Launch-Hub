@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Practice, PracticeStatus } from '../types';
 import { ProgressBar } from './ProgressBar';
@@ -29,16 +30,12 @@ export const PracticeCard: React.FC<PracticeCardProps> = ({
 
   const statusInfo = getStatusInfo(status);
 
-  // Practice display name can vary between L1 and L2 datasets.
-  // L1 typically uses `practice.name`; L2 normalizers may provide `title`/`description`.
-  const rawName = String((practice as any)?.name ?? (practice as any)?.title ?? (practice as any)?.id ?? '');
-
   // Extract practice title safely
-  const splitTitle = rawName.includes('–')
-    ? rawName.split('–')[1]?.trim() || rawName
-    : rawName.includes('-')
-      ? rawName.split('-').slice(1).join('-').trim() || rawName
-      : rawName;
+  const splitTitle = practice.name.includes('–')
+    ? practice.name.split('–')[1]?.trim()
+    : practice.name.includes('-')
+      ? practice.name.split('-').slice(1).join('-').trim()
+      : practice.name;
 
   return (
     <button
@@ -48,7 +45,7 @@ export const PracticeCard: React.FC<PracticeCardProps> = ({
       {/* HEADER */}
       <div>
         <div className="flex justify-between items-center mb-2">
-          <p className="font-bold text-gray-800">{String((practice as any)?.id ?? '')}</p>
+          <p className="font-bold text-gray-800">{practice.id}</p>
           <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${statusInfo.color}`}>
             {statusInfo.text}
           </span>

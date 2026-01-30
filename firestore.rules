@@ -7,22 +7,99 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function isSuperAdmin() {
-      return isSignedIn()
-        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.roles.superAdmin == true;
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
 
-    // Activation config
+    function hasUserDoc() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function isSuperAdmin() {
+      return hasUserDoc()
+        && userDoc().roles.superAdmin == true;
+    }
+
+    function myOrgId() {
+      return hasUserDoc() ? userDoc().orgId : null;
+    }
+
+    function isOrgMember(orgId) {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/orgMembers/$(orgId)/members/$(request.auth.uid));
+    }
+
+    function orgDoc(orgId) {
+      return get(/databases/$(database)/documents/orgs/$(orgId)).data;
+    }
+
+    function isMyOrg(orgId) {
+      return hasUserDoc() && myOrgId() == orgId;
+    }
+
+    // --- system config ---
     match /system/activation {
       allow read: if isSignedIn();
       allow write: if isSuperAdmin();
     }
 
-    // User profiles
-    match /users/{userId} {
-      allow read, write: if isSignedIn() && request.auth.uid == userId;
-      allow read, write: if isSuperAdmin();
+    // --- user profiles ---
+    match /users/{uid} {
+      allow read: if isSignedIn() && request.auth.uid == uid;
+      // user can update ONLY safe fields on their own doc
+      allow update: if isSignedIn()
+        && request.auth.uid == uid
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly([
+          "displayName", "photoURL", "updatedAt"
+        ]);
+
+      // super admin can manage any user doc
+      allow read, create, update, delete: if isSuperAdmin();
+    }
+
+
+
+
+    // --- orgs ---
+    match /orgs/{orgId} {
+      allow read: if isSuperAdmin() || isOrgMember(orgId);
+
+      // only super admin can create/update org tier and limits
+      allow create, update, delete: if isSuperAdmin();
+    }
+
+    // --- org members ---
+    match /orgMembers/{orgId}/members/{memberUid} {
+  allow read: if isSuperAdmin() || isOrgMember(orgId);
+
+  allow create: if isSuperAdmin()
+    && (
+      orgDoc(orgId).maxUsers == null
+      || orgDoc(orgId).activeMemberCount == null
+      || orgDoc(orgId).activeMemberCount < orgDoc(orgId).maxUsers
+    );
+
+  allow update, delete: if isSuperAdmin();
+}
+
+
+
+
+
+    // --- usage (org-scoped) ---
+    match /usageDaily/{docId} {
+      // docId pattern: orgId_YYYYMMDD
+      allow read: if isSuperAdmin()
+        || (hasUserDoc() && docId.startsWith(myOrgId() + "_"));
+
+      // MVP: only super admin writes usage until gateway exists
+      allow write: if isSuperAdmin();
+    }
+
+    match /usageEvents/{eventId} {
+      allow read: if isSuperAdmin();
+      allow write: if isSuperAdmin();
     }
 
     // Default deny

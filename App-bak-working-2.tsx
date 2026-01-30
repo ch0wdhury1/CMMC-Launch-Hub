@@ -535,7 +535,7 @@ if (view.type === "domain") {
   const pageTitle = useMemo(() => {
     if (view.type === "admin") return "Admin Panel";
     if (view.type === "dashboard") return "Command Dashboard";
-    if (view.type === "domain") return getDomainDisplayLabel(view.domainName);
+    if (view.type === "domain") return view.domainName;
     if (view.type === "practice") {
       const p = practiceMap.get(view.practiceId);
       return p ? `Practice: ${p.id}` : "Practice";
@@ -565,32 +565,14 @@ if (view.type === "domain") {
 
     if (view.type === "dashboard") return null;
 
-    
-
-    // --- Active practice/domain helpers (supports L1 + L2) ---
-    const activePractice =
-      view.type === "practice"
-        ? (String(view.practiceId).includes(".L2-")
-            ? l2PracticeMap.get(view.practiceId)
-            : practiceMap.get(view.practiceId))
-        : null;
-
-    const activeDomainKey =
-      view.type === "domain"
-        ? view.domainName
-        : view.type === "practice" && activePractice
-          ? (String(activePractice.id ?? "").includes(".L2-")
-              ? `__L2__:${String((activePractice as any).domainId ?? "").trim()}`
-              : String((activePractice as any).domainName ?? ""))
-          : "";
-return (
+    return (
       <div className="flex items-center text-sm text-gray-500 mb-4 px-2">
         {dashboardButton}
 
         {view.type === "domain" && (
           <>
             <ChevronRight className="h-4 w-4 mx-1" />
-            <span>{getDomainDisplayLabel(activeDomainKey)}</span>
+            <span>{getDomainDisplayLabel(view.domainName)}</span>
           </>
         )}
 
@@ -599,15 +581,26 @@ return (
             <ChevronRight className="h-4 w-4 mx-1" />
             <button
               onClick={() => {
-                if (!activeDomainKey) return;
-                setView({ type: "domain", domainName: activeDomainKey });
+                const practice =
+                  typeof view.practiceId === "string" && view.practiceId.includes(".L2-")
+                    ? l2PracticeMap.get(view.practiceId)
+                    : practiceMap.get(view.practiceId);
+
+                if (!practice) return;
+
+                const isL2 = String(practice.id ?? "").includes(".L2-");
+                const domainKey = isL2
+                  ? `__L2__:${String((practice as any).domainId ?? "").trim()}`
+                  : String((practice as any).domainName ?? "");
+
+                setView({ type: "domain", domainName: domainKey });
               }}
               className="hover:underline"
             >
-              {getDomainDisplayLabel(activeDomainKey)}
+              {getDomainDisplayLabel(practice?.domainName ?? '')}
             </button>
             <ChevronRight className="h-4 w-4 mx-1" />
-            <span className="font-medium text-gray-700">{String(activePractice?.id ?? "")}</span>
+            <span className="font-medium text-gray-700">{practice?.id ?? ''}</span>
           </>
         )}
 

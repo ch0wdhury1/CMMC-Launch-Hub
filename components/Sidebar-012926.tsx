@@ -4,6 +4,8 @@ import type { ActiveViewInfo } from "../App";
 
 // Core App Shell entitlements (org-based)
 // NOTE: your Sidebar lives in /components, so the relative path points into /src
+import { useAppState } from "../src/core/store/AppContext";
+
 import {
   Archive,
   BarChart3,
@@ -111,9 +113,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [isToolsOpen, setIsToolsOpen] = useState(false);
   const [isReportingOpen, setIsReportingOpen] = useState(false);
 
-  // Source of truth for MVP: ORG tier (passed in as subscriptionLevel)
-  const canL2 = subscriptionLevel === "COMM_L2";
-  const l2Locked = !canL2;
+// Source of truth for MVP: ORG tier (passed in as subscriptionLevel)
+const canL2 = subscriptionLevel === "COMM_L2";
+const l2Locked = !canL2;
 
 
   // --- Static dataset fallback state ---
@@ -192,42 +194,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
     setIsL2Open((v) => !v);
   };
 
-
-
-const handleL2DomainClick = (domainId: string) => {
-  if (!canL2) {
-    onLockedClick();
-    return;
-  }
-
-  const token = "__L2__:" + domainId;
-  console.log("L2_HANDLER_FIRED", { domainId, token, canL2 });
-
-  onNavClick(token);
-};
-
-
-
-  // Use a token so App can render L2 practices even if the base dataset is L1-filtered
-  // const token = "__L2__:" + domainId;
-
-  // 👇 ADD THIS LINE (TEMPORARY)
-  // console.log("NAV_DEBUG", token); // TEMP: enable when debugging navigation  onNavClick(token);
-
-
-  const getL2DomainId = (domain: any) => {
-    // Parse "Access Control (AC)" -> "AC"
-    const name = String(domain?.name ?? "");
-    const match = name.match(/\(([^)]+)\)\s*$/);
-    if (match?.[1]) return match[1];
-
-    // Fallback: derive from first practice id: "AC.L2-..." -> "AC"
-    const firstPracticeId = String(domain?.practices?.[0]?.id ?? "");
-    if (firstPracticeId.includes(".")) return firstPracticeId.split(".")[0];
-
-    return "";
+  const handleL2DomainClick = (domainId: string, domainName: string) => {
+    if (!canL2) {
+      onLockedClick();
+      return;
+    }
+    // Use a token so App can render L2 practices even if the base dataset is L1-filtered
+    const token = "__L2__::" + domainId;
+    onNavClick(token);
   };
-
 
   return (
     <aside className="w-[352px] bg-gray-800 text-white flex flex-col flex-shrink-0 overflow-y-auto border-r border-gray-700 shadow-xl">
@@ -261,9 +236,9 @@ const handleL2DomainClick = (domainId: string) => {
           <div className="pt-1 pl-2 space-y-0.5 animate-fadeIn">
             {l1Domains.map((domain: any) => (
               <button
-                key={String(getL2DomainId(domain) || domain.id || domain.name)}
+                key={domain.id ?? domain.name}
                 onClick={() => onNavClick(domain.name)}
-                className={navButtonClass(isActive("domain", domain.name))}
+                className={navButtonClass(isActive("domain", "__L2__::" + String(domain.id ?? "")))}
               >
                 <div className="h-1 w-1 bg-gray-500 rounded-full mr-3 flex-shrink-0" />
                 <span className="text-left w-full whitespace-normal break-words truncate">
@@ -285,8 +260,6 @@ const handleL2DomainClick = (domainId: string) => {
           </span>
           <ChevronRight className={`h-3 w-3 transition-transform ${isL2Open ? "rotate-90" : ""}`} />
         </button>
-
-
 
         {isL2Open && (
           <div className="pt-1 pl-2 space-y-0.5 animate-fadeIn">
@@ -312,27 +285,18 @@ const handleL2DomainClick = (domainId: string) => {
                 </div>
               </div>
             ) : (
-effectiveL2Domains.map((domain: any) => {
-  const domainId = getL2DomainId(domain);
-  const token = "__L2__:" + domainId;
-
-//  console.log("L2_CLICK", { domain, domainId, token, disabled: !domainId });
-
-  return (
-    <button
-      key={token}
-      onClick={() => handleL2DomainClick(domainId)}
-      className={navButtonClass(isActive("domain", token))}
-      disabled={!domainId}
-      title={!domainId ? "Missing domain id" : undefined}
-    >
-      <div className="h-1 w-1 bg-blue-400 rounded-full mr-3 flex-shrink-0" />
-      <span className="text-left w-full whitespace-normal break-words truncate">
-        {domain.name}
-      </span>
-    </button>
-  );
-})
+              effectiveL2Domains.map((domain: any) => (
+                <button
+                  key={domain.id ?? domain.name}
+                  onClick={() => handleL2DomainClick(String(domain.id ?? ""), domain.name)}
+                  className={navButtonClass(isActive("domain", domain.name))}
+                >
+                  <div className="h-1 w-1 bg-blue-400 rounded-full mr-3 flex-shrink-0" />
+                  <span className="text-left w-full whitespace-normal break-words truncate">
+                    {domain.name}
+                  </span>
+                </button>
+              ))
             )}
           </div>
         )}

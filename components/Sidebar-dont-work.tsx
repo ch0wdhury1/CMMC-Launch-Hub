@@ -192,28 +192,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
     setIsL2Open((v) => !v);
   };
 
-
-
 const handleL2DomainClick = (domainId: string) => {
   if (!canL2) {
     onLockedClick();
     return;
   }
 
-  const token = "__L2__:" + domainId;
-  console.log("L2_HANDLER_FIRED", { domainId, token, canL2 });
-
-  onNavClick(token);
-};
-
-
-
   // Use a token so App can render L2 practices even if the base dataset is L1-filtered
-  // const token = "__L2__:" + domainId;
+  const token = "__L2__:" + domainId;
 
   // 👇 ADD THIS LINE (TEMPORARY)
   // console.log("NAV_DEBUG", token); // TEMP: enable when debugging navigation  onNavClick(token);
-
+};
 
   const getL2DomainId = (domain: any) => {
     // Parse "Access Control (AC)" -> "AC"
@@ -261,7 +251,7 @@ const handleL2DomainClick = (domainId: string) => {
           <div className="pt-1 pl-2 space-y-0.5 animate-fadeIn">
             {l1Domains.map((domain: any) => (
               <button
-                key={String(getL2DomainId(domain) || domain.id || domain.name)}
+                key={domain.id ?? domain.name}
                 onClick={() => onNavClick(domain.name)}
                 className={navButtonClass(isActive("domain", domain.name))}
               >
@@ -315,8 +305,6 @@ const handleL2DomainClick = (domainId: string) => {
 effectiveL2Domains.map((domain: any) => {
   const domainId = getL2DomainId(domain);
   const token = "__L2__:" + domainId;
-
-//  console.log("L2_CLICK", { domain, domainId, token, disabled: !domainId });
 
   return (
     <button

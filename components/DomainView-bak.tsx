@@ -21,17 +21,6 @@ export const DomainView: React.FC<DomainViewProps> = ({
   getDomainCompletion,
   onPracticeClick,
 }) => {
-  // --- Practice list selection ---
-  // If this domain contains explicit Level 1 IDs, show ONLY those for Level 1 views.
-  const practicesToShow = useMemo(() => {
-    const practices = domain?.practices ?? [];
-    const hasL1 = practices.some((p: any) => String((p as any)?.id ?? "").includes(".L1-"));
-    const hasL2 = practices.some((p: any) => String((p as any)?.id ?? "").includes(".L2-"));
-    // If mixed dataset was accidentally passed (L1 + L2), prefer L1 when L1 exists.
-    if (hasL1 && hasL2) return practices.filter((p: any) => String((p as any)?.id ?? "").includes(".L1-"));
-    return practices;
-  }, [domain]);
-
   const percent = getDomainCompletion(domain.name);
   const practiceRecordMap = useMemo(() => new Map(practiceRecords.map(r => [r.id, r])), [practiceRecords]);
 
@@ -136,7 +125,7 @@ export const DomainView: React.FC<DomainViewProps> = ({
       =========================== */}
       <h2 className="text-xl font-semibold text-gray-800 pt-4">Practices</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {practicesToShow.map((practice) => {
+        {domain.practices.map((practice) => {
           const record = practiceRecordMap.get(practice.id);
           const status = record?.status || 'not_assessed';
           return (

@@ -82,7 +82,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
           className="flex items-center px-3 py-1.5 bg-blue-700 text-white text-sm rounded-md hover:bg-blue-600 transition-colors"
         >
           <Archive className="h-4 w-4 mr-1" />
-          Saved Templates
+          Documents
         </button>
 
         <button
