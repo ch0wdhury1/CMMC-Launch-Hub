@@ -28,18 +28,127 @@ export const PracticeView: React.FC<PracticeViewProps> = ({
 }) => {
   const { status, statusSource, analyzerSuggestion, note } = practiceRecord;
 
+
+
+
+// NEW CODE
+
+// --- Objectives (L1 + L2 compatible) ---
+const rawObjectives: any[] =
+  (Array.isArray((practice as any)?.assessment_objectives) ? (practice as any).assessment_objectives : []) ||
+  (Array.isArray((practice as any)?.assessmentObjectives) ? (practice as any).assessmentObjectives : []) ||
+  (Array.isArray((practice as any)?.objectives) ? (practice as any).objectives : []);
+
+const staticObjectives: any[] = (rawObjectives || []).map((o: any, idx: number) => {
+  // L1 shape example: { id: "a", text: "..." }
+  if (o?.text) {
+    const t = String(o.text ?? "").trim();
+    return {
+      ...o,
+      id: String(o.id ?? idx),
+      text: t,
+      statement: t,
+    };
+  }
+
+  // L2 shape example: { objectiveId: "AC.L2-3.1.3[a]", determinationStatement: "..." }
+  if (o?.objectiveId || o?.determinationStatement) {
+    const t = String(o.determinationStatement ?? "").trim();
+    return {
+      ...o,
+      id: String(o.objectiveId ?? idx),
+      objectiveId: String(o.objectiveId ?? ""),
+      text: t,
+      statement: t,
+    };
+  }
+
+  // Fallback
+  const t = String(o?.statement ?? o?.name ?? "").trim();
+  return {
+    ...o,
+    id: String(o?.id ?? idx),
+    text: t,
+    statement: t,
+  };
+});
+
+const objectiveRecords = (practiceRecord as any)?.objectiveRecords ?? {};
+
+
+// --------------
+
+
+
+
   const [isLoadingAudio, setIsLoadingAudio] = useState(false);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [slideshowImages, setSlideshowImages] = useState<{ [key: string]: string[] }>({});
   const [loadingSlideshow, setLoadingSlideshow] = useState<string | null>(null);
 
-  const splitTitle = practice.name.includes("–")
+  const splitTitle = String(practice.name ?? '').includes("–")
     ? practice.name.split("–")[1]?.trim()
-    : practice.name.includes("-")
+    : String(practice.name ?? '').includes("-")
       ? practice.name.split("-").slice(1).join(" ").trim()
       : practice.name;
 
-  const friendlyName = practice.name.split('–')[1]?.trim() || practice.name;
+
+
+
+// NEW CODE
+
+const nameSafe = String(
+  (practice as any)?.name ??
+  (practice as any)?.title ??
+  (practice as any)?.id ??
+  ""
+);
+
+const friendlyName = nameSafe.includes("–")
+  ? nameSafe.split("–")[1]?.trim() || nameSafe
+  : nameSafe || "Practice";
+
+// --- L1/L2 compatible field resolvers ---
+const potentialRaw =
+  (practice as any)?.potential_assessment_methods_and_objects ??
+  (practice as any)?.potentialAssessmentMethodsAndObjects ??
+  null;
+
+const potentialMethods = (() => {
+  // L1 may provide a string or list; L2 typically doesn't include methods.
+  if (Array.isArray(potentialRaw)) {
+    const items = potentialRaw.filter(Boolean).map((x: any) => String(x).trim()).filter(Boolean);
+    if (items.length) return items.join("\n");
+  }
+  if (typeof potentialRaw === "string") {
+    const s = potentialRaw.trim();
+    if (s) return s;
+  }
+  // Default for L2 so the section is never blank
+  return "Examine: policies, procedures, system configs, and evidence artifacts. Interview: system owners/admins. Test: enforcement mechanisms for the requirement.";
+})();
+
+const discussionRaw = (practice as any)?.discussion ?? "";
+const discussionText = Array.isArray(discussionRaw)
+  ? discussionRaw.filter(Boolean).map((x: any) => String(x))
+  : String(discussionRaw ?? "").trim();
+
+const furtherRaw = (practice as any)?.further_discussion ?? (practice as any)?.furtherDiscussion ?? "";
+const furtherDiscussionText = Array.isArray(furtherRaw)
+  ? furtherRaw.filter(Boolean).map((x: any) => String(x))
+  : String(furtherRaw ?? "").trim();
+
+const refsRaw = (practice as any)?.key_references ?? (practice as any)?.references ?? [];
+const keyReferences: string[] = Array.isArray(refsRaw)
+  ? refsRaw.filter(Boolean).map((x: any) => String(x))
+  : (typeof refsRaw === "string" && refsRaw.trim() ? [refsRaw.trim()] : []);
+
+
+// --------------
+
+
+
+
 
   const handleGeneratePracticeAudio = async () => {
     setIsLoadingAudio(true);
@@ -188,50 +297,101 @@ export const PracticeView: React.FC<PracticeViewProps> = ({
             <span className="ml-3 text-[10px] bg-blue-100 text-blue-800 px-2 py-0.5 rounded font-bold uppercase tracking-wider">Level 2 Granularity</span>
         </div>
         <div className="space-y-4">
-          {practice.assessment_objectives.map((staticObjective) => {
-            const objectiveRecord = practiceRecord.objectiveRecords[staticObjective.id] || { status: ObjectiveStatus.Pending, note: '', artifacts: [] };
-            const mergedObjective: AssessmentObjective = {
-              ...staticObjective,
-              ...objectiveRecord
-            };
-            return (
-              <AssessmentObjectiveItem
-                key={mergedObjective.id}
-                objective={mergedObjective}
-                practice={practice}
-                onUpdateObjective={(objectiveId, updates) => onUpdateObjective(practice.id, objectiveId, updates)}
-                storeTemplate={storeTemplate}
-                slideshow={slideshowImages[mergedObjective.id]}
-                isSlideshowLoading={loadingSlideshow === mergedObjective.id}
-                onGenerateSlideshow={handleGenerateSlideshow}
-              />
-            )
-          })}
+          
+
+
+
+
+
+{staticObjectives.length === 0 ? (
+  <div className="p-4 text-sm text-gray-500">
+    No assessment objectives found for this practice.
+  </div>
+) : (
+  staticObjectives.map((staticObjective: any) => {
+    const objectiveRecord =
+      objectiveRecords?.[staticObjective.id] || {
+        status: ObjectiveStatus.Pending,
+        note: "",
+        artifacts: [],
+      };
+
+    const mergedObjective: AssessmentObjective = {
+      ...staticObjective,
+      ...objectiveRecord,
+    };
+
+    return (
+      <AssessmentObjectiveItem
+        key={mergedObjective.id}
+        objective={mergedObjective}
+        practice={practice}
+        onUpdateObjective={(objectiveId, updates) =>
+          onUpdateObjective(String((practice as any)?.id ?? ""), objectiveId, updates)
+        }
+        storeTemplate={storeTemplate}
+        slideshow={slideshowImages[mergedObjective.id]}
+        isSlideshowLoading={loadingSlideshow === mergedObjective.id}
+        onGenerateSlideshow={handleGenerateSlideshow}
+      />
+    );
+  })
+)}
+
+
+
+
+
+
         </div>
 
         {/* Collapsible Sections */}
         <div className="mt-6 space-y-4">
           <CollapsibleSection title="Potential Assessment Methods and Objects">
-            {Array.isArray(practice.potential_assessment_methods_and_objects) ? (
-              <ul className="list-disc pl-5 space-y-1 text-gray-600">{practice.potential_assessment_methods_and_objects.map((item, index) => <li key={index}>{item}</li>)}</ul>
-            ) : (<p className="text-gray-600">{practice.potential_assessment_methods_and_objects || "No methods provided."}</p>)}
+            {Array.isArray(potentialMethods) ? (
+              <ul className="list-disc pl-5 space-y-1 text-gray-600">
+                {potentialMethods.map((item: string, index: number) => (
+                  <li key={index}>{item}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-gray-600">{potentialMethods || "No methods provided."}</p>
+            )}
           </CollapsibleSection>
 
           <CollapsibleSection title="Discussion & Further Discussion">
             <h5 className="font-semibold mb-1">Discussion</h5>
-            {Array.isArray(practice.discussion) ? (
-              <ul className="list-disc pl-5 text-gray-600 space-y-1">{practice.discussion.map((d, i) => <li key={i}>{d}</li>)}</ul>
-            ) : (<p className="text-gray-600">{practice.discussion || "No discussion provided."}</p>)}
+            {Array.isArray(discussionText) ? (
+              <ul className="list-disc pl-5 text-gray-600 space-y-1">
+                {discussionText.map((d: string, i: number) => (
+                  <li key={i}>{d}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-gray-600">{discussionText || "No discussion provided."}</p>
+            )}
             <h5 className="font-semibold mt-4 mb-1">Further Discussion</h5>
-            {Array.isArray(practice.further_discussion) ? (
-              <ul className="list-disc pl-5 text-gray-600 space-y-1">{practice.further_discussion.map((d, i) => <li key={i}>{d}</li>)}</ul>
-            ) : (<p className="text-gray-600">{practice.further_discussion || "No further discussion provided."}</p>)}
+            {Array.isArray(furtherDiscussionText) ? (
+              <ul className="list-disc pl-5 text-gray-600 space-y-1">
+                {furtherDiscussionText.map((d: string, i: number) => (
+                  <li key={i}>{d}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-gray-600">{furtherDiscussionText || "No further discussion provided."}</p>
+            )}
           </CollapsibleSection>
 
           <CollapsibleSection title="Key References">
-            {practice.key_references?.length ? (
-              <ul className="list-disc pl-5 text-gray-600 space-y-1">{practice.key_references.map((ref, i) => <li key={i}>{ref}</li>)}</ul>
-            ) : (<p className="text-gray-600">No key references provided.</p>)}
+            {keyReferences?.length ? (
+              <ul className="list-disc pl-5 text-gray-600 space-y-1">
+                {keyReferences.map((ref: string, i: number) => (
+                  <li key={i}>{ref}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-gray-600">No key references provided.</p>
+            )}
           </CollapsibleSection>
         </div>
       </div>

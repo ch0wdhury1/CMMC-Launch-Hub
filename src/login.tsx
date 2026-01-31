@@ -66,7 +66,7 @@ export default function Login() {
     <div style={{ maxWidth: 420, margin: "40px auto", padding: 20, border: "1px solid #ddd", borderRadius: 12 }}>
       <h2 style={{ marginBottom: 10 }}>CMMC Launch Hub</h2>
       <p style={{ marginTop: 0, color: "#555" }}>
-        {mode === "login" ? "Login" : "Create account"} (Email/Password)
+        {mode === "login" ? "Login" : "Create account"} (Email & Password)
       </p>
 
       <form onSubmit={handleSubmit} style={{ display: "grid", gap: 10 }}>

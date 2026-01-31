@@ -339,53 +339,73 @@ const getDomainDisplayLabel = (domainKey: string) => {
   }, [l2Static]);
 
   const l2PracticeMap = useMemo(() => {
-    const map = new Map<string, any>();
-    const domains = l2Static?.domains ?? [];
-    for (const d of domains) {
-      for (const p of d.practices ?? []) {
-        if (p?.requirementId) map.set(String(p.requirementId), p);
+    const m = new Map<string, any>();
+    const rawDomains = (l2Static as any)?.domains;
+
+    if (!Array.isArray(rawDomains)) return m;
+
+    for (const d of rawDomains) {
+      const domainId = String(d?.domain_id ?? "").trim();
+      const domainName = String(d?.domain_name ?? domainId).trim();
+
+      const practices = Array.isArray(d?.practices) ? d.practices : [];
+      for (const p of practices) {
+        const pid = String(p?.requirementId ?? "").trim();
+        if (!pid) continue;
+
+        const title = String(p?.requirementName ?? "").trim();
+        const statement = String(p?.requirementStatement ?? "").trim();
+
+        // --- Assessment objectives (L2) ---
+        const assessmentObjectivesRaw = Array.isArray(p?.assessmentObjectives) ? p.assessmentObjectives : [];
+        const assessmentObjectives = assessmentObjectivesRaw
+          .map((o: any) => ({
+            id: String(o?.objectiveId ?? "").trim(),
+            statement: String(o?.determinationStatement ?? o?.statement ?? "").trim(),
+          }))
+          .filter((o: any) => o.id || o.statement);
+
+        // --- Discussion fields (L2) ---
+        const discussion = String(p?.discussion ?? "").trim();
+        const furtherDiscussion = String(p?.furtherDiscussion ?? "").trim();
+
+        // --- References (L2) ---
+        const referencesRaw = Array.isArray(p?.references) ? p.references : [];
+        const references = referencesRaw.map((r: any) => String(r)).filter(Boolean);
+
+        // Some parts of the UI expect a single "name" field.
+        const name = title ? `${pid} – ${title}` : pid;
+
+        // Provide both camelCase and snake_case to stay compatible with older UI code.
+        m.set(pid, {
+          id: pid,
+          name,
+          title,
+          description: statement,
+          statement,
+          domainId,
+          domainName,
+
+          assessmentObjectives,          // camelCase
+          assessment_objectives: assessmentObjectives, // snake_case alias
+
+          discussion,
+          furtherDiscussion,
+
+          references,
+          keyReferences: references,     // alias used in some builds
+
+          // L2 JSON doesn’t include explicit methods/objects; keep a stable default so UI doesn't look empty.
+          potentialAssessmentMethods:
+            "Examine: policies, procedures, system configs, and evidence artifacts. Interview: system owners/admins. Test: enforcement mechanisms for the requirement.",
+          potentialAssessmentObjects:
+            "Policies, procedures, audit logs, screenshots/config exports, tickets/change records, access reviews, training records, and other supporting artifacts.",
+        });
       }
     }
-    return map;
+
+    return m;
   }, [l2Static]);
-
-
-
-
-const l2DomainNameById = useMemo(() => {
-  const m = new Map<string, string>();
-  const raw = l2Static?.domains;
-  if (!Array.isArray(raw)) return m;
-
-  raw.forEach((d: any) => {
-    const id = String(d?.domain_id ?? "").trim();
-    const name = String(d?.domain_name ?? "").trim();
-    if (id) m.set(id, name);
-  });
-
-  return m;
-}, [l2Static]);
-
-const resolveDomainLabel = useCallback(
-  (domainKey: string) => {
-    // L2 token path: "__L2__:AC"
-    if (domainKey?.startsWith("__L2__:")) {
-      const id = domainKey.replace("__L2__:", "").trim();
-      const name = l2DomainNameById.get(id) ?? id;
-      // IMPORTANT: format ONCE
-      return `${name} (${id})`;
-    }
-
-    // L1 path: use as-is (or you can find from domains[] if you prefer)
-    return domainKey;
-  },
-  [l2DomainNameById]
-);
-
-
-
-
-
 
   useEffect(() => {
     let cancelled = false;
@@ -409,19 +429,19 @@ const resolveDomainLabel = useCallback(
     const raw = l2Static?.domains;
     if (!Array.isArray(raw)) return [];
     return raw.map((d: any) => ({
-  id: String(d.domain_id ?? ""),
-  name: String(d.domain_name ?? ""), // ✅ NO "(AC)" appended here
-  description: d.domain_description,
-  practices: Array.isArray(d.objectives)
-    ? d.objectives.map((o: any) => ({
-        id: o.objective_id,
-        title: o.objective_name,
-        description: o.objective_statement,
-        statement: o.objective_statement,
-        domainId: d.domain_id,
-      }))
-    : [],
-}))
+      id: d.domain_id,
+      name: `${d.domain_name} (${d.domain_id})`,
+      description: d.domain_description,
+      practices: Array.isArray(d.objectives)
+        ? d.objectives.map((o: any) => ({
+            id: o.objective_id,
+            title: o.objective_name,
+            description: o.objective_statement,
+            statement: o.objective_statement,
+            domainId: d.domain_id,
+          }))
+        : [],
+    }));
   }, [l2Static]);
 
 
@@ -535,7 +555,7 @@ if (view.type === "domain") {
   const pageTitle = useMemo(() => {
     if (view.type === "admin") return "Admin Panel";
     if (view.type === "dashboard") return "Command Dashboard";
-    if (view.type === "domain") return getDomainDisplayLabel(view.domainName);
+    if (view.type === "domain") return view.domainName;
     if (view.type === "practice") {
       const p = practiceMap.get(view.practiceId);
       return p ? `Practice: ${p.id}` : "Practice";
@@ -565,32 +585,14 @@ if (view.type === "domain") {
 
     if (view.type === "dashboard") return null;
 
-    
-
-    // --- Active practice/domain helpers (supports L1 + L2) ---
-    const activePractice =
-      view.type === "practice"
-        ? (String(view.practiceId).includes(".L2-")
-            ? l2PracticeMap.get(view.practiceId)
-            : practiceMap.get(view.practiceId))
-        : null;
-
-    const activeDomainKey =
-      view.type === "domain"
-        ? view.domainName
-        : view.type === "practice" && activePractice
-          ? (String(activePractice.id ?? "").includes(".L2-")
-              ? `__L2__:${String((activePractice as any).domainId ?? "").trim()}`
-              : String((activePractice as any).domainName ?? ""))
-          : "";
-return (
+    return (
       <div className="flex items-center text-sm text-gray-500 mb-4 px-2">
         {dashboardButton}
 
         {view.type === "domain" && (
           <>
             <ChevronRight className="h-4 w-4 mx-1" />
-            <span>{getDomainDisplayLabel(activeDomainKey)}</span>
+            <span>{view.domainName}</span>
           </>
         )}
 
@@ -599,15 +601,17 @@ return (
             <ChevronRight className="h-4 w-4 mx-1" />
             <button
               onClick={() => {
-                if (!activeDomainKey) return;
-                setView({ type: "domain", domainName: activeDomainKey });
+                const practice = (typeof view.practiceId === "string" && view.practiceId.includes(".L2-")
+          ? l2PracticeMap.get(view.practiceId)
+          : practiceMap.get(view.practiceId));
+                if (practice) setView({ type: "domain", domainName: practice.domainName });
               }}
               className="hover:underline"
             >
-              {getDomainDisplayLabel(activeDomainKey)}
+              {practiceMap.get(view.practiceId)?.domainName}
             </button>
             <ChevronRight className="h-4 w-4 mx-1" />
-            <span className="font-medium text-gray-700">{String(activePractice?.id ?? "")}</span>
+            <span className="font-medium text-gray-700">{practiceMap.get(view.practiceId)?.id}</span>
           </>
         )}
 
@@ -945,10 +949,6 @@ onDiagnosticsClick={isDev ? () => setIsDiagnosticsOpen(true) : undefined}
           onLockedClick={() => setIsUpgradeModalOpen(true)}
         />
 
-
-
-
-
         <main className="flex-1 overflow-y-auto p-4 md:p-8">
           <div className="max-w-7xl mx-auto">
             <header className="flex justify-between items-center mb-2">
@@ -964,12 +964,6 @@ onDiagnosticsClick={isDev ? () => setIsDiagnosticsOpen(true) : undefined}
             Data Source: {dataSourceInfo}
           </div>
         </main>
-
-
-
-
-
-
 
         {selectedPracticeForAssist && (
           <AssistMePanel
