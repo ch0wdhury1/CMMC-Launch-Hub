@@ -259,6 +259,171 @@ export interface L2ValidationResult {
 
 export type SubscriptionLevel = "L1" | "L2";
 
+export type AssessmentLevel = 1 | 2;
+export type AssessmentStatus = "draft" | "in_progress" | "review" | "complete" | "archived";
+export type FirestoreObjectiveStatus = "pending" | "met" | "not_met" | "not_applicable";
+export type EvidenceReviewStatus = "uploaded" | "needs_review" | "accepted" | "rejected" | "superseded";
+
+export interface AssessmentDoc {
+  assessmentId: string;
+  orgId: string;
+  frameworkId: string;
+  level: AssessmentLevel;
+  name: string;
+  status: AssessmentStatus;
+  state?: string;
+  stateVersion?: number;
+  ownerUid?: string;
+  createdByUid?: string;
+  updatedByUid?: string;
+  createdAt?: any;
+  updatedAt?: any;
+}
+
+export interface FirestorePracticeRecord {
+  practiceId: string;
+  orgId: string;
+  assessmentId: string;
+  frameworkId?: string;
+  level?: AssessmentLevel;
+  domainId?: string;
+  status: PracticeStatus;
+  statusSource: StatusSource;
+  note?: string;
+  implementationSummary?: string;
+  responsibility?: ResponsibilityType;
+  providerName?: string;
+  ownerUid?: string;
+  riskRating?: "low" | "medium" | "high" | "critical";
+  evidenceCount?: number;
+  openPoamCount?: number;
+  lastUpdated?: string;
+  lastReviewedByUid?: string;
+  lastReviewedAt?: any;
+  createdByUid?: string;
+  updatedByUid?: string;
+  createdAt?: any;
+  updatedAt?: any;
+}
+
+export interface FirestoreObjectiveRecord {
+  objectiveId: string;
+  orgId: string;
+  assessmentId: string;
+  practiceId: string;
+  frameworkId?: string;
+  level?: AssessmentLevel;
+  domainId?: string;
+  sequence?: number;
+  status: FirestoreObjectiveStatus;
+  note?: string;
+  noteSummary?: string;
+  assessorComment?: string;
+  aiGuidanceSummary?: string;
+  actionPoints?: string;
+  actionPointsSummary?: string;
+  evidenceIds?: string[];
+  evidenceCount?: number;
+  ownerUid?: string;
+  lastReviewedByUid?: string;
+  lastReviewedAt?: any;
+  createdByUid?: string;
+  updatedByUid?: string;
+  createdAt?: any;
+  updatedAt?: any;
+}
+
+export interface EvidenceRecord {
+  evidenceId: string;
+  orgId: string;
+  assessmentId: string;
+  frameworkId?: string;
+  practiceIds: string[];
+  objectiveIds: string[];
+  title?: string;
+  description?: string;
+  name?: string;
+  fileName?: string;
+  fileType?: string;
+  fileSize?: number;
+  storagePath?: string;
+  sha256?: string;
+  ocrSummary?: string;
+  aiExtractedSignals?: Record<string, any>;
+  isFinalForm?: boolean;
+  reviewStatus?: EvidenceReviewStatus;
+  uploadedByUid?: string;
+  uploadedAt?: any;
+  reviewedByUid?: string;
+  reviewedAt?: any;
+  tags?: string[];
+  source?: string;
+  createdAt?: any;
+  updatedAt?: any;
+}
+
+export interface NoteRecord {
+  noteId: string;
+  orgId: string;
+  assessmentId: string;
+  targetType: "assessment" | "practice" | "objective" | "evidence" | "poam" | "ssp";
+  targetId: string;
+  practiceId?: string;
+  objectiveId?: string;
+  body: string;
+  visibility?: "internal" | "assessor" | "customer";
+  pinned?: boolean;
+  createdByUid?: string;
+  updatedByUid?: string;
+  createdAt?: any;
+  updatedAt?: any;
+  deletedAt?: any;
+}
+
+export interface FirestorePoamItem extends Omit<PoamItem, "source"> {
+  poamId: string;
+  orgId: string;
+  assessmentId: string;
+  relatedObjectiveIds?: string[];
+  relatedEvidenceIds?: string[];
+  ownerUid?: string;
+  ownerName?: string;
+  source: PoamItem["source"] | "objective_gap" | "ai_generated" | "assessor";
+  riskStatement?: string;
+  remediationPlan?: string;
+  milestones?: Array<{
+    title: string;
+    status: "open" | "in_progress" | "completed";
+    targetDate?: string;
+    completedDate?: string;
+  }>;
+  createdByUid?: string;
+  updatedByUid?: string;
+  updatedAt?: any;
+}
+
+export interface ScoreSnapshot {
+  snapshotId: string;
+  orgId: string;
+  assessmentId: string;
+  frameworkId?: string;
+  level: AssessmentLevel;
+  practiceCompletionScore: number;
+  controlsPostureScore: number;
+  overallReadinessScore: number;
+  sprsScore?: number;
+  counts?: Record<string, number>;
+  byDomain?: Record<string, number>;
+  byStatus?: Record<string, number>;
+  highRiskOpenCount?: number;
+  openPoamCount?: number;
+  evidenceCoverage?: number;
+  generatedByUid?: string;
+  generationReason?: "manual" | "scheduled" | "state_transition" | "ai_run" | "client_mvp";
+  source?: string;
+  createdAt?: any;
+}
+
 export interface PersistedState {
   version: number;
   subscriptionLevel: SubscriptionLevel; // New field

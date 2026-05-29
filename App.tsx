@@ -316,6 +316,10 @@ useEffect(() => {
     orgStatus === "active" ? (orgTier ?? (tier as any) ?? "COMM_L1") : "COMM_L1";
 
   const hasL2 = effectiveSubscriptionLevel === "COMM_L2";
+  const currentOrgId = (profile as any)?.orgId || null;
+  const currentUid = auth.currentUser?.uid || (profile as any)?.uid || null;
+  const firestoreAssessmentsEnabled =
+    String(import.meta.env.VITE_FIRESTORE_ASSESSMENTS || "false").toLowerCase() === "true";
 
 
 
@@ -381,7 +385,12 @@ const getDomainDisplayLabel = (domainKey: string) => {
     loading,
     practiceMap,
     dataSourceInfo,
-  } = useCmmcData();
+  } = useCmmcData({
+    orgId: currentOrgId,
+    uid: currentUid,
+    firestoreEnabled: firestoreAssessmentsEnabled,
+    assessmentLevel: effectiveSubscriptionLevel,
+  });
 
   const sspData = useSspData();
 

@@ -19,8 +19,20 @@ import {
   PoamItem,
   ResponsibilityMatrixEntry,
   L2ExtractionResult,
-  SubscriptionLevel
+  SubscriptionLevel,
+  AssessmentLevel,
+  FirestoreObjectiveStatus,
+  FirestorePracticeRecord,
+  FirestoreObjectiveRecord,
+  EvidenceRecord,
+  NoteRecord,
+  FirestorePoamItem
 } from "../types";
+import {
+  getOrCreateDefaultAssessment,
+  isFirestoreAssessmentsEnabled,
+  loadAssessmentState,
+} from "../src/assessmentFirestore";
 
 import { generateReadinessReport } from '../services/geminiService';
 import { READINESS_QUESTIONS } from '../data/readinessQuestions';
@@ -138,7 +150,114 @@ const defaultCompanyProfile: CompanyProfile = {
   users: [],
 };
 
-export const useCmmcData = () => {
+type UseCmmcDataOptions = {
+  orgId?: string | null;
+  uid?: string | null;
+  firestoreEnabled?: boolean;
+  assessmentLevel?: SubscriptionLevel | "COMM_L1" | "COMM_L2" | "SPONSORED" | string | null;
+};
+
+const toAssessmentLevel = (level?: UseCmmcDataOptions["assessmentLevel"]): AssessmentLevel => {
+  return String(level || "").includes("L2") ? 2 : 1;
+};
+
+const toSubscriptionLevel = (level?: UseCmmcDataOptions["assessmentLevel"]): SubscriptionLevel => {
+  return toAssessmentLevel(level) === 2 ? "L2" : "L1";
+};
+
+const toLocalObjectiveStatus = (status?: FirestoreObjectiveStatus | ObjectiveStatus | string): ObjectiveStatus => {
+  switch (status) {
+    case "met":
+    case ObjectiveStatus.Met:
+      return ObjectiveStatus.Met;
+    case "not_met":
+    case ObjectiveStatus.NotMet:
+      return ObjectiveStatus.NotMet;
+    case "not_applicable":
+    case ObjectiveStatus.NotApplicable:
+      return ObjectiveStatus.NotApplicable;
+    default:
+      return ObjectiveStatus.Pending;
+  }
+};
+
+const createInitialRecords = (practices: Practice[]): PracticeRecord[] => {
+  const now = new Date().toISOString();
+  return practices.map(p => ({
+    id: p.id,
+    status: 'not_assessed',
+    statusSource: 'none',
+    lastUpdated: now,
+    note: '',
+    objectiveRecords: p.assessment_objectives.reduce((acc, obj) => {
+      acc[obj.id] = { status: ObjectiveStatus.Pending, note: '', artifacts: [] };
+      return acc;
+    }, {} as { [key: string]: ObjectiveRecord }),
+  }));
+};
+
+const mergeFirestorePracticeRecords = (
+  baseRecords: PracticeRecord[],
+  firestorePracticeRecords: FirestorePracticeRecord[],
+  firestoreObjectiveRecords: FirestoreObjectiveRecord[],
+  evidenceRecords: EvidenceRecord[],
+  noteRecords: NoteRecord[]
+): PracticeRecord[] => {
+  const practiceMap = new Map(firestorePracticeRecords.map(r => [r.practiceId, r]));
+  const objectiveMap = new Map(firestoreObjectiveRecords.map(r => [r.objectiveId, r]));
+  const evidenceByObjective = new Map<string, EvidenceRecord[]>();
+  evidenceRecords.forEach(e => {
+    (e.objectiveIds || []).forEach(objectiveId => {
+      const current = evidenceByObjective.get(objectiveId) || [];
+      evidenceByObjective.set(objectiveId, [...current, e]);
+    });
+  });
+  const notesByTarget = new Map(noteRecords.map(n => [`${n.targetType}:${n.targetId}`, n]));
+
+  return baseRecords.map(record => {
+    const fsPractice = practiceMap.get(record.id);
+    const practiceNote = notesByTarget.get(`practice:${record.id}`)?.body;
+
+    const objectiveRecords = Object.fromEntries(
+      Object.entries(record.objectiveRecords).map(([objectiveId, objective]) => {
+        const fsObjective = objectiveMap.get(objectiveId);
+        const objectiveNote = notesByTarget.get(`objective:${objectiveId}`)?.body;
+        const evidenceArtifacts = (evidenceByObjective.get(objectiveId) || []).map(e => ({
+          id: e.evidenceId,
+          name: e.name || e.fileName || e.title || "Evidence",
+          fileType: e.fileType || "",
+          ocrSummary: e.ocrSummary || "",
+          uploadedAt: typeof e.uploadedAt === "string" ? e.uploadedAt : new Date().toISOString(),
+          isFinalForm: e.isFinalForm ?? true,
+        }));
+
+        return [objectiveId, {
+          ...objective,
+          status: toLocalObjectiveStatus(fsObjective?.status || objective.status),
+          note: fsObjective?.note || fsObjective?.noteSummary || objectiveNote || objective.note,
+          actionPoints: fsObjective?.actionPoints || objective.actionPoints,
+          actionPointsSummary: fsObjective?.actionPointsSummary || fsObjective?.aiGuidanceSummary || objective.actionPointsSummary,
+          artifacts: evidenceArtifacts.length ? evidenceArtifacts : objective.artifacts,
+        }];
+      })
+    ) as { [objectiveId: string]: ObjectiveRecord };
+
+    return {
+      ...record,
+      status: fsPractice?.status || record.status,
+      statusSource: fsPractice?.statusSource || record.statusSource,
+      lastUpdated: fsPractice?.lastUpdated || record.lastUpdated,
+      note: fsPractice?.note || practiceNote || record.note,
+      objectiveRecords,
+    };
+  });
+};
+
+export const useCmmcData = (options: UseCmmcDataOptions = {}) => {
+  const orgId = options.orgId || null;
+  const uid = options.uid || null;
+  const firestoreEnabled = options.firestoreEnabled ?? isFirestoreAssessmentsEnabled();
+  const requestedAssessmentLevel = toAssessmentLevel(options.assessmentLevel);
   const [rawDomains, setRawDomains] = useState<Domain[]>([]);
   const [rawPractices, setRawPractices] = useState<Practice[]>([]);
   const [minedPractices, setMinedPractices] = useState<Practice[]>([]);
@@ -153,6 +272,7 @@ export const useCmmcData = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [dataSourceInfo, setDataSourceInfo] = useState<string>("Initializing...");
+  const [firestoreLoadKey, setFirestoreLoadKey] = useState<string | null>(null);
 
   useEffect(() => {
     const initializeData = async () => {
@@ -179,6 +299,8 @@ export const useCmmcData = () => {
         
         if (persisted) {
             setSubscriptionLevel(persisted.subscriptionLevel || "L2");
+        } else if (options.assessmentLevel) {
+            setSubscriptionLevel(toSubscriptionLevel(options.assessmentLevel));
         } else {
             setSubscriptionLevel("L1");
         }
@@ -277,6 +399,67 @@ export const useCmmcData = () => {
     };
     initializeData();
   }, []);
+
+  useEffect(() => {
+    if (!firestoreEnabled || loading || error || !orgId || !uid) return;
+
+    const key = `${orgId}:${requestedAssessmentLevel}`;
+    if (firestoreLoadKey === key) return;
+
+    let cancelled = false;
+    const loadFirestoreOverlay = async () => {
+      try {
+        const assessment = await getOrCreateDefaultAssessment({
+          orgId,
+          uid,
+          level: requestedAssessmentLevel,
+        });
+        const firestoreState = await loadAssessmentState(orgId, assessment.assessmentId);
+
+        if (cancelled) return;
+
+        setPracticeRecords(prev => mergeFirestorePracticeRecords(
+          prev,
+          firestoreState.practiceRecords,
+          firestoreState.objectiveRecords,
+          firestoreState.evidence,
+          firestoreState.notes
+        ));
+
+        if (firestoreState.poamItems.length > 0) {
+          setPoamItems(firestoreState.poamItems.map((item: FirestorePoamItem) => ({
+            id: item.id || item.poamId,
+            title: item.title,
+            description: item.description,
+            relatedPracticeIds: item.relatedPracticeIds || [],
+            category: item.category,
+            priority: item.priority,
+            status: item.status,
+            owner: item.owner || item.ownerName,
+            createdAt: item.createdAt,
+            targetDate: item.targetDate,
+            completedDate: item.completedDate,
+            source: item.source === "objective_gap" || item.source === "ai_generated" || item.source === "assessor"
+              ? "manual"
+              : item.source,
+            notes: item.notes,
+          })));
+        }
+
+        setDataSourceInfo(prev => `${prev} | Firestore assessment: ${assessment.assessmentId}`);
+        setFirestoreLoadKey(key);
+      } catch (firestoreErr) {
+        console.warn("Firestore assessment load skipped; using local state.", firestoreErr);
+        if (!cancelled) setFirestoreLoadKey(key);
+      }
+    };
+
+    loadFirestoreOverlay();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [firestoreEnabled, loading, error, orgId, uid, requestedAssessmentLevel, firestoreLoadKey]);
 
   useEffect(() => {
     if (!loading && !error) {
