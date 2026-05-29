@@ -254,10 +254,10 @@ const mergeFirestorePracticeRecords = (
 };
 
 export const useCmmcData = (options: UseCmmcDataOptions = {}) => {
-  const orgId = options.orgId || null;
-  const uid = options.uid || null;
   const firestoreEnabled = options.firestoreEnabled ?? isFirestoreAssessmentsEnabled();
-  const requestedAssessmentLevel = toAssessmentLevel(options.assessmentLevel);
+  const orgId = firestoreEnabled ? options.orgId || null : null;
+  const uid = firestoreEnabled ? options.uid || null : null;
+  const requestedAssessmentLevel = firestoreEnabled ? toAssessmentLevel(options.assessmentLevel) : 1;
   const [rawDomains, setRawDomains] = useState<Domain[]>([]);
   const [rawPractices, setRawPractices] = useState<Practice[]>([]);
   const [minedPractices, setMinedPractices] = useState<Practice[]>([]);
@@ -299,7 +299,7 @@ export const useCmmcData = (options: UseCmmcDataOptions = {}) => {
         
         if (persisted) {
             setSubscriptionLevel(persisted.subscriptionLevel || "L2");
-        } else if (options.assessmentLevel) {
+        } else if (firestoreEnabled && options.assessmentLevel) {
             setSubscriptionLevel(toSubscriptionLevel(options.assessmentLevel));
         } else {
             setSubscriptionLevel("L1");
