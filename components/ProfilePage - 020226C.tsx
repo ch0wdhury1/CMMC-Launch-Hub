@@ -61,16 +61,6 @@ export const ProfilePage: React.FC = () => {
   const [orgMembersLoading, setOrgMembersLoading] = useState(false);
   const [orgMembersError, setOrgMembersError] = useState<string | null>(null);
 
-
-
-
-
-const [memberProfiles, setMemberProfiles] = useState<Record<string, any>>({});
-
-
-
-
-
   // ✅ New user request form state (for Add User Request)
   const [newUser, setNewUser] = useState<UserProfile>({
     id: crypto.randomUUID(),
@@ -146,45 +136,6 @@ const [memberProfiles, setMemberProfiles] = useState<Record<string, any>>({});
 
     return () => unsub();
   }, [orgId]);
-
-
-
-
-
-
-useEffect(() => {
-  const run = async () => {
-    const uids = (orgMembers || []).map((m) => m.uid).filter(Boolean);
-    if (uids.length === 0) {
-      setMemberProfiles({});
-      return;
-    }
-
-    // Fetch each users/{uid} doc (MVP simple; small org sizes)
-    const entries = await Promise.all(
-      uids.map(async (id) => {
-        try {
-          const snap = await getDoc(doc(db, "users", String(id)));
-          return [id, snap.exists() ? snap.data() : null] as const;
-        } catch (e) {
-          console.error("member profile fetch failed", id, e);
-          return [id, null] as const;
-        }
-      })
-    );
-
-    const map: Record<string, any> = {};
-    for (const [id, data] of entries) map[id] = data;
-    setMemberProfiles(map);
-  };
-
-  run();
-}, [orgMembers]);
-
-
-
-
-
 
   // Permissions for editing org info (owner OR orgAdmin OR superAdmin)
   const canEditCompany =
@@ -511,27 +462,15 @@ useEffect(() => {
           <p className="text-sm text-gray-500 text-center py-2">No users added yet.</p>
         ) : (
           <div className="space-y-3 mb-4">
-
-
-{orgMembers.map((m) => {
-  const p = memberProfiles[m.uid] || {};
-  return (
-    <div key={m.uid} className="border p-3 rounded bg-gray-50">
-      <p className="font-semibold">{p?.fullName || p?.name || "—"}</p>
-      <p className="text-sm text-gray-600">Email: {p?.email || "—"}</p>
-      <p className="text-sm text-gray-600">Phone: {p?.phone || "—"}</p>
-
-      <p className="text-sm text-gray-500 mt-1">
-        Role: {m.role ?? "orgUser"}
-        {m.superAdmin ? " • superAdmin" : ""}
-      </p>
-
-      {/* Optional: keep UID visible for debugging */}
-      <p className="text-[11px] text-gray-400 mt-1">{m.uid}</p>
-    </div>
-  );
-})}
-
+            {orgMembers.map((m) => (
+              <div key={m.uid} className="border p-3 rounded bg-gray-50">
+                <p className="font-semibold">{m.uid}</p>
+                <p className="text-sm text-gray-500">
+                  role: {m.role ?? "orgUser"}
+                  {m.superAdmin ? " • superAdmin" : ""}
+                </p>
+              </div>
+            ))}
           </div>
         )}
 
@@ -562,15 +501,13 @@ useEffect(() => {
               className="w-full border p-2 rounded bg-white text-black"
             />
 
-<select
-  value={newUser.role || "orgAdmin"}
-  onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
-  className="w-full border p-2 rounded bg-white text-black"
->
-  <option value="orgAdmin">Org Admin User</option>
-  <option value="orgUser">Org Standard User</option>
-</select>
-
+            <input
+              type="text"
+              placeholder='Requested Role ("orgAdmin" or "orgUser")'
+              value={newUser.role || "orgAdmin"}
+              onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
+              className="w-full border p-2 rounded bg-white text-black"
+            />
 
             <button
               type="button"

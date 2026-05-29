@@ -54,8 +54,8 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
       <div className="flex items-center space-x-2">
         {/* ✅ Super Admin button */}
         {onSuperAdminClick && (
-          <button           
-	    onClick={onSuperAdminClick}
+          <button
+            onClick={onSuperAdminClick}
             className="flex items-center px-3 py-1.5 bg-gray-900/30 text-white text-sm rounded-md hover:bg-gray-900/40 transition-colors border border-white/20"
             title="Super Admin Panel"
           >
@@ -63,7 +63,6 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
             Super Admin
           </button>
         )}
-
 
         {/* ✅ Admin button */}
         {onAdminClick && (

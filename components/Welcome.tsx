@@ -17,7 +17,7 @@ export const Welcome: React.FC<WelcomeProps> = ({ overallCompletion, onPrimaryAc
     <div className="animate-fadeIn text-center bg-white p-10 rounded-xl shadow-md border border-gray-200">
       
       <h2 className="text-3xl font-bold text-gray-800">
-        {isNewUser ? "Welcome to the CMMC Launch Hub" : "Welcome Back!"}
+        {isNewUser ? "Welcome to CMMC Launch Hub" : "Welcome Back!"}
       </h2>
 
       <p className="mt-3 text-lg text-gray-600 max-w-2xl mx-auto">

@@ -1,15 +1,17 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { AssessmentObjective, Artifact, ObjectiveStatus, Practice, SavedTemplate, ObjectiveRecord } from '../types';
+
+
+import { callGemini } from '../src/lib/geminiClient';
 import { 
   getOcrSummary, 
-  generateObjectiveActionPoints, 
   generateInstructionAudio,
-  startObjectiveChat
 } from '../services/geminiService';
-import { GenerateContentResponse } from '@google/genai';
+
+
+
 import { jsPDF } from 'jspdf';
-import { decode, decodeAudioData } from '../services/audioUtils';
 import { Paperclip, FileText, Trash2, Loader2, Bot, Volume2, Download, MessageSquare, Send, ChevronDown, ChevronUp, Save, Film, Clapperboard, X, ChevronLeft, ChevronRight, Sparkles, ClipboardCopy, CheckCircle2, XCircle, HelpCircle } from 'lucide-react';
 
 type ChatMessage = {
@@ -140,35 +142,100 @@ export const AssessmentObjectiveItem: React.FC<AssessmentObjectiveItemProps> = (
   const [isDeepDiveLoading, setIsDeepDiveLoading] = useState(false);
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
+
+
+
   const handleGetActionPoints = async () => {
     setIsActionPointsLoading(true);
     try {
-      const result = await generateObjectiveActionPoints(practice, objective);
-      
-      const newTemplates = result.templates.map((t: any) => ({
-        id: crypto.randomUUID(), name: t.name, filename: t.filename, content: t.content, createdAt: new Date().toISOString()
+      const ctx = {
+        practiceId: practice?.id,
+        practiceTitle: (practice as any)?.name ?? (practice as any)?.title,
+        objectiveId: objective?.id,
+        objectiveText: objective?.text,
+        objectiveStatus: objective?.status,
+        note: objective?.note || "",
+        artifacts: (objective?.artifacts || []).slice(0, 6).map(a => ({
+          name: a.name,
+          fileType: a.fileType,
+          ocrSummary: a.ocrSummary,
+        })),
+      };
+
+      const prompt = `
+Return STRICT JSON only. No markdown. No commentary.
+
+You are a CMMC Level 2 readiness assistant. Generate implementation guidance for THIS objective.
+
+JSON schema:
+{
+  "actionPointsHtml": "string (HTML with <ul><li> etc. Keep concise, scannable.)",
+  "summary": "string (2-5 sentences, plain text)",
+  "templates": [
+    { "name": "string", "filename": "string ending with .txt", "content": "string" }
+  ]
+}
+
+Rules:
+- Templates should be practical evidence artifacts (policy/procedure snippets, checklists, logs, SOPs).
+- Keep templates short but usable.
+- Ensure HTML is safe/simple (p, ul, li, b).
+
+Context:
+${JSON.stringify(ctx, null, 2)}
+      `.trim();
+
+      const raw = await callGemini(prompt, { model: 'gemini-2.5-flash', temperature: 0.2 });
+
+      let parsed: any = null;
+      try {
+        parsed = JSON.parse(raw);
+      } catch (e) {
+        console.error("AI returned non-JSON:", raw);
+        throw new Error("AI response was not valid JSON. Try again.");
+      }
+
+      const actionPointsHtml = String(parsed?.actionPointsHtml || "").trim();
+      const summary = String(parsed?.summary || "").trim();
+      const templates = Array.isArray(parsed?.templates) ? parsed.templates : [];
+
+      const newTemplates = templates.map((t: any) => ({
+        id: crypto.randomUUID(),
+        name: String(t?.name || "Template"),
+        filename: String(t?.filename || "template.txt"),
+        content: String(t?.content || ""),
+        createdAt: new Date().toISOString(),
       }));
 
       onUpdateObjective(objective.id, {
-        actionPoints: result.actionPoints,
-        actionPointsSummary: result.summary,
+        actionPoints: actionPointsHtml,
+        actionPointsSummary: summary,
         templates: newTemplates,
       });
 
       newTemplates.forEach((t: any) => {
         storeTemplate({
-          id: t.id, practiceId: practice.id, objectiveId: objective.id,
-          title: t.name, content: t.content, createdAt: t.createdAt,
+          id: t.id,
+          practiceId: practice.id,
+          objectiveId: objective.id,
+          title: t.name,
+          content: t.content,
+          createdAt: t.createdAt,
         });
       });
 
     } catch (error: any) {
       console.error("Action Points failed:", error);
-      alert("Could not get AI guidance.");
+      alert(error?.message || "Could not get AI guidance.");
     } finally {
       setIsActionPointsLoading(false);
     }
   };
+
+
+
+
+
 
   useEffect(() => {
     if (chatContainerRef.current) {
@@ -269,29 +336,85 @@ export const AssessmentObjectiveItem: React.FC<AssessmentObjectiveItemProps> = (
     alert(`"${template.name} (PDF)" has been saved.`);
   };
 
+
+
+
+
+  const buildChatPrompt = (history: ChatMessage[], latestUserMsg: string) => {
+    const ctx = {
+      practiceId: practice?.id,
+      practiceTitle: (practice as any)?.name ?? (practice as any)?.title,
+      objectiveId: objective?.id,
+      objectiveText: objective?.text,
+      objectiveStatus: objective?.status,
+      actionPointsSummary: objective?.actionPointsSummary || "",
+      note: objective?.note || "",
+      artifacts: (objective?.artifacts || []).slice(0, 6).map(a => ({
+        name: a.name,
+        ocrSummary: a.ocrSummary,
+      })),
+    };
+
+    const lastTurns = history.slice(-8).map(m => `${m.role.toUpperCase()}: ${m.text}`).join('\n');
+
+    return `
+You are a CMMC Level 2 compliance assistant helping a small defense contractor.
+
+Objective context (JSON):
+${JSON.stringify(ctx, null, 2)}
+
+Conversation (most recent last):
+${lastTurns}
+
+USER: ${latestUserMsg}
+
+Respond in a helpful, practical way:
+- direct answer first
+- steps/checklist if relevant
+- include evidence examples when possible
+- keep it concise
+    `.trim();
+  };
+
   const handleSendDeepDiveMessage = async () => {
     if (!deepDiveInput.trim() || isDeepDiveLoading) return;
+
     const newUserMessage: ChatMessage = { role: 'user', text: deepDiveInput };
     const updatedHistory = [...deepDiveHistory, newUserMessage];
+
     setDeepDiveHistory(updatedHistory);
     setDeepDiveInput('');
     setIsDeepDiveLoading(true);
-    let modelResponse = '';
+
+    // add placeholder model message so UI stays the same
     setDeepDiveHistory(prev => [...prev, { role: 'model', text: '' }]);
 
     try {
-      const stream = await startObjectiveChat(objective, updatedHistory, deepDiveInput);
-      for await (const chunk of stream) {
-        modelResponse += (chunk as GenerateContentResponse).text;
-        setDeepDiveHistory(prev => prev.map((msg, i) => i === prev.length - 1 ? { ...msg, text: modelResponse } : msg));
-      }
+      const prompt = buildChatPrompt(deepDiveHistory, newUserMessage.text);
+      const text = await callGemini(prompt, { model: 'gemini-2.5-flash', temperature: 0.2 });
+
+      setDeepDiveHistory(prev =>
+        prev.map((msg, i) =>
+          i === prev.length - 1 ? { ...msg, text: (text || '').trim() || 'Sorry, no response.' } : msg
+        )
+      );
     } catch (error) {
       console.error('Chat error:', error);
-      setDeepDiveHistory(prev => prev.map((msg, i) => i === prev.length - 1 ? { ...msg, text: 'Sorry, something went wrong.' } : msg));
+      setDeepDiveHistory(prev =>
+        prev.map((msg, i) =>
+          i === prev.length - 1 ? { ...msg, text: 'Sorry, something went wrong.' } : msg
+        )
+      );
     } finally {
       setIsDeepDiveLoading(false);
     }
   };
+
+
+
+
+
+
 
   const stripHtml = (html?: string) => {
     if (!html) return "";

@@ -3,9 +3,14 @@ import React, { useState } from 'react';
 import { Practice, AssessmentObjective, Artifact, SavedTemplate, PracticeRecord, PracticeStatus, StatusSource, ObjectiveRecord, ObjectiveStatus } from '../types';
 import { AssessmentObjectiveItem } from './AssessmentObjectiveItem';
 import { CollapsibleSection } from './CollapsibleSection';
-import { generatePracticeExplanationAudio, generateSlideshow } from '../services/geminiService';
-import { decode, pcmToWav } from '../services/audioUtils';
+
+import { generateSlideshow } from '../services/geminiService';
+// import { generatePracticeExplanationAudio, generateSlideshow } from '../services/geminiService';
+// import { decode, pcmToWav } from '../services/audioUtils';
+
 import { Sparkles, Volume2, Loader2, Download, Info, Check, RefreshCw, AlertCircle } from 'lucide-react';
+
+import { callGemini } from '../src/lib/geminiClient';
 
 interface PracticeViewProps {
   practice: Practice;
@@ -81,6 +86,30 @@ const objectiveRecords = (practiceRecord as any)?.objectiveRecords ?? {};
 
 
 
+
+
+  const [overviewText, setOverviewText] = useState<string>('');
+  const [isSpeakingOverview, setIsSpeakingOverview] = useState(false);
+
+  const [evidenceExamplesText, setEvidenceExamplesText] = useState<string>('');
+  const [isLoadingEvidence, setIsLoadingEvidence] = useState(false);
+
+  const [clarifiedObjectivesText, setClarifiedObjectivesText] = useState<string>('');
+  const [isLoadingObjectives, setIsLoadingObjectives] = useState(false);
+
+  const stopSpeech = () => {
+    try {
+      window.speechSynthesis?.cancel();
+    } catch {}
+    setIsSpeakingOverview(false);
+  };
+
+
+
+
+
+
+
   const [isLoadingAudio, setIsLoadingAudio] = useState(false);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [slideshowImages, setSlideshowImages] = useState<{ [key: string]: string[] }>({});
@@ -151,26 +180,73 @@ const keyReferences: string[] = Array.isArray(refsRaw)
 
 
   const handleGeneratePracticeAudio = async () => {
-    setIsLoadingAudio(true);
-    if (audioUrl) {
-      URL.revokeObjectURL(audioUrl);
-      setAudioUrl(null);
+    // toggle off if currently speaking
+    if (isSpeakingOverview) {
+      stopSpeech();
+      return;
     }
 
+    setIsLoadingAudio(true);
     try {
-      const { script, audioB64 } = await generatePracticeExplanationAudio(practice);
-      const audioBytes = decode(audioB64);
-      const audioBlob = pcmToWav(audioBytes);
-      const url = URL.createObjectURL(audioBlob);
-      setAudioUrl(url);
+      const ctx = {
+        id: (practice as any)?.id,
+        name: (practice as any)?.name ?? (practice as any)?.title,
+        brief_description: (practice as any)?.brief_description,
+        level: (practice as any)?.level,
+        domain: (practice as any)?.domain,
+        objectives: staticObjectives?.map((o: any) => o?.statement || o?.text).filter(Boolean).slice(0, 12),
+      };
 
+      const prompt = `
+You are a CMMC readiness assistant.
+
+Create a short spoken overview (about 60–90 seconds) of this practice for a business audience.
+Keep it plain English and actionable.
+Structure:
+- What it means (1–2 sentences)
+- Why it matters
+- What an assessor looks for
+- What to do first (quick win)
+- Typical evidence examples (2–4 bullets)
+
+Practice context (JSON):
+${JSON.stringify(ctx, null, 2)}
+`.trim();
+
+      const text = await callGemini(prompt, { model: 'gemini-2.5-flash', temperature: 0.2 });
+      const finalText = (text || '').trim();
+      setOverviewText(finalText);
+
+      if (finalText) {
+        // Speak it
+        const utter = new SpeechSynthesisUtterance(finalText);
+        utter.rate = 1.0;
+        utter.pitch = 1.0;
+        utter.onend = () => setIsSpeakingOverview(false);
+        utter.onerror = () => setIsSpeakingOverview(false);
+
+        setIsSpeakingOverview(true);
+        window.speechSynthesis.cancel(); // ensure clean start
+        window.speechSynthesis.speak(utter);
+      } else {
+        alert('Overview unavailable.');
+      }
     } catch (error) {
-      console.error("Failed to generate practice audio explanation:", error);
-      alert("Audio explanation unavailable.");
+      console.error('Failed to generate practice overview:', error);
+      alert('Practice overview unavailable.');
+      setIsSpeakingOverview(false);
     } finally {
       setIsLoadingAudio(false);
     }
   };
+
+
+
+
+
+
+
+
 
   const handleGenerateSlideshow = async (objectiveId: string, actionPointsText: string) => {
     if (!actionPointsText) {
@@ -189,6 +265,90 @@ const keyReferences: string[] = Array.isArray(refsRaw)
       setLoadingSlideshow(null);
     }
   };
+
+
+
+
+
+
+  const handleGenerateEvidenceExamples = async () => {
+    if (isLoadingEvidence) return;
+    setIsLoadingEvidence(true);
+    setEvidenceExamplesText('');
+    try {
+      const ctx = {
+        id: (practice as any)?.id,
+        name: (practice as any)?.name ?? (practice as any)?.title,
+        brief_description: (practice as any)?.brief_description,
+        level: (practice as any)?.level,
+        domain: (practice as any)?.domain,
+      };
+
+      const prompt = `
+You are a CMMC readiness assistant.
+
+Generate evidence examples for this practice.
+Output format:
+- Policy/Procedure Evidence
+- Technical Evidence
+- Operational Evidence (tickets, checklists, training, etc.)
+- Screenshots/Logs
+Keep it concise and specific (8–15 bullets total).
+
+Practice context (JSON):
+${JSON.stringify(ctx, null, 2)}
+`.trim();
+
+      const text = await callGemini(prompt, { model: 'gemini-2.5-flash', temperature: 0.2 });
+      setEvidenceExamplesText((text || '').trim() || '(No response)');
+    } catch (e: any) {
+      console.error(e);
+      setEvidenceExamplesText('Sorry, evidence generation failed.');
+    } finally {
+      setIsLoadingEvidence(false);
+    }
+  };
+
+  const handleClarifyObjectives = async () => {
+    if (isLoadingObjectives) return;
+    setIsLoadingObjectives(true);
+    setClarifiedObjectivesText('');
+    try {
+      const objList = staticObjectives
+        .map((o: any, idx: number) => `(${idx + 1}) ${String(o?.statement || o?.text || '').trim()}`)
+        .filter((s: string) => s.length > 6)
+        .slice(0, 30)
+        .join('\n');
+
+      const prompt = `
+You are a CMMC readiness assistant.
+
+Clarify the assessment objectives below.
+For each objective:
+- Rewrite in plain English
+- What the assessor is verifying
+- Pass/Fail signals (1–2 bullets)
+Keep it tight and readable.
+
+Practice: ${(practice as any)?.id} — ${(practice as any)?.name ?? (practice as any)?.title ?? ''}
+Objectives:
+${objList}
+`.trim();
+
+      const text = await callGemini(prompt, { model: 'gemini-2.5-flash', temperature: 0.2 });
+      setClarifiedObjectivesText((text || '').trim() || '(No response)');
+    } catch (e: any) {
+      console.error(e);
+      setClarifiedObjectivesText('Sorry, objective clarification failed.');
+    } finally {
+      setIsLoadingObjectives(false);
+    }
+  };
+
+
+
+
+
   
   const getStatusInfo = (s: PracticeStatus) => {
     switch (s) {
@@ -281,14 +441,73 @@ const keyReferences: string[] = Array.isArray(refsRaw)
         <div className="bg-white p-4 rounded-lg shadow-md border border-gray-200 mb-6">
           <button onClick={handleGeneratePracticeAudio} disabled={isLoadingAudio} className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-md shadow hover:bg-blue-700 transition disabled:bg-blue-400 disabled:cursor-wait">
             {isLoadingAudio ? <Loader2 className="h-5 w-5 mr-2 animate-spin" /> : <Volume2 className="h-5 w-5 mr-2" />}
-            {isLoadingAudio ? 'Generating...' : `Practice Overview (Audio)`}
+	    {isLoadingAudio ? 'Generating...' : (isSpeakingOverview ? 'Stop Audio' : `Practice Overview (Audio)`)}
           </button>
 
-          {audioUrl && (
-            <div className="mt-4 animate-fadeIn bg-gray-50 p-3 rounded-md border border-gray-200">
-              <audio controls src={audioUrl} className="w-full"></audio>
-            </div>
-          )}
+
+
+<div className="bg-white p-4 rounded-lg shadow-md border border-gray-200 mb-6">
+  <div className="flex flex-col sm:flex-row gap-2">
+    <button
+      onClick={handleGenerateEvidenceExamples}
+      disabled={isLoadingEvidence}
+      className="flex items-center justify-center px-4 py-2 bg-indigo-600 text-white rounded-md shadow hover:bg-indigo-700 transition disabled:bg-indigo-400 disabled:cursor-wait"
+    >
+      {isLoadingEvidence ? <Loader2 className="h-5 w-5 mr-2 animate-spin" /> : <Sparkles className="h-5 w-5 mr-2" />}
+      Auto-generate evidence examples
+    </button>
+
+    <button
+      onClick={handleClarifyObjectives}
+      disabled={isLoadingObjectives}
+      className="flex items-center justify-center px-4 py-2 bg-emerald-600 text-white rounded-md shadow hover:bg-emerald-700 transition disabled:bg-emerald-400 disabled:cursor-wait"
+    >
+      {isLoadingObjectives ? <Loader2 className="h-5 w-5 mr-2 animate-spin" /> : <Sparkles className="h-5 w-5 mr-2" />}
+      Clarify assessment objectives
+    </button>
+  </div>
+
+  {evidenceExamplesText && (
+    <div className="mt-4 bg-gray-50 p-3 rounded-md border border-gray-200">
+      <div className="text-xs font-semibold text-gray-700 mb-2">Evidence Examples (AI)</div>
+      <div className="text-sm text-gray-700 whitespace-pre-wrap">{evidenceExamplesText}</div>
+    </div>
+  )}
+
+  {clarifiedObjectivesText && (
+    <div className="mt-4 bg-gray-50 p-3 rounded-md border border-gray-200">
+      <div className="text-xs font-semibold text-gray-700 mb-2">Clarified Objectives (AI)</div>
+      <div className="text-sm text-gray-700 whitespace-pre-wrap">{clarifiedObjectivesText}</div>
+    </div>
+  )}
+</div>
+
+
+
+
+
+
+
+{overviewText && (
+  <div className="mt-4 animate-fadeIn bg-gray-50 p-3 rounded-md border border-gray-200">
+    <div className="flex items-center justify-between mb-2">
+      <div className="text-xs font-semibold text-gray-700">Transcript</div>
+      <button
+        onClick={stopSpeech}
+        className="text-xs px-2 py-1 border rounded hover:bg-gray-100"
+      >
+        Stop
+      </button>
+    </div>
+    <div className="text-sm text-gray-700 whitespace-pre-wrap">{overviewText}</div>
+  </div>
+)}
+
+
+
+
+
+
         </div>
 
         {/* Assessment Objectives (Granular level) */}

@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useMemo, useEffect } from "react";
 
-import { doc, getDoc } from "firebase/firestore";
+import {doc, getDoc, addDoc, collection, serverTimestamp, setDoc} from "firebase/firestore";
 import {
   onAuthStateChanged,
   User,
@@ -12,8 +12,9 @@ import { auth, db } from "./src/firebase";
 
 import { can, isSuperAdmin as isSuperAdminRole } from "./src/access";
 
-import { AdminPanel } from "./components/AdminPanel";
+import { SuperAdminPanel } from "./components/SuperAdminPanel";
 
+import { AdminPanel } from "./components/AdminPanel";
 import { Sidebar } from "./components/Sidebar";
 import { Dashboard } from "./components/Dashboard";
 import { DomainView } from "./components/DomainView";
@@ -46,14 +47,26 @@ import { SPRS_CONTROLS } from "./data/sprsControls";
 
 import { Home, ChevronRight, Key, ShieldAlert, Database, Loader2 } from "lucide-react";
 
+
 /* =========================================================
    TEMP: system/activation read test (console-only)
+   SuperAdmin ONLY
    ========================================================= */
 async function testReadSystemActivation() {
   try {
     const u = auth.currentUser;
     if (!u) {
       console.log("⚠️ [system/activation] Not logged in yet");
+      return;
+    }
+
+    // ✅ Gate by Firestore user doc roles.superAdmin
+    const userSnap = await getDoc(doc(db, "users", u.uid));
+    const roles = userSnap.exists() ? (userSnap.data() as any)?.roles : null;
+    const isSuperAdmin = roles?.superAdmin === true;
+
+    if (!isSuperAdmin) {
+      console.log("ℹ️ [system/activation] Skipped (not superAdmin)");
       return;
     }
 
@@ -70,6 +83,7 @@ async function testReadSystemActivation() {
     console.error("❌ [system/activation] READ FAILED:", err);
   }
 }
+
 
 /* =========================================================
    Bootstrap (inline, so no missing import)
@@ -252,12 +266,34 @@ function AuthedApp({ onLogout }: { onLogout: () => void }) {
   }, [profile]);
 
   const ent = profile?.entitlements;
-  const roles = profile?.roles;
 
-  // Admin access = super admin role + entitlement flag
-  const canAdmin = isSuperAdminRole(roles) && can(ent, "admin_panel");
+  // ✅ Role flags (users/{uid}.roles)
+  const rolesAny: any = (profile as any)?.roles || {};
+  const isSuperAdmin = rolesAny?.superAdmin === true;
+  const orgRole = rolesAny?.orgRole;
+  const isOrgAdmin = orgRole === "orgAdmin";
 
-  const isSuperAdmin = !!profile?.roles?.superAdmin;
+
+
+// ✅ TEMP: system/activation read test — superAdmin only
+
+useEffect(() => {
+  console.log("[system/activation] gate check", { isSuperAdmin });
+
+  if (!isSuperAdmin) return;
+
+  const t = setTimeout(() => {
+    testReadSystemActivation();
+  }, 800);
+
+  return () => clearTimeout(t);
+}, [isSuperAdmin]);
+
+
+
+
+  // NOTE: legacy helper-based admin gating retained for compatibility (currently unused)
+  const canAdmin = isSuperAdminRole(rolesAny) && can(ent, "admin_panel");
   const isDev = import.meta.env.DEV;
 
   // ✅ Effective subscription level for Sidebar gating
@@ -266,6 +302,15 @@ function AuthedApp({ onLogout }: { onLogout: () => void }) {
     orgStatus === "active" ? (orgTier ?? (tier as any) ?? "COMM_L1") : "COMM_L1";
 
   const hasL2 = effectiveSubscriptionLevel === "COMM_L2";
+
+
+
+
+
+
+
+
+
 
 
 
@@ -339,14 +384,72 @@ const getDomainDisplayLabel = (domainKey: string) => {
   }, [l2Static]);
 
   const l2PracticeMap = useMemo(() => {
-    const map = new Map<string, any>();
-    const domains = l2Static?.domains ?? [];
-    for (const d of domains) {
-      for (const p of d.practices ?? []) {
-        if (p?.requirementId) map.set(String(p.requirementId), p);
+    const m = new Map<string, any>();
+    const rawDomains = (l2Static as any)?.domains;
+
+    if (!Array.isArray(rawDomains)) return m;
+
+    for (const d of rawDomains) {
+      const domainId = String(d?.domain_id ?? "").trim();
+      const domainName = String(d?.domain_name ?? domainId).trim();
+
+      const practices = Array.isArray(d?.practices) ? d.practices : [];
+      for (const p of practices) {
+        const pid = String(p?.requirementId ?? "").trim();
+        if (!pid) continue;
+
+        const title = String(p?.requirementName ?? "").trim();
+        const statement = String(p?.requirementStatement ?? "").trim();
+
+        // --- Assessment objectives (L2) ---
+        const assessmentObjectivesRaw = Array.isArray(p?.assessmentObjectives) ? p.assessmentObjectives : [];
+        const assessmentObjectives = assessmentObjectivesRaw
+          .map((o: any) => ({
+            id: String(o?.objectiveId ?? "").trim(),
+            statement: String(o?.determinationStatement ?? o?.statement ?? "").trim(),
+          }))
+          .filter((o: any) => o.id || o.statement);
+
+        // --- Discussion fields (L2) ---
+        const discussion = String(p?.discussion ?? "").trim();
+        const furtherDiscussion = String(p?.furtherDiscussion ?? "").trim();
+
+        // --- References (L2) ---
+        const referencesRaw = Array.isArray(p?.references) ? p.references : [];
+        const references = referencesRaw.map((r: any) => String(r)).filter(Boolean);
+
+        // Some parts of the UI expect a single "name" field.
+        const name = title ? `${pid} – ${title}` : pid;
+
+        // Provide both camelCase and snake_case to stay compatible with older UI code.
+        m.set(pid, {
+          id: pid,
+          name,
+          title,
+          description: statement,
+          statement,
+          domainId,
+          domainName,
+
+          assessmentObjectives,          // camelCase
+          assessment_objectives: assessmentObjectives, // snake_case alias
+
+          discussion,
+          furtherDiscussion,
+
+          references,
+          keyReferences: references,     // alias used in some builds
+
+          // L2 JSON doesn’t include explicit methods/objects; keep a stable default so UI doesn't look empty.
+          potentialAssessmentMethods:
+            "Examine: policies, procedures, system configs, and evidence artifacts. Interview: system owners/admins. Test: enforcement mechanisms for the requirement.",
+          potentialAssessmentObjects:
+            "Policies, procedures, audit logs, screenshots/config exports, tickets/change records, access reviews, training records, and other supporting artifacts.",
+        });
       }
     }
-    return map;
+
+    return m;
   }, [l2Static]);
 
   useEffect(() => {
@@ -642,6 +745,8 @@ if (view.type === "domain") {
 
 
 
+case "superAdmin":
+  return <SuperAdminPanel />;
 
 
 case "domain": {
@@ -857,7 +962,8 @@ case "domain": {
   return (
     <div className="flex flex-col h-screen bg-gray-50">
       <AppHeader
-        onAdminClick={isSuperAdmin ? () => setView({ type: "admin" }) : undefined}
+        onAdminClick={isOrgAdmin || isSuperAdmin ? () => setView({ type: "admin" }) : undefined}
+        onSuperAdminClick={isSuperAdmin ? () => setView({ type: "superAdmin" }) : undefined}
 	onSave={() => {}}
         onSavedTemplatesClick={() => setView({ type: "savedTemplates" })}
         onProfileClick={() => setView({ type: "profile" })}
@@ -947,58 +1053,269 @@ function Login() {
   const [password, setPassword] = useState("");
   const [msg, setMsg] = useState("");
 
-  const submit = async (e: React.FormEvent) => {
+  // Register form extras (MVP)
+  const [orgName, setOrgName] = useState("");
+  const [requestedTier, setRequestedTier] = useState<"SPONSORED" | "COMM_L1" | "COMM_L2">("COMM_L1");
+  const [website, setWebsite] = useState("");
+  const [address, setAddress] = useState("");
+  const [primaryContactName, setPrimaryContactName] = useState("");
+  const [primaryContactPhone, setPrimaryContactPhone] = useState("");
+const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setMsg("");
+
+    const cleanEmail = email.trim().toLowerCase();
+
     try {
       if (mode === "login") {
-        await signInWithEmailAndPassword(auth, email, password);
+        await signInWithEmailAndPassword(auth, cleanEmail, password);
         setMsg("✅ Logged in");
-      } else {
-        await createUserWithEmailAndPassword(auth, email, password);
-        setMsg("✅ Registered + logged in");
+        return;
       }
+
+      // ===== Register =====
+      if (!orgName.trim() || !primaryContactName.trim()) {
+        setMsg("❌ Please enter Company Name and Primary Contact Name.");
+        return;
+      }
+      if (!cleanEmail) {
+        setMsg("❌ Please enter a valid email address.");
+        return;
+      }
+      if (password.length < 6) {
+        setMsg("❌ Password must be at least 6 characters.");
+        return;
+      }
+
+      const orgId =
+        "org_" +
+        orgName
+          .trim()
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "_")
+          .replace(/^_+|_+$/g, "")
+          .slice(0, 40);
+
+      const cred = await createUserWithEmailAndPassword(auth, cleanEmail, password);
+
+      // Ensure users/{uid} has orgId + pending status (merge-safe)
+      await setDoc(
+        doc(db, "users", cred.user.uid),
+        {
+          uid: cred.user.uid,
+          email: cleanEmail,
+          fullName: primaryContactName.trim(),
+          phone: primaryContactPhone.trim(),
+          orgId,
+          status: "pending",
+          roles: { orgRole: "orgAdmin" },
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      // Create SuperAdmin inbox item (accessRequests)
+      try {
+        await addDoc(collection(db, "accessRequests"), {
+          type: "orgRegistration",
+          status: "pending",
+
+          orgId,
+          requestedTier,
+
+          orgName: orgName.trim(),
+          website: website.trim(),
+          address: address.trim(),
+
+          primaryContactName: primaryContactName.trim(),
+          primaryContactPhone: primaryContactPhone.trim(),
+          primaryContactEmail: cleanEmail,
+
+          // compatibility / convenience fields for tables
+          ownerEmail: cleanEmail,
+          fullName: primaryContactName.trim(),
+          email: cleanEmail,
+
+          requestedByUid: cred.user.uid,
+          createdAt: serverTimestamp(),
+        });
+
+        console.log("✅ orgRegistration accessRequest created for", cleanEmail, "orgId:", orgId);
+      } catch (e: any) {
+        console.error("❌ orgRegistration accessRequest FAILED:", e);
+        setMsg(`❌ Registration request failed: ${e?.message || String(e)}`);
+        return;
+      }
+
+      // MVP: do not allow access until Super Admin approves
+      await signOut(auth);
+
+      setMsg("✅ Registration submitted. Super Admin will activate your account.");
+      setMode("login");
+      setEmail("");
+      setPassword("");
+      setOrgName("");
+      setRequestedTier("COMM_L1");
+      setWebsite("");
+      setAddress("");
+      setPrimaryContactName("");
+      setPrimaryContactPhone("");
     } catch (err: any) {
+      console.error(err);
       setMsg(`❌ ${err?.message || "Unknown error"}`);
     }
-  };
+  };;
 
   return (
-    <div style={{ maxWidth: 420, margin: "40px auto", padding: 20, border: "1px solid #ddd", borderRadius: 12 }}>
-      <h2 style={{ marginBottom: 10 }}>CMMC Launch Hub</h2>
-      <p style={{ marginTop: 0, color: "#555" }}>
-        {mode === "login" ? "Login" : "Create account"} (Email/Password)
-      </p>
+    <div className="flex flex-col h-screen bg-gray-50">
+      <AppHeader
+        showAppActions={false}
+        onSave={() => {}}
+        onSavedTemplatesClick={() => {}}
+        onProfileClick={() => {}}
+        overallCompletion={0}
+        sprsScore={-250}
+      />
 
-      <form onSubmit={submit} style={{ display: "grid", gap: 10 }}>
-        <input
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          style={{ padding: 10, borderRadius: 8, border: "1px solid #ccc" }}
-        />
-        <input
-          placeholder="Password (6+ chars)"
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          style={{ padding: 10, borderRadius: 8, border: "1px solid #ccc" }}
-        />
+      <div className="flex flex-1 overflow-hidden">
+        {/* Sidebar shell (no items until login) */}
+        <aside className="w-64 bg-gradient-to-b from-slate-900 to-slate-800 border-r border-slate-800" />
 
-        <button type="submit" style={{ padding: 10, borderRadius: 8, cursor: "pointer" }}>
-          {mode === "login" ? "Login" : "Register"}
-        </button>
+        <main className="flex-1 overflow-y-auto p-4 md:p-10">
+          <div className="max-w-6xl mx-auto">
+            <h1 className="text-4xl font-extrabold text-center text-gray-900 mb-10">
+              AI Powered CMMC Readiness Platform
+            </h1>
 
-        <button
-          type="button"
-          onClick={() => setMode(mode === "login" ? "register" : "login")}
-          style={{ padding: 10, borderRadius: 8, cursor: "pointer" }}
-        >
-          Switch to {mode === "login" ? "Register" : "Login"}
-        </button>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start justify-center">
+              {/* Login / Register Card */}
+              <div className="bg-white rounded-xl shadow-md border border-gray-200 p-6 max-w-xl mx-auto w-full">
+                <h2 className="text-lg font-semibold text-gray-900 mb-4">
+                  {mode === "login" ? "Login" : "Register"} (Email/Password)
+                </h2>
 
-        {msg && <div style={{ marginTop: 6, whiteSpace: "pre-wrap" }}>{msg}</div>}
-      </form>
+                <form onSubmit={submit} className="space-y-3">
+                  <input
+                    placeholder="Email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <input
+                    placeholder="Password (6+ chars)"
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  {mode === "register" && (
+                    <div className="space-y-3 pt-2">
+                      <div className="h-px bg-gray-200" />
+                      <div className="text-sm font-semibold text-gray-900">Company Registration</div>
+
+                      <input
+                        placeholder="Company Name *"
+                        value={orgName}
+                        onChange={(e) => setOrgName(e.target.value)}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+
+                      <select
+                        value={requestedTier}
+                        onChange={(e) => setRequestedTier(e.target.value as any)}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="SPONSORED">SPONSORED (1 user)</option>
+                        <option value="COMM_L1">COMM_L1 (Level 1)</option>
+                        <option value="COMM_L2">COMM_L2 (Level 2)</option>
+                      </select>
+
+                      <input
+                        placeholder="Website (optional)"
+                        value={website}
+                        onChange={(e) => setWebsite(e.target.value)}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+
+                      <input
+                        placeholder="Address (optional)"
+                        value={address}
+                        onChange={(e) => setAddress(e.target.value)}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+
+                      <div className="text-sm font-semibold text-gray-900 pt-1">Primary Contact</div>
+
+                      <input
+                        placeholder="Full Name *"
+                        value={primaryContactName}
+                        onChange={(e) => setPrimaryContactName(e.target.value)}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+
+                      <input
+                        placeholder="Phone (optional)"
+                        value={primaryContactPhone}
+                        onChange={(e) => setPrimaryContactPhone(e.target.value)}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+
+                      <p className="text-xs text-gray-500">
+                        After you submit, an Admin will approve your registration and activate your org.
+                      </p>
+                    </div>
+                  )}
+
+
+                  <button
+                    type="submit"
+                    className="w-full bg-white border border-gray-300 rounded-lg py-2 font-semibold text-gray-900 hover:bg-gray-50"
+                  >
+                    {mode === "login" ? "Login" : "Register"}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setMode(mode === "login" ? "register" : "login")}
+                    className="w-full text-sm text-blue-700 hover:text-blue-900 py-2"
+                  >
+                    Switch to {mode === "login" ? "Register" : "Login"}
+                  </button>
+
+                  {msg && <div className="text-sm text-gray-700 whitespace-pre-wrap">{msg}</div>}
+                </form>
+              </div>
+
+              {/* How it works placeholder (keeps layout stable; we will wire HowItWorksPanel next) */}
+              <div className="bg-white rounded-xl shadow-md border border-gray-200 p-6 max-w-xl mx-auto w-full">
+                <h2 className="text-xl font-bold text-gray-900 mb-2">How the Launch Hub Works</h2>
+                <p className="text-sm text-gray-600 mb-4">
+                  Use the walkthrough panel on the Dashboard after login. We’ll re-enable this panel on the login screen next.
+                </p>
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    className="px-4 py-2 rounded-md bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700"
+                    onClick={() => setMsg("ℹ️ Please login to access the full walkthrough.")}
+                  >
+                    Listen to Walkthrough
+                  </button>
+                  <button
+                    type="button"
+                    className="px-4 py-2 rounded-md border border-gray-300 bg-white text-sm font-semibold hover:bg-gray-50"
+                    onClick={() => setMsg("ℹ️ Please login to read the walkthrough transcript.")}
+                  >
+                    Read Transcript
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
+
+      <AppFooter />
     </div>
   );
 }

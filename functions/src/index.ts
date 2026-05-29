@@ -3,13 +3,78 @@ import cors from "cors";
 import { onRequest } from "firebase-functions/v2/https";
 import admin from "firebase-admin";
 
+
+import { defineSecret } from "firebase-functions/params";
+
+
 admin.initializeApp();
-
 const db = admin.firestore();
-
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+
+
+app.post("/api/ai/gemini", requireAuth, async (req: any, res) => {
+  try {
+    const prompt = req.body?.prompt;
+    if (!prompt || typeof prompt !== "string") {
+      return res.status(400).json({ error: "prompt is required" });
+    }
+
+    const model =
+      typeof req.body?.model === "string" && req.body.model.trim()
+        ? req.body.model.trim()
+        : "gemini-2.5-flash";
+
+    const temperature =
+      typeof req.body?.temperature === "number" ? req.body.temperature : 0.2;
+
+    const apiKey = GEMINI_API_KEY.value();
+    if (!apiKey) return res.status(500).json({ error: "Missing GEMINI_API_KEY" });
+
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+      model
+    )}:generateContent?key=${apiKey}`;
+
+    const r = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        generationConfig: { temperature },
+      }),
+    });
+
+    const data: any = await r.json();
+
+    if (!r.ok) {
+      return res.status(r.status).json({ error: "Gemini error", details: data });
+    }
+
+    const text =
+      data?.candidates?.[0]?.content?.parts
+        ?.map((p: any) => p?.text)
+        ?.filter(Boolean)
+        ?.join("") || "";
+
+    return res.json({ text });
+  } catch (e: any) {
+    return res.status(500).json({ error: "Server error", details: String(e) });
+  }
+});
+
+
+
+
+
+
+const GEMINI_API_KEY = defineSecret("GEMINI_API_KEY");
+
+
+
+
+
 
 // --- Auth middleware: requires Bearer token ---
 async function requireAuth(req: any, res: any, next: any) {
@@ -97,4 +162,9 @@ app.post("/api/bootstrap", requireAuth, async (req: any, res) => {
 });
 
 // --- CRITICAL export ---
-export const api = onRequest(app);
+// export const api = onRequest(app);
+
+export const api = onRequest({ secrets: [GEMINI_API_KEY] }, app);
+
+
+

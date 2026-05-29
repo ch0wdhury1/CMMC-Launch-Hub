@@ -77,13 +77,9 @@ match /system/{docId} {
 // --- user profiles ---
 // --- users ---
 match /users/{uid} {
-  allow read: if request.auth != null
-    && (request.auth.uid == uid || isSuperAdmin());
-
-  // Allow super admin to bootstrap/update users during approval
-  allow create, update: if request.auth != null
-    && (request.auth.uid == uid || isSuperAdmin());
-
+  allow read: if request.auth != null && request.auth.uid == uid;
+  allow update: if request.auth != null && request.auth.uid == uid;
+  allow create: if request.auth != null && request.auth.uid == uid;
   allow delete: if false;
 }
 
@@ -135,19 +131,14 @@ match /orgs/{orgId} {
 }
 
     // --- org members ---
-match /orgMembers/{orgId}/members/{memberUid} {
+    match /orgMembers/{orgId}/members/{memberUid} {
   allow read: if isSuperAdmin() || isOrgMember(orgId);
 
-  // ✅ SuperAdmin can create membership even when org is being created
-  // in the same transaction (org doc may not "exist" during rules eval).
   allow create: if isSuperAdmin()
     && (
-      !exists(/databases/$(database)/documents/orgs/$(orgId))
-      || (
-        orgDoc(orgId).maxUsers == null
-        || orgDoc(orgId).activeMemberCount == null
-        || orgDoc(orgId).activeMemberCount < orgDoc(orgId).maxUsers
-      )
+      orgDoc(orgId).maxUsers == null
+      || orgDoc(orgId).activeMemberCount == null
+      || orgDoc(orgId).activeMemberCount < orgDoc(orgId).maxUsers
     );
 
   allow update, delete: if isSuperAdmin();
@@ -159,29 +150,15 @@ match /orgMembers/{orgId}/members/{memberUid} {
 
 
 // --- access requests (admin inbox) ---
-// Docs:
-// - orgRegistration: { type:"orgRegistration", status:"pending", requestedTier, orgName, primaryContactName, ... , requestedByUid, ownerEmail, createdAt }
-// - addUser: { type:"addUser", orgId, fullName, email, requestedRole, status:"pending", requestedByUid, createdAt }
-// - upgradeRequest: { type:"upgradeRequest", orgId, requestedTier, status:"pending", requestedByUid, createdAt }
+// Example docs created by org admins/owners:
+// { type:"addUser", orgId:"org_x", fullName, email, requestedRole, status:"pending", requestedByUid, createdAt }
 match /accessRequests/{reqId} {
 
-  // Only super admin can read/list all requests (Admin/SuperAdmin panel)
+  // Only super admin can read/list all requests (Admin Panel)
   allow read: if isSuperAdmin();
 
-  // ✅ Allow first-time registrants (no userDoc/org yet) to create orgRegistration
-  allow create: if isSignedIn()
-    && request.resource.data.type == "orgRegistration"
-    && request.resource.data.status == "pending"
-    && request.resource.data.requestedByUid == request.auth.uid
-    // basic required fields (keeps junk out)
-    && request.resource.data.orgName is string
-    && request.resource.data.requestedTier is string
-    && request.resource.data.primaryContactName is string
-    && request.resource.data.ownerEmail is string;
-
-  // ✅ Existing org admin/owner requests (addUser / upgradeRequest) — requires userDoc + org membership
+  // Org owner/admin can create requests ONLY for their own org
   allow create: if hasUserDoc()
-    && (request.resource.data.type in ["addUser", "upgradeRequest"])
     && (isOrgOwner(myOrgId()) || isOrgAdmin(myOrgId()))
     && request.resource.data.orgId == myOrgId()
     && request.resource.data.status == "pending"

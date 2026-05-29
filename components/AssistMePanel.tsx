@@ -1,5 +1,8 @@
 
 import React, { useState, useEffect, useRef } from 'react';
+
+import { callGemini } from '../src/lib/geminiClient';
+
 import { Practice } from '../types';
 import {
   X,
@@ -45,6 +48,98 @@ export const AssistMePanel: React.FC<AssistMePanelProps> = ({
 
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
+
+
+  const [aiExplainText, setAiExplainText] = useState('');
+  const [aiGuidanceText, setAiGuidanceText] = useState('');
+  const [aiError, setAiError] = useState('');
+
+  const [isExplainLoading, setIsExplainLoading] = useState(false);
+  const [isGuidanceLoading, setIsGuidanceLoading] = useState(false);
+
+  const buildPracticeContext = () => {
+    // Keep this defensive; Practice shape can vary between L1/L2
+    const ctx: any = {
+      id: practice?.id,
+      title: (practice as any)?.title,
+      level: (practice as any)?.level,
+      domain: (practice as any)?.domain,
+      description: (practice as any)?.description,
+      assessmentObjectives: (practice as any)?.assessmentObjectives,
+      potentialAssessmentMethodsAndObjects: (practice as any)?.potentialAssessmentMethodsAndObjects,
+      discussion: (practice as any)?.discussion,
+      furtherDiscussion: (practice as any)?.furtherDiscussion,
+      keyReferences: (practice as any)?.keyReferences,
+    };
+    return JSON.stringify(ctx, null, 2);
+  };
+
+  const handleExplainPractice = async () => {
+    if (isExplainLoading) return;
+    setAiError('');
+    setAiExplainText('');
+    setIsExplainLoading(true);
+    try {
+      const prompt = `
+You are a CMMC readiness assistant helping a small defense contractor.
+
+Explain this practice in plain English and keep it actionable.
+Include:
+- What this practice is trying to achieve (intent)
+- What "good" looks like (success criteria)
+- Typical implementation approach (people/process/tech)
+- Common pitfalls
+- Evidence examples (what an assessor would accept)
+
+Practice context (JSON):
+${buildPracticeContext()}
+`.trim();
+
+      const text = await callGemini(prompt, { model: 'gemini-2.5-flash', temperature: 0.2 });
+      setAiExplainText(text || '(No response)');
+    } catch (e: any) {
+      console.error(e);
+      setAiError(e?.message || 'Sorry, explanation failed.');
+    } finally {
+      setIsExplainLoading(false);
+    }
+  };
+
+  const handleImplementationGuidance = async () => {
+    if (isGuidanceLoading) return;
+    setAiError('');
+    setAiGuidanceText('');
+    setIsGuidanceLoading(true);
+    try {
+      const prompt = `
+You are a CMMC readiness assistant.
+
+Provide implementation guidance for this practice.
+Output format:
+1) Step-by-step implementation plan (5–10 steps)
+2) Evidence checklist (bullets)
+3) Suggested policy/procedure language (short bullets, not a full policy)
+4) Responsible roles (e.g., IT, HR, Facilities, Exec) and cadence
+5) Quick win vs mature implementation
+
+Practice context (JSON):
+${buildPracticeContext()}
+`.trim();
+
+      const text = await callGemini(prompt, { model: 'gemini-2.5-flash', temperature: 0.2 });
+      setAiGuidanceText(text || '(No response)');
+    } catch (e: any) {
+      console.error(e);
+      setAiError(e?.message || 'Sorry, guidance failed.');
+    } finally {
+      setIsGuidanceLoading(false);
+    }
+  };
+
+
+
+
+
   const scrollToBottom = () => {
     if (chatContainerRef.current) {
       chatContainerRef.current.scrollTop =
@@ -65,6 +160,11 @@ export const AssistMePanel: React.FC<AssistMePanelProps> = ({
       setIsChatLoading(false);
       setIsToolsLoading(false);
       setIsAudioLoading(false);
+      setAiExplainText('');
+      setAiGuidanceText('');
+      setAiError('');
+      setIsExplainLoading(false);
+      setIsGuidanceLoading(false);
     }
   }, [isOpen, practice]);
 
@@ -117,50 +217,83 @@ export const AssistMePanel: React.FC<AssistMePanelProps> = ({
     }
   };
 
+
+
+
+
+
+
+
   /* ============================
      Chat (Streaming)
   ============================= */
+  const buildChatPrompt = (history: ChatMessage[], latestUserMsg: string) => {
+    const context = {
+      id: (practice as any)?.id,
+      title: (practice as any)?.title,
+      level: (practice as any)?.level,
+      domain: (practice as any)?.domain,
+      description: (practice as any)?.description,
+      assessmentObjectives: (practice as any)?.assessmentObjectives,
+      potentialAssessmentMethodsAndObjects: (practice as any)?.potentialAssessmentMethodsAndObjects,
+      discussion: (practice as any)?.discussion,
+      furtherDiscussion: (practice as any)?.furtherDiscussion,
+      keyReferences: (practice as any)?.keyReferences,
+    };
+
+    // Keep prompt small to avoid token bloat
+    const lastTurns = history.slice(-8).map(m => `${m.role.toUpperCase()}: ${m.text}`).join('\n');
+
+    return `
+You are a CMMC readiness assistant helping a small defense contractor.
+
+Practice context (JSON):
+${JSON.stringify(context, null, 2)}
+
+Conversation (most recent last):
+${lastTurns}
+
+USER: ${latestUserMsg}
+
+Respond helpfully and concisely. When relevant, include:
+- Practical steps
+- Evidence examples
+- Common pitfalls
+`.trim();
+  };
+
   const handleSendMessage = async () => {
     if (!userInput.trim() || isChatLoading) return;
 
     const newUserMessage: ChatMessage = { role: 'user', text: userInput };
     const updatedHistory = [...chatHistory, newUserMessage];
+
     setChatHistory(updatedHistory);
     setUserInput('');
     setIsChatLoading(true);
 
-    let modelResponse = '';
-
-    // Add placeholder model message at the end
-    setChatHistory(prev => [...prev, { role: 'model', text: '' }]);
-
     try {
-      const stream = await startChatStream(practice, updatedHistory, userInput);
+      const prompt = buildChatPrompt(chatHistory, newUserMessage.text);
+      const text = await callGemini(prompt, { model: 'gemini-2.5-flash', temperature: 0.2 });
 
-      for await (const chunk of stream) {
-        const c = chunk as GenerateContentResponse;
-        modelResponse += c.text;
-
-        // Update placeholder (last message) as streaming text arrives
-        setChatHistory(prev =>
-          prev.map((msg, index) =>
-            index === prev.length - 1 ? { ...msg, text: modelResponse } : msg
-          )
-        );
-      }
-    } catch (error) {
+      setChatHistory(prev => [...prev, { role: 'model', text: text || 'Sorry, no response.' }]);
+    } catch (error: any) {
       console.error('Chat error:', error);
-      setChatHistory(prev =>
-        prev.map((msg, index) =>
-          index === prev.length - 1
-            ? { ...msg, text: 'Sorry, something went wrong.' }
-            : msg
-        )
-      );
+      setChatHistory(prev => [...prev, { role: 'model', text: 'Sorry, something went wrong.' }]);
     } finally {
       setIsChatLoading(false);
     }
   };
+
+
+
+
+
+
+
+
+
+
 
   if (!isOpen) return null;
 
@@ -169,7 +302,8 @@ export const AssistMePanel: React.FC<AssistMePanelProps> = ({
     isChatLoading && lastMsg && lastMsg.role === 'user';
 
   return (
-    <div className="fixed inset-y-0 right-0 w-full max-w-md bg-white shadow-xl z-50 transform transition-transform duration-300 ease-in-out translate-x-0">
+
+    <div className="fixed top-0 bottom-12 right-0 w-full max-w-md bg-white shadow-xl z-50 transform transition-transform duration-300 ease-in-out translate-x-0">  
       <div className="flex flex-col h-full">
         {/* HEADER */}
         <header className="p-4 bg-gray-800 text-white flex justify-between items-center">
@@ -287,7 +421,68 @@ export const AssistMePanel: React.FC<AssistMePanelProps> = ({
         {activeTab === 'artifacts' && (
           <div className="flex-1 p-4 overflow-y-auto">
             <div className="space-y-4">
-              {/* EXPLANATION */}
+              
+
+
+              {/* GEMINI ACTIONS (secure via Cloud Functions) */}
+              <div className="p-4 bg-gray-50 rounded-lg">
+                <h3 className="font-semibold mb-2">Gemini Actions</h3>
+
+                <div className="grid grid-cols-1 gap-2">
+                  <button
+                    onClick={handleExplainPractice}
+                    disabled={isExplainLoading}
+                    className="w-full text-sm py-2 px-3 bg-white border border-gray-300 rounded-md hover:bg-gray-100 disabled:opacity-50"
+                  >
+                    {isExplainLoading ? (
+                      <span className="inline-flex items-center gap-2">
+                        <Loader2 className="h-4 w-4 animate-spin" /> Generating explanation...
+                      </span>
+                    ) : (
+                      'Explain this practice'
+                    )}
+                  </button>
+
+                  <button
+                    onClick={handleImplementationGuidance}
+                    disabled={isGuidanceLoading}
+                    className="w-full text-sm py-2 px-3 bg-white border border-gray-300 rounded-md hover:bg-gray-100 disabled:opacity-50"
+                  >
+                    {isGuidanceLoading ? (
+                      <span className="inline-flex items-center gap-2">
+                        <Loader2 className="h-4 w-4 animate-spin" /> Generating guidance...
+                      </span>
+                    ) : (
+                      'Implementation guidance'
+                    )}
+                  </button>
+                </div>
+
+                {aiError && (
+                  <div className="mt-3 text-sm text-red-600 whitespace-pre-wrap">
+                    {aiError}
+                  </div>
+                )}
+
+                {aiExplainText && (
+                  <div className="mt-3 text-sm text-gray-700 whitespace-pre-wrap">
+                    {aiExplainText}
+                  </div>
+                )}
+
+                {aiGuidanceText && (
+                  <div className="mt-3 text-sm text-gray-700 whitespace-pre-wrap">
+                    {aiGuidanceText}
+                  </div>
+                )}
+              </div>
+
+
+
+
+
+
+	      {/* EXPLANATION */}
               <div className="p-4 bg-gray-50 rounded-lg">
                 <h3 className="font-semibold mb-2">
                   Plain Language Explanation

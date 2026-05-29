@@ -79,17 +79,10 @@ export async function bootstrapUserProfile() {
 
   // Read activation config (optional)
   let activation: ActivationConfig = {};
-  try {  // Read activation config (optional; superAdmin-only in rules)
-  let activation: any = {};
   try {
     const activationRef = doc(db, "system", "activation");
     const activationSnap = await getDoc(activationRef);
-    activation = activationSnap.exists() ? activationSnap.data() : {};
-  } catch (e) {
-    console.log("ℹ️ [system/activation] bootstrap skipped (no access)");
-    activation = {};
-  }
-activation = (activationSnap.exists() ? activationSnap.data() : {}) as ActivationConfig;
+    activation = (activationSnap.exists() ? activationSnap.data() : {}) as ActivationConfig;
   } catch (e) {
     // ✅ Non-superadmins can't read /system/* — that's expected
     console.log("ℹ️ [system/activation] bootstrap skipped (no access)");

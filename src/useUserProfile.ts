@@ -46,13 +46,51 @@ export function useUserProfile() {
 
     const unsub = onSnapshot(
       userRef,
-      (snap) => {
-        const data = snap.exists() ? (snap.data() as UserProfile) : null;
-        setProfile(data);
-        setTier(data?.tier ?? null);
-        setTrack(data?.track ?? null);
-        setLoading(false);
-      },
+
+
+
+
+(snap) => {
+  const raw = snap.exists() ? (snap.data() as any) : null;
+
+  if (!raw) {
+    setProfile(null);
+    setTier(null);
+    setTrack(null);
+    setLoading(false);
+    return;
+  }
+
+  // ✅ Normalize roles into an object/map
+  let roles: any = raw.roles;
+
+  // Case A: roles is accidentally stored as a string, e.g. "superAdmin: true"
+  if (typeof roles === "string") {
+    const superAdmin = /superAdmin\s*:\s*true/i.test(roles);
+    roles = { superAdmin };
+  }
+
+  // Case B: Firestore doc has a literal field named "roles.superAdmin"
+  // (this happens if someone created a field with a dot in the name)
+  if (raw["roles.superAdmin"] === true) {
+    roles = { ...(roles && typeof roles === "object" ? roles : {}), superAdmin: true };
+  }
+
+  const data: UserProfile = {
+    ...raw,
+    roles: roles && typeof roles === "object" ? roles : {},
+  };
+
+  setProfile(data);
+  setTier(data?.tier ?? null);
+  setTrack(data?.track ?? null);
+  setLoading(false);
+},
+
+
+
+
+
       (err) => {
         console.error("useUserProfile snapshot error:", err);
         setProfile(null);
