@@ -43,15 +43,37 @@ function isOrgMember(orgId) {
     );
 }
 
+function orgMemberDoc(orgId) {
+  return get(
+    /databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)
+  ).data;
+}
+
+function isActiveOrgMember(orgId) {
+  return isOrgMember(orgId)
+    && orgMemberDoc(orgId).status == "active";
+}
+
 function isOrgAdmin(orgId) {
   return isOrgMember(orgId)
-    && get(
-      /databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)
-    ).data.role == "orgAdmin";
+    && orgMemberDoc(orgId).role == "orgAdmin";
 }
 
 function isOrgOwnerOrAdmin(orgId) {
   return isOrgOwner(orgId) || isOrgAdmin(orgId) || isSuperAdmin();
+}
+
+function canReadAssessmentData(orgId) {
+  return isSuperAdmin() || isActiveOrgMember(orgId);
+}
+
+function canWriteAssessmentShell(orgId) {
+  return isSuperAdmin()
+    || isOrgOwner(orgId)
+    || (
+      isActiveOrgMember(orgId)
+      && orgMemberDoc(orgId).role in ["orgOwner", "orgAdmin", "assessor", "contributor"]
+    );
 }
 
 
@@ -131,6 +153,43 @@ match /orgs/{orgId} {
     // WRITE members:
     // - super admin only (Admin Panel will handle later)
     allow create, update, delete: if isSuperAdmin();
+  }
+
+  // --- assessment shell (Phase 4A) ---
+  match /assessments/{assessmentId} {
+    allow read: if canReadAssessmentData(orgId);
+    allow create, update: if canWriteAssessmentShell(orgId);
+    allow delete: if false;
+
+    match /practiceRecords/{practiceId} {
+      allow read: if canReadAssessmentData(orgId);
+      allow write: if false;
+    }
+
+    match /objectiveRecords/{objectiveId} {
+      allow read: if canReadAssessmentData(orgId);
+      allow write: if false;
+    }
+
+    match /poamItems/{poamId} {
+      allow read: if canReadAssessmentData(orgId);
+      allow write: if false;
+    }
+
+    match /scoreSnapshots/{snapshotId} {
+      allow read: if canReadAssessmentData(orgId);
+      allow write: if false;
+    }
+  }
+
+  match /evidence/{evidenceId} {
+    allow read: if canReadAssessmentData(orgId);
+    allow write: if false;
+  }
+
+  match /notes/{noteId} {
+    allow read: if canReadAssessmentData(orgId);
+    allow write: if false;
   }
 }
 
