@@ -63,10 +63,21 @@ export async function getOrCreateDefaultAssessment({
 }: GetOrCreateAssessmentInput): Promise<AssessmentDoc> {
   const assessmentId = getDefaultAssessmentId(level);
   const ref = doc(db, "orgs", orgId, "assessments", assessmentId);
+  console.info("[assessmentFirestore] checking assessment shell", {
+    orgId,
+    assessmentId,
+    level,
+  });
   const snap = await getDoc(ref);
 
   if (snap.exists()) {
-    return { assessmentId, ...(snap.data() as Omit<AssessmentDoc, "assessmentId">) };
+    const existing = { assessmentId, ...(snap.data() as Omit<AssessmentDoc, "assessmentId">) };
+    console.info("[assessmentFirestore] retrieved existing assessment shell", {
+      orgId,
+      assessmentId,
+      level,
+    });
+    return existing;
   }
 
   const assessment: AssessmentDoc = {
@@ -85,7 +96,17 @@ export async function getOrCreateDefaultAssessment({
     updatedAt: serverTimestamp(),
   };
 
+  console.info("[assessmentFirestore] creating missing assessment shell", {
+    orgId,
+    assessmentId,
+    level,
+  });
   await setDoc(ref, assessment, { merge: true });
+  console.info("[assessmentFirestore] created assessment shell", {
+    orgId,
+    assessmentId,
+    level,
+  });
   return assessment;
 }
 
@@ -95,6 +116,12 @@ export async function loadAssessmentState(orgId: string, assessmentId: string): 
   const assessment = assessmentSnap.exists()
     ? ({ assessmentId, ...(assessmentSnap.data() as Omit<AssessmentDoc, "assessmentId">) } as AssessmentDoc)
     : null;
+
+  console.info("[assessmentFirestore] loaded assessment shell", {
+    orgId,
+    assessmentId,
+    exists: assessment !== null,
+  });
 
   const [
     practiceRecordsSnap,
