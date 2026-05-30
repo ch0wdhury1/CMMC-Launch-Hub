@@ -1,5 +1,5 @@
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   Domain,
   Practice,
@@ -30,8 +30,11 @@ import {
 } from "../types";
 import {
   getOrCreateDefaultAssessment,
+  getDefaultAssessmentId,
   isFirestoreAssessmentsEnabled,
   loadAssessmentState,
+  saveObjectiveRecord,
+  savePracticeRecord,
 } from "../src/assessmentFirestore";
 
 import { generateReadinessReport } from '../services/geminiService';
@@ -181,6 +184,19 @@ const toLocalObjectiveStatus = (status?: FirestoreObjectiveStatus | ObjectiveSta
   }
 };
 
+const toFirestoreObjectiveStatus = (status: ObjectiveStatus): FirestoreObjectiveStatus => {
+  switch (status) {
+    case ObjectiveStatus.Met:
+      return "met";
+    case ObjectiveStatus.NotMet:
+      return "not_met";
+    case ObjectiveStatus.NotApplicable:
+      return "not_applicable";
+    default:
+      return "pending";
+  }
+};
+
 const createInitialRecords = (practices: Practice[]): PracticeRecord[] => {
   const now = new Date().toISOString();
   return practices.map(p => ({
@@ -263,6 +279,7 @@ export const useCmmcData = (options: UseCmmcDataOptions = {}) => {
   const [minedPractices, setMinedPractices] = useState<Practice[]>([]);
   const [highRiskPractices, setHighRiskPractices] = useState<string[]>([]);
   const [practiceRecords, setPracticeRecords] = useState<PracticeRecord[]>([]);
+  const practiceRecordsRef = useRef<PracticeRecord[]>([]);
   const [analyzerAnswers, setAnalyzerAnswers] = useState<ReadinessAnswers>(initialAnswers);
   const [savedReports, setSavedReports] = useState<SavedReport[]>([]);
   const [poamItems, setPoamItems] = useState<PoamItem[]>([]);
@@ -273,6 +290,10 @@ export const useCmmcData = (options: UseCmmcDataOptions = {}) => {
   const [error, setError] = useState<string | null>(null);
   const [dataSourceInfo, setDataSourceInfo] = useState<string>("Initializing...");
   const [firestoreLoadKey, setFirestoreLoadKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    practiceRecordsRef.current = practiceRecords;
+  }, [practiceRecords]);
 
   useEffect(() => {
     const initializeData = async () => {
@@ -569,10 +590,70 @@ export const useCmmcData = (options: UseCmmcDataOptions = {}) => {
 
   const updateCompanyProfile = (updates: Partial<CompanyProfile>) => setCompanyProfile(prev => prev ? { ...prev, ...updates } : null);
   const addUserToCompany = (user: UserProfile) => setCompanyProfile(prev => prev ? { ...prev, users: [...prev.users, user] } : null);
-  const updatePracticeNote = (id: string, note: string) => setPracticeRecords(prev => prev.map(p => p.id === id ? { ...p, note, lastUpdated: new Date().toISOString() } : p));
-  
+  const persistPracticeRecord = useCallback((record: PracticeRecord) => {
+    if (!firestoreEnabled || !orgId || !uid) return;
+
+    const assessmentId = getDefaultAssessmentId(requestedAssessmentLevel);
+    void savePracticeRecord(orgId, assessmentId, {
+      practiceId: record.id,
+      orgId,
+      assessmentId,
+      status: record.status,
+      statusSource: record.statusSource,
+      note: record.note,
+      lastUpdated: record.lastUpdated,
+      updatedByUid: uid,
+    }).catch(error => {
+      console.error("[assessmentFirestore] practice record save failed; local state retained", {
+        orgId,
+        assessmentId,
+        practiceId: record.id,
+        error,
+      });
+    });
+  }, [firestoreEnabled, orgId, uid, requestedAssessmentLevel]);
+
+  const persistObjectiveRecord = useCallback((practiceId: string, objectiveId: string, record: ObjectiveRecord) => {
+    if (!firestoreEnabled || !orgId || !uid) return;
+
+    const assessmentId = getDefaultAssessmentId(requestedAssessmentLevel);
+    void saveObjectiveRecord(orgId, assessmentId, {
+      objectiveId,
+      practiceId,
+      orgId,
+      assessmentId,
+      status: toFirestoreObjectiveStatus(record.status),
+      note: record.note,
+      actionPoints: record.actionPoints,
+      actionPointsSummary: record.actionPointsSummary,
+      updatedByUid: uid,
+    }).catch(error => {
+      console.error("[assessmentFirestore] objective record save failed; local state retained", {
+        orgId,
+        assessmentId,
+        practiceId,
+        objectiveId,
+        error,
+      });
+    });
+  }, [firestoreEnabled, orgId, uid, requestedAssessmentLevel]);
+
+  const updatePracticeNote = useCallback((id: string, note: string) => {
+    const nextRecords = practiceRecordsRef.current.map(p => p.id === id
+      ? { ...p, note, lastUpdated: new Date().toISOString() }
+      : p
+    );
+    practiceRecordsRef.current = nextRecords;
+    setPracticeRecords(nextRecords);
+
+    const updatedRecord = nextRecords.find(p => p.id === id);
+    if (updatedRecord) persistPracticeRecord(updatedRecord);
+  }, [persistPracticeRecord]);
+
   const updateObjectiveRecord = useCallback((practiceId: string, objectiveId: string, updates: Partial<ObjectiveRecord>) => {
-    setPracticeRecords(prevRecords => prevRecords.map(p => {
+    let updatedObjective: ObjectiveRecord | undefined;
+    let updatedPractice: PracticeRecord | undefined;
+    const nextRecords = practiceRecordsRef.current.map(p => {
       if (p.id !== practiceId) return p;
       const newObjectiveRecords = {
         ...p.objectiveRecords,
@@ -589,9 +670,17 @@ export const useCmmcData = (options: UseCmmcDataOptions = {}) => {
       else if (allMetOrNA && objectives.length > 0) newStatus = 'met';
       else if (anyProgress) newStatus = 'partial';
 
-      return { ...p, objectiveRecords: newObjectiveRecords, status: newStatus, statusSource: 'auto' as StatusSource, lastUpdated: new Date().toISOString() };
-    }));
-  }, []);
+      updatedObjective = newObjectiveRecords[objectiveId];
+      updatedPractice = { ...p, objectiveRecords: newObjectiveRecords, status: newStatus, statusSource: 'auto' as StatusSource, lastUpdated: new Date().toISOString() };
+      return updatedPractice;
+    });
+
+    practiceRecordsRef.current = nextRecords;
+    setPracticeRecords(nextRecords);
+
+    if (updatedObjective) persistObjectiveRecord(practiceId, objectiveId, updatedObjective);
+    if (updatedPractice) persistPracticeRecord(updatedPractice);
+  }, [persistObjectiveRecord, persistPracticeRecord]);
 
   const updatePoamItem = (item: PoamItem) => setPoamItems(prev => prev.map(p => p.id === item.id ? item : p));
   const addPoamItem = (item: Omit<PoamItem, 'id' | 'createdAt' | 'source'>) => {

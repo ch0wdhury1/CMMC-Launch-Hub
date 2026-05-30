@@ -69,7 +69,6 @@ function canReadAssessmentData(orgId) {
 
 function canWriteAssessmentShell(orgId) {
   return isSuperAdmin()
-    || isOrgOwner(orgId)
     || (
       isActiveOrgMember(orgId)
       && orgMemberDoc(orgId).role in ["orgOwner", "orgAdmin", "assessor", "contributor"]
@@ -163,12 +162,14 @@ match /orgs/{orgId} {
 
     match /practiceRecords/{practiceId} {
       allow read: if canReadAssessmentData(orgId);
-      allow write: if false;
+      allow create, update: if canWriteAssessmentShell(orgId);
+      allow delete: if false;
     }
 
     match /objectiveRecords/{objectiveId} {
       allow read: if canReadAssessmentData(orgId);
-      allow write: if false;
+      allow create, update: if canWriteAssessmentShell(orgId);
+      allow delete: if false;
     }
 
     match /poamItems/{poamId} {

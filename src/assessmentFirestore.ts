@@ -55,6 +55,10 @@ function assessmentName(level: AssessmentLevel): string {
   return `Default CMMC Level ${level} Assessment`;
 }
 
+function stripUndefined<T extends Record<string, unknown>>(value: T): Partial<T> {
+  return Object.fromEntries(Object.entries(value).filter(([, fieldValue]) => fieldValue !== undefined)) as Partial<T>;
+}
+
 export async function getOrCreateDefaultAssessment({
   orgId,
   uid,
@@ -165,6 +169,62 @@ export async function loadAssessmentState(orgId: string, assessmentId: string): 
       ...(d.data() as Omit<ScoreSnapshot, "snapshotId">),
     })),
   };
+}
+
+export async function savePracticeRecord(
+  orgId: string,
+  assessmentId: string,
+  record: FirestorePracticeRecord
+): Promise<void> {
+  const practiceId = record.practiceId;
+  const ref = doc(db, "orgs", orgId, "assessments", assessmentId, "practiceRecords", cleanDocId(practiceId));
+  const payload = stripUndefined({
+    practiceId,
+    orgId,
+    assessmentId,
+    status: record.status,
+    statusSource: record.statusSource,
+    note: record.note || "",
+    lastUpdated: record.lastUpdated,
+    updatedByUid: record.updatedByUid,
+    updatedAt: serverTimestamp(),
+  });
+
+  await setDoc(ref, payload, { merge: true });
+  console.info("[assessmentFirestore] saved practice record", {
+    orgId,
+    assessmentId,
+    practiceId,
+  });
+}
+
+export async function saveObjectiveRecord(
+  orgId: string,
+  assessmentId: string,
+  record: FirestoreObjectiveRecord
+): Promise<void> {
+  const objectiveId = record.objectiveId;
+  const ref = doc(db, "orgs", orgId, "assessments", assessmentId, "objectiveRecords", cleanDocId(objectiveId));
+  const payload = stripUndefined({
+    objectiveId,
+    practiceId: record.practiceId,
+    orgId,
+    assessmentId,
+    status: record.status,
+    note: record.note || "",
+    actionPoints: record.actionPoints,
+    actionPointsSummary: record.actionPointsSummary,
+    updatedByUid: record.updatedByUid,
+    updatedAt: serverTimestamp(),
+  });
+
+  await setDoc(ref, payload, { merge: true });
+  console.info("[assessmentFirestore] saved objective record", {
+    orgId,
+    assessmentId,
+    practiceId: record.practiceId,
+    objectiveId,
+  });
 }
 
 export const toFirestoreDocId = cleanDocId;
