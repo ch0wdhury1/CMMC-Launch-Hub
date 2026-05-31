@@ -305,7 +305,7 @@ const mergeFirestorePracticeRecords = (
 
         return [objectiveId, {
           ...objective,
-          status: toLocalObjectiveStatus(fsObjective?.status || objective.status),
+          status: toLocalObjectiveStatus(fsObjective?.status ?? objective.status),
           note: objectiveNote ?? fsObjective?.note ?? fsObjective?.noteSummary ?? objective.note,
           actionPoints: fsObjective?.actionPoints ?? objective.actionPoints,
           actionPointsSummary: fsObjective?.actionPointsSummary ?? fsObjective?.aiGuidanceSummary ?? objective.actionPointsSummary,
@@ -316,9 +316,9 @@ const mergeFirestorePracticeRecords = (
 
     return {
       ...record,
-      status: fsPractice?.status || record.status,
-      statusSource: fsPractice?.statusSource || record.statusSource,
-      lastUpdated: fsPractice?.lastUpdated || record.lastUpdated,
+      status: fsPractice?.status ?? record.status,
+      statusSource: fsPractice?.statusSource ?? record.statusSource,
+      lastUpdated: fsPractice?.lastUpdated ?? record.lastUpdated,
       note: fsPractice?.note ?? practiceNote ?? record.note,
       objectiveRecords,
     };
@@ -358,6 +358,8 @@ export const useCmmcData = (options: UseCmmcDataOptions = {}) => {
       setLoading(true);
       setError(null);
       try {
+        // Static JSON is the reference library for CMMC practice and objective content.
+        // localStorage initializes the working state as a cache and offline fallback.
         const l1Url = '/cmmc_l1_prepop.json';
         const l2Url = '/cmmc_l2_prepop.json';
 
@@ -497,6 +499,8 @@ export const useCmmcData = (options: UseCmmcDataOptions = {}) => {
 
         if (cancelled) return;
 
+        // With Firestore enabled, persisted Firestore records are the source of truth.
+        // Existing localStorage state remains only as fallback for records not yet present in Firestore.
         setPracticeRecords(prev => mergeFirestorePracticeRecords(
           prev,
           firestoreState.practiceRecords,
@@ -518,6 +522,7 @@ export const useCmmcData = (options: UseCmmcDataOptions = {}) => {
 
         setDataSourceInfo(prev => `${prev} | Firestore assessment: ${assessment.assessmentId}`);
         setFirestoreLoadKey(key);
+        console.info("[SourceOfTruth] Firestore assessment state applied");
       } catch (firestoreErr) {
         console.warn("Firestore assessment load skipped; using local state.", firestoreErr);
         if (!cancelled) setFirestoreLoadKey(key);
