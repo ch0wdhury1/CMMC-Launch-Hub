@@ -215,6 +215,7 @@ Return ONLY valid JSON.
 // -------------------------------------------------------------
 
 export async function getOcrSummary(file: File): Promise<string> {
+  // TODO: Remove this browser-side OCR path after any remaining legacy callers move to authenticated Functions.
   const { base64, mimeType } = await fileToBase64(file);
 
   return await withRetry(async () => {

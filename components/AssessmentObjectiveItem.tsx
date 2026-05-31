@@ -5,7 +5,6 @@ import { AssessmentObjective, Artifact, EvidenceFileUpload, ObjectiveStatus, Pra
 
 import { callGemini } from '../src/lib/geminiClient';
 import { 
-  getOcrSummary, 
   generateInstructionAudio,
 } from '../services/geminiService';
 
@@ -257,28 +256,14 @@ ${JSON.stringify(ctx, null, 2)}
     if (!file) return;
     setIsUploading(true);
     try {
-      let summaryText = "";
-      let processingStatus: Artifact["processingStatus"];
-      let processingError: string | undefined;
-
-      try {
-        summaryText = await getOcrSummary(file);
-      } catch (error) {
-        const rawMessage = error instanceof Error ? error.message : "";
-        processingStatus = "ocr_failed";
-        processingError = rawMessage.trim().replace(/\s+/g, " ").slice(0, 160) || "OCR processing failed";
-        console.warn("OCR failed; saving evidence metadata without OCR summary:", error);
-      }
-
       const newArtifact: Artifact = {
         id: `${Date.now()}-${file.name}`, 
         name: file.name, 
         fileName: file.name,
         fileType: file.type,
         fileSize: file.size,
-        ocrSummary: processingStatus === "ocr_failed" ? "" : summaryText || "No OCR summary available.",
-        processingStatus,
-        processingError,
+        ocrSummary: "",
+        processingStatus: "ocr_pending",
         uploadedAt: new Date().toISOString(),
         isFinalForm: true
       };

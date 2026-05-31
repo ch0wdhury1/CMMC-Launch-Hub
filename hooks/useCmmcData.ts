@@ -49,6 +49,7 @@ import {
   saveScoreSnapshot,
 } from "../src/assessmentFirestore";
 import { uploadEvidenceFile } from "../src/evidenceStorage";
+import { requestEvidenceOcr } from "../src/evidenceOcr";
 
 import { generateReadinessReport } from '../services/geminiService';
 import { READINESS_QUESTIONS } from '../data/readinessQuestions';
@@ -735,6 +736,33 @@ export const useCmmcData = (options: UseCmmcDataOptions = {}) => {
     });
   }, [actorEmail, firestoreEnabled, orgId, requestedAssessmentLevel, uid]);
 
+  const updateCachedArtifact = useCallback((
+    practiceId: string,
+    objectiveId: string,
+    evidenceId: string,
+    updates: Partial<Artifact>
+  ) => {
+    setPracticeRecords(prev => {
+      const next = prev.map(practice => practice.id === practiceId
+        ? {
+            ...practice,
+            objectiveRecords: {
+              ...practice.objectiveRecords,
+              [objectiveId]: {
+                ...practice.objectiveRecords[objectiveId],
+                artifacts: (practice.objectiveRecords[objectiveId]?.artifacts || []).map(artifact =>
+                  artifact.id === evidenceId ? {...artifact, ...updates} : artifact
+                ),
+              },
+            },
+          }
+        : practice
+      );
+      practiceRecordsRef.current = next;
+      return next;
+    });
+  }, []);
+
   const persistEvidenceRecords = useCallback((practiceId: string, objectiveId: string, artifacts: Artifact[], evidenceFiles: EvidenceFileUpload[] = []) => {
     if (!firestoreEnabled || !orgId || !uid) return;
 
@@ -785,6 +813,8 @@ export const useCmmcData = (options: UseCmmcDataOptions = {}) => {
             uploadedAt: artifact.uploadedAt,
             storageStatus: "upload_failed",
             storageError: rawMessage.trim().replace(/\s+/g, " ").slice(0, 160) || "Storage upload failed",
+            processingStatus: "ocr_failed",
+            processingError: "OCR skipped because Storage upload failed",
           };
         }
 
@@ -807,6 +837,44 @@ export const useCmmcData = (options: UseCmmcDataOptions = {}) => {
             storageStatus: savedRecord.storageStatus,
           },
         });
+        if (savedRecord.storageStatus !== "uploaded" || !savedRecord.storagePath) {
+          updateCachedArtifact(practiceId, objectiveId, artifact.id, {
+            processingStatus: "ocr_failed",
+            processingError: savedRecord.processingError || "OCR skipped because Storage upload failed",
+          });
+          return;
+        }
+
+        void requestEvidenceOcr({
+          orgId,
+          assessmentId,
+          evidenceId: artifact.id,
+          storagePath: savedRecord.storagePath,
+          fileName: savedRecord.fileName || artifact.name,
+          fileType: savedRecord.fileType || artifact.fileType,
+          fileSize: savedRecord.fileSize ?? artifact.fileSize ?? 0,
+          practiceIds: savedRecord.practiceIds,
+          objectiveIds: savedRecord.objectiveIds,
+        }).then(result => {
+          updateCachedArtifact(practiceId, objectiveId, artifact.id, {
+            ocrSummary: result.ocrSummary,
+            processingStatus: "ocr_completed",
+            processingError: undefined,
+          });
+        }).catch(error => {
+          const rawMessage = error instanceof Error ? error.message : "";
+          const processingError = rawMessage.trim().replace(/\s+/g, " ").slice(0, 160) || "OCR processing failed";
+          console.warn("[evidence-ocr] OCR failed; uploaded evidence retained", {
+            orgId,
+            assessmentId,
+            evidenceId: artifact.id,
+            error: processingError,
+          });
+          updateCachedArtifact(practiceId, objectiveId, artifact.id, {
+            processingStatus: "ocr_failed",
+            processingError,
+          });
+        });
       }).catch(error => {
         console.error("[assessmentFirestore] evidence metadata save failed; local state retained", {
           orgId,
@@ -818,7 +886,7 @@ export const useCmmcData = (options: UseCmmcDataOptions = {}) => {
         });
       });
     });
-  }, [firestoreEnabled, logActivity, orgId, uid, requestedAssessmentLevel]);
+  }, [firestoreEnabled, logActivity, orgId, uid, requestedAssessmentLevel, updateCachedArtifact]);
 
   const persistObjectiveNote = useCallback((practiceId: string, objectiveId: string, content: string) => {
     if (!firestoreEnabled || !orgId || !uid) return;

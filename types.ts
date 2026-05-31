@@ -24,7 +24,7 @@ export interface Artifact {
   fileType: string;
   fileSize?: number;
   ocrSummary: string;
-  processingStatus?: "ocr_failed";
+  processingStatus?: "ocr_pending" | "ocr_completed" | "ocr_failed";
   processingError?: string;
   storagePath?: string;
   downloadUrl?: string;
@@ -368,8 +368,11 @@ export interface EvidenceRecord {
   storageError?: string;
   sha256?: string;
   ocrSummary?: string;
-  processingStatus?: "ocr_failed";
+  processingStatus?: "ocr_pending" | "ocr_completed" | "ocr_failed";
   processingError?: string;
+  processedAt?: any;
+  processedBy?: string;
+  ocrModel?: string;
   aiExtractedSignals?: Record<string, any>;
   isFinalForm?: boolean;
   reviewStatus?: EvidenceReviewStatus;
