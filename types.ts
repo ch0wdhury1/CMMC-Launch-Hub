@@ -418,6 +418,16 @@ export interface ScoreSnapshot {
   assessmentId: string;
   frameworkId?: string;
   level: AssessmentLevel;
+  completionPercent: number;
+  totalPractices: number;
+  totalObjectives: number;
+  metCount: number;
+  partialCount: number;
+  notMetCount: number;
+  notAssessedCount: number;
+  evidenceCount: number;
+  poamOpenCount: number;
+  poamCompletedCount: number;
   practiceCompletionScore: number;
   controlsPostureScore: number;
   overallReadinessScore: number;
@@ -429,8 +439,9 @@ export interface ScoreSnapshot {
   openPoamCount?: number;
   evidenceCoverage?: number;
   generatedByUid?: string;
+  createdByUid: string;
   generationReason?: "manual" | "scheduled" | "state_transition" | "ai_run" | "client_mvp";
-  source?: string;
+  source: "client_mvp";
   createdAt?: any;
 }
 

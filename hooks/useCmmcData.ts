@@ -27,7 +27,8 @@ import {
   EvidenceRecord,
   NoteRecord,
   FirestorePoamItem,
-  Artifact
+  Artifact,
+  ScoreSnapshot
 } from "../types";
 import {
   getOrCreateDefaultAssessment,
@@ -41,6 +42,7 @@ import {
   saveObjectiveRecord,
   savePoamItem,
   savePracticeRecord,
+  saveScoreSnapshot,
 } from "../src/assessmentFirestore";
 
 import { generateReadinessReport } from '../services/geminiService';
@@ -333,6 +335,7 @@ export const useCmmcData = (options: UseCmmcDataOptions = {}) => {
   const [highRiskPractices, setHighRiskPractices] = useState<string[]>([]);
   const [practiceRecords, setPracticeRecords] = useState<PracticeRecord[]>([]);
   const practiceRecordsRef = useRef<PracticeRecord[]>([]);
+  const scoreSnapshotBaselineRef = useRef<{ contextKey: string; fingerprint: string } | null>(null);
   const [analyzerAnswers, setAnalyzerAnswers] = useState<ReadinessAnswers>(initialAnswers);
   const [savedReports, setSavedReports] = useState<SavedReport[]>([]);
   const [poamItems, setPoamItems] = useState<PoamItem[]>([]);
@@ -855,6 +858,114 @@ export const useCmmcData = (options: UseCmmcDataOptions = {}) => {
           overallReadinessScore: Math.round(score) 
       };
   }, [practiceRecords, allPractices]);
+
+  const scoreSnapshotFingerprint = useMemo(() => {
+    const activePracticeIds = new Set(allPractices.map(practice => practice.id));
+    return JSON.stringify({
+    practices: practiceRecords.filter(record => activePracticeIds.has(record.id)).map(record => ({
+      id: record.id,
+      status: record.status,
+      objectives: Object.entries(record.objectiveRecords).map(([objectiveId, objective]) => ({
+        objectiveId,
+        status: objective.status,
+        evidenceIds: objective.artifacts.map(artifact => artifact.id).sort(),
+      })),
+    })),
+    poamItems: poamItems.map(item => ({
+      id: item.id,
+      status: item.status,
+      priority: item.priority,
+      targetDate: item.targetDate,
+      completedDate: item.completedDate,
+    })),
+  });
+  }, [allPractices, practiceRecords, poamItems]);
+
+  useEffect(() => {
+    if (!firestoreEnabled || loading || error || !orgId || !uid) return;
+
+    const contextKey = `${orgId}:${requestedAssessmentLevel}`;
+    if (firestoreLoadKey !== contextKey) return;
+
+    if (scoreSnapshotBaselineRef.current?.contextKey !== contextKey) {
+      scoreSnapshotBaselineRef.current = { contextKey, fingerprint: scoreSnapshotFingerprint };
+      return;
+    }
+
+    if (scoreSnapshotBaselineRef.current.fingerprint === scoreSnapshotFingerprint) return;
+    scoreSnapshotBaselineRef.current = { contextKey, fingerprint: scoreSnapshotFingerprint };
+
+    const timeoutId = window.setTimeout(() => {
+      const recordMap = new Map(practiceRecords.map(record => [record.id, record]));
+      const activeRecords = allPractices.map(practice => recordMap.get(practice.id)).filter(Boolean) as PracticeRecord[];
+      const totalPractices = allPractices.length;
+      const totalObjectives = allPractices.reduce((total, practice) => total + practice.assessment_objectives.length, 0);
+      const metCount = activeRecords.filter(record => record.status === "met").length;
+      const partialCount = activeRecords.filter(record => record.status === "partial").length;
+      const notMetCount = activeRecords.filter(record => record.status === "not_met").length;
+      const notAssessedCount = activeRecords.filter(record => record.status === "not_assessed").length;
+      const evidenceIds = new Set(activeRecords.flatMap(record =>
+        Object.values(record.objectiveRecords).flatMap(objective => objective.artifacts.map(artifact => artifact.id))
+      ));
+      const byDomain = Object.fromEntries(domains.map(domain => {
+        const domainRecords = domain.practices.map(practice => recordMap.get(practice.id)).filter(Boolean) as PracticeRecord[];
+        const completed = domainRecords.filter(record => record.status === "met").length;
+        const partial = domainRecords.filter(record => record.status === "partial").length;
+        const percent = domain.practices.length > 0
+          ? Math.round(((completed + 0.5 * partial) / domain.practices.length) * 100)
+          : 0;
+        return [domain.name, percent];
+      }));
+      const assessmentId = getDefaultAssessmentId(requestedAssessmentLevel);
+      const snapshot: ScoreSnapshot = {
+        snapshotId: crypto.randomUUID(),
+        orgId,
+        assessmentId,
+        level: requestedAssessmentLevel,
+        completionPercent: scores.practiceCompletionScore,
+        totalPractices,
+        totalObjectives,
+        metCount,
+        partialCount,
+        notMetCount,
+        notAssessedCount,
+        evidenceCount: evidenceIds.size,
+        poamOpenCount: poamItems.filter(item => item.status === "open" || item.status === "in_progress").length,
+        poamCompletedCount: poamItems.filter(item => item.status === "completed").length,
+        byDomain,
+        practiceCompletionScore: scores.practiceCompletionScore,
+        controlsPostureScore: scores.controlsPostureScore,
+        overallReadinessScore: scores.overallReadinessScore,
+        source: "client_mvp",
+        createdByUid: uid,
+      };
+
+      void saveScoreSnapshot(orgId, assessmentId, snapshot).catch(snapshotError => {
+        console.error("[assessmentFirestore] score snapshot save failed; live score retained", {
+          orgId,
+          assessmentId,
+          snapshotId: snapshot.snapshotId,
+          error: snapshotError,
+        });
+      });
+    }, 1500);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [
+    allPractices,
+    domains,
+    error,
+    firestoreEnabled,
+    firestoreLoadKey,
+    loading,
+    orgId,
+    poamItems,
+    practiceRecords,
+    requestedAssessmentLevel,
+    scoreSnapshotFingerprint,
+    scores,
+    uid,
+  ]);
 
   const getSavedTemplates = useCallback((): SavedTemplate[] => {
     try {

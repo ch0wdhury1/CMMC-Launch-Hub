@@ -180,7 +180,8 @@ match /orgs/{orgId} {
 
     match /scoreSnapshots/{snapshotId} {
       allow read: if canReadAssessmentData(orgId);
-      allow write: if false;
+      allow create: if canWriteAssessmentShell(orgId);
+      allow update, delete: if false;
     }
   }
 

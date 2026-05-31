@@ -3,6 +3,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  limit,
   orderBy,
   query,
   serverTimestamp,
@@ -148,7 +149,7 @@ export async function loadAssessmentState(orgId: string, assessmentId: string): 
     getDocs(collection(db, "orgs", orgId, "evidence")),
     loadNoteRecords(orgId, assessmentId),
     loadPoamItems(orgId, assessmentId),
-    getDocs(query(collection(assessmentRef, "scoreSnapshots"), orderBy("createdAt", "desc"))),
+    loadScoreSnapshots(orgId, assessmentId),
   ]);
 
   return {
@@ -166,10 +167,7 @@ export async function loadAssessmentState(orgId: string, assessmentId: string): 
       .filter((e) => e.assessmentId === assessmentId),
     notes: notesSnap,
     poamItems: poamItemsSnap,
-    scoreSnapshots: scoreSnapshotsSnap.docs.map((d) => ({
-      snapshotId: d.id,
-      ...(d.data() as Omit<ScoreSnapshot, "snapshotId">),
-    })),
+    scoreSnapshots: scoreSnapshotsSnap,
   };
 }
 
@@ -186,6 +184,15 @@ export async function loadPoamItems(orgId: string, assessmentId: string): Promis
     poamId: decodeURIComponent(d.id),
     id: decodeURIComponent(d.id),
     ...(d.data() as Omit<FirestorePoamItem, "poamId" | "id">),
+  }));
+}
+
+export async function loadScoreSnapshots(orgId: string, assessmentId: string): Promise<ScoreSnapshot[]> {
+  const snapshotsRef = collection(db, "orgs", orgId, "assessments", assessmentId, "scoreSnapshots");
+  const snapshotsSnap = await getDocs(query(snapshotsRef, orderBy("createdAt", "desc"), limit(25)));
+  return snapshotsSnap.docs.map((d) => ({
+    snapshotId: decodeURIComponent(d.id),
+    ...(d.data() as Omit<ScoreSnapshot, "snapshotId">),
   }));
 }
 
@@ -355,6 +362,46 @@ export async function savePoamItem(
     orgId,
     assessmentId,
     poamId,
+  });
+}
+
+export async function saveScoreSnapshot(
+  orgId: string,
+  assessmentId: string,
+  snapshot: ScoreSnapshot
+): Promise<void> {
+  const snapshotId = snapshot.snapshotId;
+  const ref = doc(db, "orgs", orgId, "assessments", assessmentId, "scoreSnapshots", cleanDocId(snapshotId));
+  const payload = stripUndefined({
+    snapshotId,
+    orgId,
+    assessmentId,
+    level: snapshot.level,
+    completionPercent: snapshot.completionPercent,
+    sprsScore: snapshot.sprsScore,
+    totalPractices: snapshot.totalPractices,
+    totalObjectives: snapshot.totalObjectives,
+    metCount: snapshot.metCount,
+    partialCount: snapshot.partialCount,
+    notMetCount: snapshot.notMetCount,
+    notAssessedCount: snapshot.notAssessedCount,
+    evidenceCount: snapshot.evidenceCount,
+    poamOpenCount: snapshot.poamOpenCount,
+    poamCompletedCount: snapshot.poamCompletedCount,
+    byDomain: snapshot.byDomain,
+    practiceCompletionScore: snapshot.practiceCompletionScore,
+    controlsPostureScore: snapshot.controlsPostureScore,
+    overallReadinessScore: snapshot.overallReadinessScore,
+    source: "client_mvp",
+    createdByUid: snapshot.createdByUid,
+    createdAt: serverTimestamp(),
+  });
+
+  await setDoc(ref, payload);
+  console.info("[assessmentFirestore] saved score snapshot", {
+    orgId,
+    assessmentId,
+    snapshotId,
   });
 }
 
