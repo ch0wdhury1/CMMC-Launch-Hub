@@ -141,6 +141,12 @@ app.post("/api/evidence/ocr", requireAuth, async (req: any, res) => {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
       EVIDENCE_OCR_MODEL
     )}:generateContent`;
+    console.info("[evidence-ocr] Gemini request diagnostics", {
+      url,
+      apiKeyPresent: Boolean(apiKey),
+      apiKeyLength: apiKey.length,
+      apiKeyStartsWithAIza: apiKey.startsWith("AIza"),
+    });
     const geminiResponse = await fetch(url, {
       method: "POST",
       headers: {
@@ -166,6 +172,10 @@ app.post("/api/evidence/ocr", requireAuth, async (req: any, res) => {
       }),
     });
     const data: any = await geminiResponse.json();
+    console.info("[evidence-ocr] Gemini response diagnostics", {
+      status: geminiResponse.status,
+      error: data?.error || null,
+    });
     if (!geminiResponse.ok) {
       throw new Error(data?.error?.message || "Gemini OCR request failed");
     }
