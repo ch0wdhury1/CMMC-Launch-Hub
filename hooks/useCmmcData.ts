@@ -977,6 +977,27 @@ export const useCmmcData = (options: UseCmmcDataOptions = {}) => {
     uid,
   ]);
 
+  /*
+   * RECOVERY TEST
+   *
+   * 1 Login
+   * 2 Change objective status
+   * 3 Add note
+   * 4 Add evidence metadata
+   * 5 Add POAM
+   * 6 Click Save
+   * 7 Logout
+   * 8 Clear localStorage
+   * 9 Login again
+   *
+   * Expected:
+   * Objective restored
+   * Note restored
+   * Evidence restored
+   * POAM restored
+   * Shell restored
+   * Snapshots preserved
+   */
   const saveAssessment = useCallback(async () => {
     savePersistedState({
       subscriptionLevel,

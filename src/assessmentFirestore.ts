@@ -33,6 +33,15 @@ export type AssessmentState = {
   scoreSnapshots: ScoreSnapshot[];
 };
 
+export type RecoverySummary = {
+  practicesLoaded: number;
+  objectivesLoaded: number;
+  evidenceLoaded: number;
+  notesLoaded: number;
+  poamLoaded: number;
+  snapshotsLoaded: number;
+};
+
 export type GetOrCreateAssessmentInput = {
   orgId: string;
   uid: string;
@@ -54,6 +63,20 @@ export function getObjectiveRecordStorageKey(practiceId: string, objectiveId: st
 
 export function getObjectiveNoteId(practiceId: string, objectiveId: string): string {
   return `assessor_review::${getObjectiveRecordStorageKey(practiceId, objectiveId)}`;
+}
+
+export function buildRecoverySummary(state: Pick<
+  AssessmentState,
+  "practiceRecords" | "objectiveRecords" | "evidence" | "notes" | "poamItems" | "scoreSnapshots"
+>): RecoverySummary {
+  return {
+    practicesLoaded: state.practiceRecords.length,
+    objectivesLoaded: state.objectiveRecords.length,
+    evidenceLoaded: state.evidence.length,
+    notesLoaded: state.notes.length,
+    poamLoaded: state.poamItems.length,
+    snapshotsLoaded: state.scoreSnapshots.length,
+  };
 }
 
 function cleanDocId(id: string): string {
@@ -125,6 +148,7 @@ export async function getOrCreateDefaultAssessment({
 
 export async function loadAssessmentState(orgId: string, assessmentId: string): Promise<AssessmentState> {
   const assessmentRef = doc(db, "orgs", orgId, "assessments", assessmentId);
+  console.info("[Recovery] Loading assessment shell");
   const assessmentSnap = await getDoc(assessmentRef);
   const assessment = assessmentSnap.exists()
     ? ({ assessmentId, ...(assessmentSnap.data() as Omit<AssessmentDoc, "assessmentId">) } as AssessmentDoc)
@@ -152,7 +176,7 @@ export async function loadAssessmentState(orgId: string, assessmentId: string): 
     loadScoreSnapshots(orgId, assessmentId),
   ]);
 
-  return {
+  const state: AssessmentState = {
     assessment,
     practiceRecords: practiceRecordsSnap.docs.map((d) => ({
       practiceId: decodeURIComponent(d.id),
@@ -169,6 +193,16 @@ export async function loadAssessmentState(orgId: string, assessmentId: string): 
     poamItems: poamItemsSnap,
     scoreSnapshots: scoreSnapshotsSnap,
   };
+
+  const summary = buildRecoverySummary(state);
+  console.info(`[Recovery] Loaded ${summary.practicesLoaded} practice records`);
+  console.info(`[Recovery] Loaded ${summary.objectivesLoaded} objective records`);
+  console.info(`[Recovery] Loaded ${summary.evidenceLoaded} evidence records`);
+  console.info(`[Recovery] Loaded ${summary.notesLoaded} notes`);
+  console.info(`[Recovery] Loaded ${summary.poamLoaded} poam items`);
+  console.info(`[Recovery] Loaded ${summary.snapshotsLoaded} score snapshots`);
+
+  return state;
 }
 
 export async function loadNoteRecords(orgId: string, assessmentId: string): Promise<NoteRecord[]> {
