@@ -138,10 +138,13 @@ app.post("/api/evidence/ocr", requireAuth, async (req: any, res) => {
     const [fileBytes] = await admin.storage().bucket().file(storagePath).download();
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
       EVIDENCE_OCR_MODEL
-    )}:generateContent?key=${apiKey}`;
+    )}:generateContent`;
     const geminiResponse = await fetch(url, {
       method: "POST",
-      headers: {"Content-Type": "application/json"},
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": apiKey,
+      },
       body: JSON.stringify({
         contents: [{
           role: "user",
