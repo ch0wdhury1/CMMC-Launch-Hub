@@ -235,14 +235,28 @@ export async function loadScoreSnapshots(orgId: string, assessmentId: string): P
   }));
 }
 
-export async function loadActivityLogEntries(orgId: string, assessmentId: string): Promise<ActivityLogEntry[]> {
+/**
+ * History feed reserved for a future audit timeline, assessor history,
+ * collaboration feed, and report support.
+ */
+export async function loadActivityLogEntries(orgId: string, assessmentId: string, entryLimit = 50): Promise<ActivityLogEntry[]> {
   const activityRef = collection(db, "orgs", orgId, "assessments", assessmentId, "activityLog");
-  const activitySnap = await getDocs(query(activityRef, orderBy("createdAt", "desc"), limit(50)));
-  return activitySnap.docs.map((d) => ({
-    activityId: decodeURIComponent(d.id),
-    ...(d.data() as Omit<ActivityLogEntry, "activityId">),
-  }));
+  try {
+    const activitySnap = await getDocs(query(activityRef, orderBy("createdAt", "desc"), limit(entryLimit)));
+    const entries = activitySnap.docs.map((d) => ({
+      activityId: decodeURIComponent(d.id),
+      ...(d.data() as Omit<ActivityLogEntry, "activityId">),
+    }));
+    console.info(`[ActivityLog] Loaded ${entries.length} activity entries`);
+    return entries;
+  } catch (error) {
+    console.warn("[ActivityLog] Activity retrieval skipped; assessment load will continue.", error);
+    console.info("[ActivityLog] Loaded 0 activity entries");
+    return [];
+  }
 }
+
+export const getLatestActivityEntries = loadActivityLogEntries;
 
 export async function savePracticeRecord(
   orgId: string,

@@ -346,6 +346,7 @@ export const useCmmcData = (options: UseCmmcDataOptions = {}) => {
   const [analyzerAnswers, setAnalyzerAnswers] = useState<ReadinessAnswers>(initialAnswers);
   const [savedReports, setSavedReports] = useState<SavedReport[]>([]);
   const [poamItems, setPoamItems] = useState<PoamItem[]>([]);
+  const [activityLogEntries, setActivityLogEntries] = useState<ActivityLogEntry[]>([]);
   const [responsibilityMatrix, setResponsibilityMatrix] = useState<ResponsibilityMatrixEntry[]>([]);
   const [companyProfile, setCompanyProfile] = useState<CompanyProfile | null>(null);
   const [subscriptionLevel, setSubscriptionLevel] = useState<SubscriptionLevel>("L1");
@@ -529,6 +530,9 @@ export const useCmmcData = (options: UseCmmcDataOptions = {}) => {
             return Array.from(merged.values());
           });
         }
+        // Loaded for future audit timeline, assessor history, collaboration feed,
+        // and report support. There is intentionally no visible UI in this phase.
+        setActivityLogEntries(firestoreState.activityLogEntries);
 
         setDataSourceInfo(prev => `${prev} | Firestore assessment: ${assessment.assessmentId}`);
         setFirestoreLoadKey(key);
@@ -1190,6 +1194,7 @@ export const useCmmcData = (options: UseCmmcDataOptions = {}) => {
     savedReports, 
     scores, 
     poamItems, 
+    activityLogEntries,
     responsibilityMatrix,
     subscriptionLevel, 
     upgradeSubscription,
