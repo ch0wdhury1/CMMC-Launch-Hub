@@ -1,3 +1,5 @@
+// Force redeploy: Gemini OCR header auth fix 2026-05-31
+
 import express from "express";
 import cors from "cors";
 import { onRequest } from "firebase-functions/v2/https";
