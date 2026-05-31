@@ -47,6 +47,10 @@ export function getDefaultAssessmentId(level: AssessmentLevel): string {
   return level === 2 ? "default_l2" : "default_l1";
 }
 
+export function getObjectiveRecordStorageKey(practiceId: string, objectiveId: string): string {
+  return `${practiceId}::${objectiveId}`;
+}
+
 function cleanDocId(id: string): string {
   return encodeURIComponent(id).replace(/\./g, "%2E");
 }
@@ -150,8 +154,8 @@ export async function loadAssessmentState(orgId: string, assessmentId: string): 
       ...(d.data() as Omit<FirestorePracticeRecord, "practiceId">),
     })),
     objectiveRecords: objectiveRecordsSnap.docs.map((d) => ({
-      objectiveId: decodeURIComponent(d.id),
-      ...(d.data() as Omit<FirestoreObjectiveRecord, "objectiveId">),
+      ...(d.data() as FirestoreObjectiveRecord),
+      objectiveId: (d.data() as FirestoreObjectiveRecord).objectiveId || decodeURIComponent(d.id),
     })),
     evidence: evidenceSnap.docs
       .map((d) => ({ evidenceId: d.id, ...(d.data() as Omit<EvidenceRecord, "evidenceId">) }))
@@ -204,9 +208,11 @@ export async function saveObjectiveRecord(
   record: FirestoreObjectiveRecord
 ): Promise<void> {
   const objectiveId = record.objectiveId;
-  const ref = doc(db, "orgs", orgId, "assessments", assessmentId, "objectiveRecords", cleanDocId(objectiveId));
+  const storageKey = getObjectiveRecordStorageKey(record.practiceId, objectiveId);
+  const ref = doc(db, "orgs", orgId, "assessments", assessmentId, "objectiveRecords", cleanDocId(storageKey));
   const payload = stripUndefined({
     objectiveId,
+    storageKey,
     practiceId: record.practiceId,
     orgId,
     assessmentId,
@@ -224,6 +230,7 @@ export async function saveObjectiveRecord(
     assessmentId,
     practiceId: record.practiceId,
     objectiveId,
+    storageKey,
   });
 }
 

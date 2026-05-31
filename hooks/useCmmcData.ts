@@ -31,6 +31,7 @@ import {
 import {
   getOrCreateDefaultAssessment,
   getDefaultAssessmentId,
+  getObjectiveRecordStorageKey,
   isFirestoreAssessmentsEnabled,
   loadAssessmentState,
   saveObjectiveRecord,
@@ -220,7 +221,10 @@ const mergeFirestorePracticeRecords = (
   noteRecords: NoteRecord[]
 ): PracticeRecord[] => {
   const practiceMap = new Map(firestorePracticeRecords.map(r => [r.practiceId, r]));
-  const objectiveMap = new Map(firestoreObjectiveRecords.map(r => [r.objectiveId, r]));
+  const objectiveMap = new Map(firestoreObjectiveRecords.map(r => [
+    getObjectiveRecordStorageKey(r.practiceId, r.objectiveId),
+    r,
+  ]));
   const evidenceByObjective = new Map<string, EvidenceRecord[]>();
   evidenceRecords.forEach(e => {
     (e.objectiveIds || []).forEach(objectiveId => {
@@ -236,7 +240,7 @@ const mergeFirestorePracticeRecords = (
 
     const objectiveRecords = Object.fromEntries(
       Object.entries(record.objectiveRecords).map(([objectiveId, objective]) => {
-        const fsObjective = objectiveMap.get(objectiveId);
+        const fsObjective = objectiveMap.get(getObjectiveRecordStorageKey(record.id, objectiveId));
         const objectiveNote = notesByTarget.get(`objective:${objectiveId}`)?.body;
         const evidenceArtifacts = (evidenceByObjective.get(objectiveId) || []).map(e => ({
           id: e.evidenceId,
@@ -250,9 +254,9 @@ const mergeFirestorePracticeRecords = (
         return [objectiveId, {
           ...objective,
           status: toLocalObjectiveStatus(fsObjective?.status || objective.status),
-          note: fsObjective?.note || fsObjective?.noteSummary || objectiveNote || objective.note,
-          actionPoints: fsObjective?.actionPoints || objective.actionPoints,
-          actionPointsSummary: fsObjective?.actionPointsSummary || fsObjective?.aiGuidanceSummary || objective.actionPointsSummary,
+          note: fsObjective?.note ?? fsObjective?.noteSummary ?? objectiveNote ?? objective.note,
+          actionPoints: fsObjective?.actionPoints ?? objective.actionPoints,
+          actionPointsSummary: fsObjective?.actionPointsSummary ?? fsObjective?.aiGuidanceSummary ?? objective.actionPointsSummary,
           artifacts: evidenceArtifacts.length ? evidenceArtifacts : objective.artifacts,
         }];
       })
@@ -263,7 +267,7 @@ const mergeFirestorePracticeRecords = (
       status: fsPractice?.status || record.status,
       statusSource: fsPractice?.statusSource || record.statusSource,
       lastUpdated: fsPractice?.lastUpdated || record.lastUpdated,
-      note: fsPractice?.note || practiceNote || record.note,
+      note: fsPractice?.note ?? practiceNote ?? record.note,
       objectiveRecords,
     };
   });

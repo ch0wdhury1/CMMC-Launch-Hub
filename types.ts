@@ -308,6 +308,7 @@ export interface FirestorePracticeRecord {
 
 export interface FirestoreObjectiveRecord {
   objectiveId: string;
+  storageKey?: string;
   orgId: string;
   assessmentId: string;
   practiceId: string;
