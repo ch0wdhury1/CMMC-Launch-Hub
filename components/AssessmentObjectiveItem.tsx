@@ -257,17 +257,33 @@ ${JSON.stringify(ctx, null, 2)}
     if (!file) return;
     setIsUploading(true);
     try {
-      const summaryText = await getOcrSummary(file);
+      let summaryText = "";
+      let processingStatus: Artifact["processingStatus"];
+      let processingError: string | undefined;
+
+      try {
+        summaryText = await getOcrSummary(file);
+      } catch (error) {
+        const rawMessage = error instanceof Error ? error.message : "";
+        processingStatus = "ocr_failed";
+        processingError = rawMessage.trim().replace(/\s+/g, " ").slice(0, 160) || "OCR processing failed";
+        console.warn("OCR failed; saving evidence metadata without OCR summary:", error);
+      }
+
       const newArtifact: Artifact = {
         id: `${Date.now()}-${file.name}`, 
         name: file.name, 
+        fileName: file.name,
         fileType: file.type,
-        ocrSummary: summaryText || "No OCR summary available.", 
+        fileSize: file.size,
+        ocrSummary: processingStatus === "ocr_failed" ? "" : summaryText || "No OCR summary available.",
+        processingStatus,
+        processingError,
         uploadedAt: new Date().toISOString(),
         isFinalForm: true
       };
       onUpdateObjective(objective.id, { artifacts: [...objective.artifacts, newArtifact] });
-    } catch (error) { console.error("OCR failed:", error); alert("Could not process file."); } 
+    } catch (error) { console.error("Could not save artifact metadata:", error); }
     finally { setIsUploading(false); e.target.value = ""; }
   };
 

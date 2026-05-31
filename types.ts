@@ -24,6 +24,8 @@ export interface Artifact {
   fileType: string;
   fileSize?: number;
   ocrSummary: string;
+  processingStatus?: "ocr_failed";
+  processingError?: string;
   uploadedAt: string;
   isFinalForm: boolean;
 }
@@ -353,6 +355,8 @@ export interface EvidenceRecord {
   storagePath?: string;
   sha256?: string;
   ocrSummary?: string;
+  processingStatus?: "ocr_failed";
+  processingError?: string;
   aiExtractedSignals?: Record<string, any>;
   isFinalForm?: boolean;
   reviewStatus?: EvidenceReviewStatus;

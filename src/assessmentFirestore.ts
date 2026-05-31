@@ -253,6 +253,8 @@ export async function saveEvidenceRecord(
     fileType: record.fileType,
     fileSize: record.fileSize,
     ocrSummary: record.ocrSummary,
+    processingStatus: record.processingStatus,
+    processingError: record.processingError,
     uploadedByUid: record.uploadedByUid,
     reviewStatus: "uploaded",
     source: "local_upload_metadata",

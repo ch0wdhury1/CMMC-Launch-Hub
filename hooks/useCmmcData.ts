@@ -259,6 +259,8 @@ const mergeFirestorePracticeRecords = (
           name: e.name || e.fileName || e.title || "Evidence",
           fileType: e.fileType || "",
           ocrSummary: e.ocrSummary || "",
+          processingStatus: e.processingStatus,
+          processingError: e.processingError,
           uploadedAt: toEvidenceUploadedAt(e),
           isFinalForm: e.isFinalForm ?? true,
         }));
@@ -676,6 +678,8 @@ export const useCmmcData = (options: UseCmmcDataOptions = {}) => {
         fileType: artifact.fileType,
         fileSize: artifact.fileSize,
         ocrSummary: artifact.ocrSummary,
+        processingStatus: artifact.processingStatus,
+        processingError: artifact.processingError,
         uploadedByUid: uid,
         reviewStatus: "uploaded",
         source: "local_upload_metadata",
