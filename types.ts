@@ -26,8 +26,17 @@ export interface Artifact {
   ocrSummary: string;
   processingStatus?: "ocr_failed";
   processingError?: string;
+  storagePath?: string;
+  downloadUrl?: string;
+  storageStatus?: "uploaded" | "upload_failed";
+  storageError?: string;
   uploadedAt: string;
   isFinalForm: boolean;
+}
+
+export interface EvidenceFileUpload {
+  evidenceId: string;
+  file: File;
 }
 
 export interface ObjectiveRecord {
@@ -354,6 +363,9 @@ export interface EvidenceRecord {
   fileType?: string;
   fileSize?: number;
   storagePath?: string;
+  downloadUrl?: string;
+  storageStatus?: "uploaded" | "upload_failed";
+  storageError?: string;
   sha256?: string;
   ocrSummary?: string;
   processingStatus?: "ocr_failed";

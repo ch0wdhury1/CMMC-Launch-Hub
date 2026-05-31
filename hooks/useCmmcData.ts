@@ -26,6 +26,7 @@ import {
   FirestorePracticeRecord,
   FirestoreObjectiveRecord,
   EvidenceRecord,
+  EvidenceFileUpload,
   NoteRecord,
   FirestorePoamItem,
   Artifact,
@@ -47,6 +48,7 @@ import {
   saveActivityLogEntry,
   saveScoreSnapshot,
 } from "../src/assessmentFirestore";
+import { uploadEvidenceFile } from "../src/evidenceStorage";
 
 import { generateReadinessReport } from '../services/geminiService';
 import { READINESS_QUESTIONS } from '../data/readinessQuestions';
@@ -298,6 +300,10 @@ const mergeFirestorePracticeRecords = (
           ocrSummary: e.ocrSummary || "",
           processingStatus: e.processingStatus,
           processingError: e.processingError,
+          storagePath: e.storagePath,
+          downloadUrl: e.downloadUrl,
+          storageStatus: e.storageStatus,
+          storageError: e.storageError,
           uploadedAt: toEvidenceUploadedAt(e),
           isFinalForm: e.isFinalForm ?? true,
         }));
@@ -729,12 +735,13 @@ export const useCmmcData = (options: UseCmmcDataOptions = {}) => {
     });
   }, [actorEmail, firestoreEnabled, orgId, requestedAssessmentLevel, uid]);
 
-  const persistEvidenceRecords = useCallback((practiceId: string, objectiveId: string, artifacts: Artifact[]) => {
+  const persistEvidenceRecords = useCallback((practiceId: string, objectiveId: string, artifacts: Artifact[], evidenceFiles: EvidenceFileUpload[] = []) => {
     if (!firestoreEnabled || !orgId || !uid) return;
 
     const assessmentId = getDefaultAssessmentId(requestedAssessmentLevel);
     artifacts.forEach(artifact => {
-      void saveEvidenceRecord(orgId, {
+      const evidenceFile = evidenceFiles.find(upload => upload.evidenceId === artifact.id)?.file;
+      const baseRecord: EvidenceRecord = {
         evidenceId: artifact.id,
         orgId,
         assessmentId,
@@ -752,7 +759,40 @@ export const useCmmcData = (options: UseCmmcDataOptions = {}) => {
         uploadedByUid: uid,
         reviewStatus: "uploaded",
         source: "local_upload_metadata",
-      }).then(() => {
+      };
+      const persistRecord = async () => {
+        if (!evidenceFile) {
+          await saveEvidenceRecord(orgId, baseRecord);
+          return baseRecord;
+        }
+
+        let recordToSave: EvidenceRecord;
+        try {
+          const uploaded = await uploadEvidenceFile({
+            orgId,
+            evidenceId: artifact.id,
+            file: evidenceFile,
+          });
+          recordToSave = {
+            ...baseRecord,
+            ...uploaded,
+            storageStatus: "uploaded",
+          };
+        } catch (storageError) {
+          const rawMessage = storageError instanceof Error ? storageError.message : "";
+          recordToSave = {
+            ...baseRecord,
+            uploadedAt: artifact.uploadedAt,
+            storageStatus: "upload_failed",
+            storageError: rawMessage.trim().replace(/\s+/g, " ").slice(0, 160) || "Storage upload failed",
+          };
+        }
+
+        await saveEvidenceRecord(orgId, recordToSave);
+        return recordToSave;
+      };
+
+      void persistRecord().then(savedRecord => {
         logActivity({
           action: "evidence.uploaded",
           targetType: "evidence",
@@ -764,6 +804,7 @@ export const useCmmcData = (options: UseCmmcDataOptions = {}) => {
             fileName: artifact.fileName || artifact.name,
             fileType: artifact.fileType,
             fileSize: artifact.fileSize,
+            storageStatus: savedRecord.storageStatus,
           },
         });
       }).catch(error => {
@@ -817,7 +858,7 @@ export const useCmmcData = (options: UseCmmcDataOptions = {}) => {
     if (updatedRecord) persistPracticeRecord(updatedRecord);
   }, [persistPracticeRecord]);
 
-  const updateObjectiveRecord = useCallback((practiceId: string, objectiveId: string, updates: Partial<ObjectiveRecord>) => {
+  const updateObjectiveRecord = useCallback((practiceId: string, objectiveId: string, updates: Partial<ObjectiveRecord>, evidenceFiles: EvidenceFileUpload[] = []) => {
     let updatedObjective: ObjectiveRecord | undefined;
     let updatedPractice: PracticeRecord | undefined;
     let addedArtifacts: Artifact[] = [];
@@ -855,7 +896,7 @@ export const useCmmcData = (options: UseCmmcDataOptions = {}) => {
 
     if (updatedObjective) persistObjectiveRecord(practiceId, objectiveId, updatedObjective);
     if (updatedPractice) persistPracticeRecord(updatedPractice);
-    if (addedArtifacts.length) persistEvidenceRecords(practiceId, objectiveId, addedArtifacts);
+    if (addedArtifacts.length) persistEvidenceRecords(practiceId, objectiveId, addedArtifacts, evidenceFiles);
     if (updates.note !== undefined) persistObjectiveNote(practiceId, objectiveId, updates.note);
     if (updates.status !== undefined && updates.status !== previousStatus) {
       logActivity({

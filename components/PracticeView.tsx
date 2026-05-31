@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Practice, AssessmentObjective, Artifact, SavedTemplate, PracticeRecord, PracticeStatus, StatusSource, ObjectiveRecord, ObjectiveStatus } from '../types';
+import { Practice, AssessmentObjective, Artifact, EvidenceFileUpload, SavedTemplate, PracticeRecord, PracticeStatus, StatusSource, ObjectiveRecord, ObjectiveStatus } from '../types';
 import { AssessmentObjectiveItem } from './AssessmentObjectiveItem';
 import { CollapsibleSection } from './CollapsibleSection';
 
@@ -16,7 +16,7 @@ interface PracticeViewProps {
   practice: Practice;
   practiceRecord: PracticeRecord;
   onUpdateNote: (practiceId: string, note: string) => void;
-  onUpdateObjective: (practiceId: string, objectiveId: string, updates: Partial<ObjectiveRecord>) => void;
+  onUpdateObjective: (practiceId: string, objectiveId: string, updates: Partial<ObjectiveRecord>, evidenceFiles?: EvidenceFileUpload[]) => void;
   onApplySuggestion: (practiceId: string) => void;
   onAssistClick: (practiceId: string) => void;
   storeTemplate: (template: SavedTemplate) => void;
@@ -545,8 +545,8 @@ ${objList}
         key={mergedObjective.id}
         objective={mergedObjective}
         practice={practice}
-        onUpdateObjective={(objectiveId, updates) =>
-          onUpdateObjective(String((practice as any)?.id ?? ""), objectiveId, updates)
+        onUpdateObjective={(objectiveId, updates, evidenceFiles) =>
+          onUpdateObjective(String((practice as any)?.id ?? ""), objectiveId, updates, evidenceFiles)
         }
         storeTemplate={storeTemplate}
         slideshow={slideshowImages[mergedObjective.id]}

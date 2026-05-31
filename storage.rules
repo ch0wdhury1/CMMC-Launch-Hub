@@ -1,0 +1,64 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function userDoc() {
+      return firestore.get(
+        /databases/(default)/documents/users/$(request.auth.uid)
+      ).data;
+    }
+
+    function hasUserDoc() {
+      return isSignedIn()
+        && firestore.exists(
+          /databases/(default)/documents/users/$(request.auth.uid)
+        );
+    }
+
+    function isSuperAdmin() {
+      return hasUserDoc()
+        && userDoc().roles.superAdmin == true;
+    }
+
+    function orgMemberDoc(orgId) {
+      return firestore.get(
+        /databases/(default)/documents/orgs/$(orgId)/members/$(request.auth.uid)
+      ).data;
+    }
+
+    function isActiveOrgMember(orgId) {
+      return isSignedIn()
+        && firestore.exists(
+          /databases/(default)/documents/orgs/$(orgId)/members/$(request.auth.uid)
+        )
+        && orgMemberDoc(orgId).status == "active";
+    }
+
+    function canReadEvidence(orgId) {
+      return isSuperAdmin() || isActiveOrgMember(orgId);
+    }
+
+    function canWriteEvidence(orgId) {
+      return isSuperAdmin()
+        || (
+          isActiveOrgMember(orgId)
+          && orgMemberDoc(orgId).role in ["orgOwner", "orgAdmin", "assessor", "contributor"]
+        );
+    }
+
+    match /orgs/{orgId}/evidence/{evidenceId}/{fileName} {
+      allow read: if canReadEvidence(orgId);
+      allow create, update: if canWriteEvidence(orgId);
+      allow delete: if false;
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

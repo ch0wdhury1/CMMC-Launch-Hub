@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { AssessmentObjective, Artifact, ObjectiveStatus, Practice, SavedTemplate, ObjectiveRecord } from '../types';
+import { AssessmentObjective, Artifact, EvidenceFileUpload, ObjectiveStatus, Practice, SavedTemplate, ObjectiveRecord } from '../types';
 
 
 import { callGemini } from '../src/lib/geminiClient';
@@ -111,7 +111,7 @@ const SlideshowModal: React.FC<SlideshowModalProps> = ({ images, isOpen, onClose
 interface AssessmentObjectiveItemProps {
   objective: AssessmentObjective; 
   practice: Practice;
-  onUpdateObjective: (objectiveId: string, updates: Partial<ObjectiveRecord>) => void;
+  onUpdateObjective: (objectiveId: string, updates: Partial<ObjectiveRecord>, evidenceFiles?: EvidenceFileUpload[]) => void;
   storeTemplate: (template: SavedTemplate) => void;
   slideshow?: string[];
   isSlideshowLoading: boolean;
@@ -282,7 +282,10 @@ ${JSON.stringify(ctx, null, 2)}
         uploadedAt: new Date().toISOString(),
         isFinalForm: true
       };
-      onUpdateObjective(objective.id, { artifacts: [...objective.artifacts, newArtifact] });
+      onUpdateObjective(objective.id, { artifacts: [...objective.artifacts, newArtifact] }, [{
+        evidenceId: newArtifact.id,
+        file,
+      }]);
     } catch (error) { console.error("Could not save artifact metadata:", error); }
     finally { setIsUploading(false); e.target.value = ""; }
   };
