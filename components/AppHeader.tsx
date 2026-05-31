@@ -8,6 +8,8 @@ interface AppHeaderProps {
   onDiagnosticsClick?: () => void;
   overallCompletion: number;
   sprsScore: number;
+  saveStatus?: "idle" | "saving" | "saved" | "error";
+  saveMessage?: string;
 
   // optional handlers
   onLogout?: () => void;
@@ -22,6 +24,8 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   onDiagnosticsClick,
   overallCompletion,
   sprsScore,
+  saveStatus = "idle",
+  saveMessage,
   onLogout,
   onAdminClick,
   onSuperAdminClick, // ✅ NEW
@@ -117,11 +121,15 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
 
         <button
           onClick={onSave}
-          className="flex items-center px-3 py-1.5 bg-green-600 text-white text-sm rounded-md hover:bg-green-500 transition-colors"
+          disabled={saveStatus === "saving"}
+          className="flex items-center px-3 py-1.5 bg-green-600 text-white text-sm rounded-md hover:bg-green-500 transition-colors disabled:opacity-70 disabled:cursor-wait"
         >
           <Save className="h-4 w-4 mr-1" />
-          Save
+          {saveStatus === "saving" ? "Saving..." : saveStatus === "saved" ? "Saved" : "Save"}
         </button>
+        {saveStatus === "error" && saveMessage && (
+          <span className="max-w-48 text-xs text-red-100" role="alert">{saveMessage}</span>
+        )}
 
         {onLogout && (
           <button

@@ -405,4 +405,21 @@ export async function saveScoreSnapshot(
   });
 }
 
+export async function saveAssessmentLastSavedAt(
+  orgId: string,
+  assessmentId: string,
+  uid: string
+): Promise<void> {
+  const ref = doc(db, "orgs", orgId, "assessments", assessmentId);
+  await setDoc(ref, {
+    lastSavedAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+    updatedByUid: uid,
+  }, { merge: true });
+  console.info("[assessmentFirestore] updated assessment lastSavedAt", {
+    orgId,
+    assessmentId,
+  });
+}
+
 export const toFirestoreDocId = cleanDocId;

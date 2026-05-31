@@ -380,6 +380,7 @@ const getDomainDisplayLabel = (domainKey: string) => {
     setAnalyzerAnswers,
     runAnalyzer,
     saveReport,
+    saveAssessment,
     getDomainCompletion,
     commitMinedRequirement,
     loading,
@@ -391,6 +392,22 @@ const getDomainDisplayLabel = (domainKey: string) => {
     firestoreEnabled: firestoreAssessmentsEnabled,
     assessmentLevel: effectiveSubscriptionLevel,
   });
+  const [assessmentSaveStatus, setAssessmentSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [assessmentSaveMessage, setAssessmentSaveMessage] = useState("");
+
+  const handleSaveAssessment = useCallback(async () => {
+    setAssessmentSaveStatus("saving");
+    setAssessmentSaveMessage("");
+    try {
+      await saveAssessment();
+      setAssessmentSaveStatus("saved");
+      window.setTimeout(() => setAssessmentSaveStatus("idle"), 1800);
+    } catch (saveError) {
+      console.error("Assessment save failed:", saveError);
+      setAssessmentSaveStatus("error");
+      setAssessmentSaveMessage(saveError instanceof Error ? saveError.message : "Assessment save failed.");
+    }
+  }, [saveAssessment]);
 
   const sspData = useSspData();
 
@@ -987,7 +1004,9 @@ case "domain": {
       <AppHeader
         onAdminClick={isOrgAdmin || isSuperAdmin ? () => setView({ type: "admin" }) : undefined}
         onSuperAdminClick={isSuperAdmin ? () => setView({ type: "superAdmin" }) : undefined}
-	onSave={() => {}}
+	onSave={handleSaveAssessment}
+        saveStatus={assessmentSaveStatus}
+        saveMessage={assessmentSaveMessage}
         onSavedTemplatesClick={() => setView({ type: "savedTemplates" })}
         onProfileClick={() => setView({ type: "profile" })}
 onDiagnosticsClick={isDev ? () => setIsDiagnosticsOpen(true) : undefined}

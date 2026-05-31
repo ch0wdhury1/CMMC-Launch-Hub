@@ -281,6 +281,7 @@ export interface AssessmentDoc {
   ownerUid?: string;
   createdByUid?: string;
   updatedByUid?: string;
+  lastSavedAt?: any;
   createdAt?: any;
   updatedAt?: any;
 }
