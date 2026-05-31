@@ -32,10 +32,12 @@ import {
 import {
   getOrCreateDefaultAssessment,
   getDefaultAssessmentId,
+  getObjectiveNoteId,
   getObjectiveRecordStorageKey,
   isFirestoreAssessmentsEnabled,
   loadAssessmentState,
   saveEvidenceRecord,
+  saveNoteRecord,
   saveObjectiveRecord,
   savePracticeRecord,
 } from "../src/assessmentFirestore";
@@ -245,6 +247,9 @@ const mergeFirestorePracticeRecords = (
     });
   });
   const notesByTarget = new Map(noteRecords.map(n => [`${n.targetType}:${n.targetId}`, n]));
+  const objectiveNotes = new Map(noteRecords
+    .filter(note => note.noteType === "assessor_review" && note.practiceId && note.objectiveId)
+    .map(note => [getObjectiveRecordStorageKey(note.practiceId!, note.objectiveId!), note.content]));
 
   return baseRecords.map(record => {
     const fsPractice = practiceMap.get(record.id);
@@ -253,7 +258,8 @@ const mergeFirestorePracticeRecords = (
     const objectiveRecords = Object.fromEntries(
       Object.entries(record.objectiveRecords).map(([objectiveId, objective]) => {
         const fsObjective = objectiveMap.get(getObjectiveRecordStorageKey(record.id, objectiveId));
-        const objectiveNote = notesByTarget.get(`objective:${objectiveId}`)?.body;
+        const objectiveNote = objectiveNotes.get(getObjectiveRecordStorageKey(record.id, objectiveId))
+          ?? notesByTarget.get(`objective:${objectiveId}`)?.body;
         const evidenceArtifacts = (evidenceByObjective.get(getObjectiveRecordStorageKey(record.id, objectiveId)) || []).map(e => ({
           id: e.evidenceId,
           name: e.name || e.fileName || e.title || "Evidence",
@@ -272,7 +278,7 @@ const mergeFirestorePracticeRecords = (
         return [objectiveId, {
           ...objective,
           status: toLocalObjectiveStatus(fsObjective?.status || objective.status),
-          note: fsObjective?.note ?? fsObjective?.noteSummary ?? objectiveNote ?? objective.note,
+          note: objectiveNote ?? fsObjective?.note ?? fsObjective?.noteSummary ?? objective.note,
           actionPoints: fsObjective?.actionPoints ?? objective.actionPoints,
           actionPointsSummary: fsObjective?.actionPointsSummary ?? fsObjective?.aiGuidanceSummary ?? objective.actionPointsSummary,
           artifacts: Array.from(mergedArtifacts.values()),
@@ -696,6 +702,32 @@ export const useCmmcData = (options: UseCmmcDataOptions = {}) => {
     });
   }, [firestoreEnabled, orgId, uid, requestedAssessmentLevel]);
 
+  const persistObjectiveNote = useCallback((practiceId: string, objectiveId: string, content: string) => {
+    if (!firestoreEnabled || !orgId || !uid) return;
+
+    const assessmentId = getDefaultAssessmentId(requestedAssessmentLevel);
+    const noteId = getObjectiveNoteId(practiceId, objectiveId);
+    void saveNoteRecord(orgId, {
+      noteId,
+      orgId,
+      assessmentId,
+      practiceId,
+      objectiveId,
+      noteType: "assessor_review",
+      content,
+      updatedByUid: uid,
+    }).catch(error => {
+      console.error("[assessmentFirestore] assessor review note save failed; local state retained", {
+        orgId,
+        assessmentId,
+        noteId,
+        practiceId,
+        objectiveId,
+        error,
+      });
+    });
+  }, [firestoreEnabled, orgId, uid, requestedAssessmentLevel]);
+
   const updatePracticeNote = useCallback((id: string, note: string) => {
     const nextRecords = practiceRecordsRef.current.map(p => p.id === id
       ? { ...p, note, lastUpdated: new Date().toISOString() }
@@ -745,7 +777,8 @@ export const useCmmcData = (options: UseCmmcDataOptions = {}) => {
     if (updatedObjective) persistObjectiveRecord(practiceId, objectiveId, updatedObjective);
     if (updatedPractice) persistPracticeRecord(updatedPractice);
     if (addedArtifacts.length) persistEvidenceRecords(practiceId, objectiveId, addedArtifacts);
-  }, [persistEvidenceRecords, persistObjectiveRecord, persistPracticeRecord]);
+    if (updates.note !== undefined) persistObjectiveNote(practiceId, objectiveId, updates.note);
+  }, [persistEvidenceRecords, persistObjectiveNote, persistObjectiveRecord, persistPracticeRecord]);
 
   const updatePoamItem = (item: PoamItem) => setPoamItems(prev => prev.map(p => p.id === item.id ? item : p));
   const addPoamItem = (item: Omit<PoamItem, 'id' | 'createdAt' | 'source'>) => {

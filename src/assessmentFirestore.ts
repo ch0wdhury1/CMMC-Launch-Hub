@@ -51,6 +51,10 @@ export function getObjectiveRecordStorageKey(practiceId: string, objectiveId: st
   return `${practiceId}::${objectiveId}`;
 }
 
+export function getObjectiveNoteId(practiceId: string, objectiveId: string): string {
+  return `assessor_review::${getObjectiveRecordStorageKey(practiceId, objectiveId)}`;
+}
+
 function cleanDocId(id: string): string {
   return encodeURIComponent(id).replace(/\./g, "%2E");
 }
@@ -142,7 +146,7 @@ export async function loadAssessmentState(orgId: string, assessmentId: string): 
     getDocs(collection(assessmentRef, "practiceRecords")),
     getDocs(collection(assessmentRef, "objectiveRecords")),
     getDocs(collection(db, "orgs", orgId, "evidence")),
-    getDocs(collection(db, "orgs", orgId, "notes")),
+    loadNoteRecords(orgId, assessmentId),
     getDocs(collection(assessmentRef, "poamItems")),
     getDocs(query(collection(assessmentRef, "scoreSnapshots"), orderBy("createdAt", "desc"))),
   ]);
@@ -160,9 +164,7 @@ export async function loadAssessmentState(orgId: string, assessmentId: string): 
     evidence: evidenceSnap.docs
       .map((d) => ({ evidenceId: d.id, ...(d.data() as Omit<EvidenceRecord, "evidenceId">) }))
       .filter((e) => e.assessmentId === assessmentId),
-    notes: notesSnap.docs
-      .map((d) => ({ noteId: d.id, ...(d.data() as Omit<NoteRecord, "noteId">) }))
-      .filter((n) => n.assessmentId === assessmentId),
+    notes: notesSnap,
     poamItems: poamItemsSnap.docs.map((d) => ({
       poamId: d.id,
       id: d.id,
@@ -173,6 +175,13 @@ export async function loadAssessmentState(orgId: string, assessmentId: string): 
       ...(d.data() as Omit<ScoreSnapshot, "snapshotId">),
     })),
   };
+}
+
+export async function loadNoteRecords(orgId: string, assessmentId: string): Promise<NoteRecord[]> {
+  const notesSnap = await getDocs(collection(db, "orgs", orgId, "notes"));
+  return notesSnap.docs
+    .map((d) => ({ noteId: d.id, ...(d.data() as Omit<NoteRecord, "noteId">) }))
+    .filter((note) => note.assessmentId === assessmentId);
 }
 
 export async function savePracticeRecord(
@@ -269,6 +278,36 @@ export async function saveEvidenceRecord(
     evidenceId,
     practiceIds: record.practiceIds,
     objectiveIds: record.objectiveIds,
+  });
+}
+
+export async function saveNoteRecord(
+  orgId: string,
+  record: NoteRecord
+): Promise<void> {
+  const noteId = record.noteId;
+  const ref = doc(db, "orgs", orgId, "notes", cleanDocId(noteId));
+  const snap = await getDoc(ref);
+  const payload = stripUndefined({
+    noteId,
+    orgId,
+    assessmentId: record.assessmentId,
+    practiceId: record.practiceId,
+    objectiveId: record.objectiveId,
+    noteType: "assessor_review",
+    content: record.content,
+    updatedByUid: record.updatedByUid,
+    createdAt: snap.exists() ? undefined : serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+
+  await setDoc(ref, payload, { merge: true });
+  console.info("[assessmentFirestore] saved assessor review note", {
+    orgId,
+    assessmentId: record.assessmentId,
+    noteId,
+    practiceId: record.practiceId,
+    objectiveId: record.objectiveId,
   });
 }
 

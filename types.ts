@@ -374,11 +374,13 @@ export interface NoteRecord {
   noteId: string;
   orgId: string;
   assessmentId: string;
-  targetType: "assessment" | "practice" | "objective" | "evidence" | "poam" | "ssp";
-  targetId: string;
+  noteType: "assessor_review";
+  content: string;
   practiceId?: string;
   objectiveId?: string;
-  body: string;
+  targetType?: "assessment" | "practice" | "objective" | "evidence" | "poam" | "ssp";
+  targetId?: string;
+  body?: string;
   visibility?: "internal" | "assessor" | "customer";
   pinned?: boolean;
   createdByUid?: string;

@@ -191,7 +191,8 @@ match /orgs/{orgId} {
 
   match /notes/{noteId} {
     allow read: if canReadAssessmentData(orgId);
-    allow write: if false;
+    allow create, update: if canWriteAssessmentShell(orgId);
+    allow delete: if false;
   }
 }
 
