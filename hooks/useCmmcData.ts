@@ -26,7 +26,8 @@ import {
   FirestoreObjectiveRecord,
   EvidenceRecord,
   NoteRecord,
-  FirestorePoamItem
+  FirestorePoamItem,
+  Artifact
 } from "../types";
 import {
   getOrCreateDefaultAssessment,
@@ -34,6 +35,7 @@ import {
   getObjectiveRecordStorageKey,
   isFirestoreAssessmentsEnabled,
   loadAssessmentState,
+  saveEvidenceRecord,
   saveObjectiveRecord,
   savePracticeRecord,
 } from "../src/assessmentFirestore";
@@ -213,6 +215,13 @@ const createInitialRecords = (practices: Practice[]): PracticeRecord[] => {
   }));
 };
 
+const toEvidenceUploadedAt = (evidence: EvidenceRecord): string => {
+  if (typeof evidence.uploadedAt === "string") return evidence.uploadedAt;
+  if (typeof evidence.createdAt === "string") return evidence.createdAt;
+  if (evidence.createdAt?.toDate) return evidence.createdAt.toDate().toISOString();
+  return new Date().toISOString();
+};
+
 const mergeFirestorePracticeRecords = (
   baseRecords: PracticeRecord[],
   firestorePracticeRecords: FirestorePracticeRecord[],
@@ -227,9 +236,12 @@ const mergeFirestorePracticeRecords = (
   ]));
   const evidenceByObjective = new Map<string, EvidenceRecord[]>();
   evidenceRecords.forEach(e => {
-    (e.objectiveIds || []).forEach(objectiveId => {
-      const current = evidenceByObjective.get(objectiveId) || [];
-      evidenceByObjective.set(objectiveId, [...current, e]);
+    (e.practiceIds || []).forEach(practiceId => {
+      (e.objectiveIds || []).forEach(objectiveId => {
+        const storageKey = getObjectiveRecordStorageKey(practiceId, objectiveId);
+        const current = evidenceByObjective.get(storageKey) || [];
+        evidenceByObjective.set(storageKey, [...current, e]);
+      });
     });
   });
   const notesByTarget = new Map(noteRecords.map(n => [`${n.targetType}:${n.targetId}`, n]));
@@ -242,14 +254,18 @@ const mergeFirestorePracticeRecords = (
       Object.entries(record.objectiveRecords).map(([objectiveId, objective]) => {
         const fsObjective = objectiveMap.get(getObjectiveRecordStorageKey(record.id, objectiveId));
         const objectiveNote = notesByTarget.get(`objective:${objectiveId}`)?.body;
-        const evidenceArtifacts = (evidenceByObjective.get(objectiveId) || []).map(e => ({
+        const evidenceArtifacts = (evidenceByObjective.get(getObjectiveRecordStorageKey(record.id, objectiveId)) || []).map(e => ({
           id: e.evidenceId,
           name: e.name || e.fileName || e.title || "Evidence",
           fileType: e.fileType || "",
           ocrSummary: e.ocrSummary || "",
-          uploadedAt: typeof e.uploadedAt === "string" ? e.uploadedAt : new Date().toISOString(),
+          uploadedAt: toEvidenceUploadedAt(e),
           isFinalForm: e.isFinalForm ?? true,
         }));
+        const mergedArtifacts = new Map(objective.artifacts.map(artifact => [artifact.id, artifact]));
+        evidenceArtifacts.forEach(artifact => {
+          mergedArtifacts.set(artifact.id, { ...mergedArtifacts.get(artifact.id), ...artifact });
+        });
 
         return [objectiveId, {
           ...objective,
@@ -257,7 +273,7 @@ const mergeFirestorePracticeRecords = (
           note: fsObjective?.note ?? fsObjective?.noteSummary ?? objectiveNote ?? objective.note,
           actionPoints: fsObjective?.actionPoints ?? objective.actionPoints,
           actionPointsSummary: fsObjective?.actionPointsSummary ?? fsObjective?.aiGuidanceSummary ?? objective.actionPointsSummary,
-          artifacts: evidenceArtifacts.length ? evidenceArtifacts : objective.artifacts,
+          artifacts: Array.from(mergedArtifacts.values()),
         }];
       })
     ) as { [objectiveId: string]: ObjectiveRecord };
@@ -642,6 +658,40 @@ export const useCmmcData = (options: UseCmmcDataOptions = {}) => {
     });
   }, [firestoreEnabled, orgId, uid, requestedAssessmentLevel]);
 
+  const persistEvidenceRecords = useCallback((practiceId: string, objectiveId: string, artifacts: Artifact[]) => {
+    if (!firestoreEnabled || !orgId || !uid) return;
+
+    const assessmentId = getDefaultAssessmentId(requestedAssessmentLevel);
+    artifacts.forEach(artifact => {
+      void saveEvidenceRecord(orgId, {
+        evidenceId: artifact.id,
+        orgId,
+        assessmentId,
+        practiceIds: [practiceId],
+        objectiveIds: [objectiveId],
+        title: artifact.name,
+        name: artifact.name,
+        description: artifact.description,
+        fileName: artifact.fileName || artifact.name,
+        fileType: artifact.fileType,
+        fileSize: artifact.fileSize,
+        ocrSummary: artifact.ocrSummary,
+        uploadedByUid: uid,
+        reviewStatus: "uploaded",
+        source: "local_upload_metadata",
+      }).catch(error => {
+        console.error("[assessmentFirestore] evidence metadata save failed; local state retained", {
+          orgId,
+          assessmentId,
+          evidenceId: artifact.id,
+          practiceId,
+          objectiveId,
+          error,
+        });
+      });
+    });
+  }, [firestoreEnabled, orgId, uid, requestedAssessmentLevel]);
+
   const updatePracticeNote = useCallback((id: string, note: string) => {
     const nextRecords = practiceRecordsRef.current.map(p => p.id === id
       ? { ...p, note, lastUpdated: new Date().toISOString() }
@@ -657,11 +707,17 @@ export const useCmmcData = (options: UseCmmcDataOptions = {}) => {
   const updateObjectiveRecord = useCallback((practiceId: string, objectiveId: string, updates: Partial<ObjectiveRecord>) => {
     let updatedObjective: ObjectiveRecord | undefined;
     let updatedPractice: PracticeRecord | undefined;
+    let addedArtifacts: Artifact[] = [];
     const nextRecords = practiceRecordsRef.current.map(p => {
       if (p.id !== practiceId) return p;
+      const previousObjective = p.objectiveRecords[objectiveId] || { status: ObjectiveStatus.Pending, note: '', artifacts: [] };
+      if (updates.artifacts) {
+        const existingArtifactIds = new Set(previousObjective.artifacts.map(artifact => artifact.id));
+        addedArtifacts = updates.artifacts.filter(artifact => !existingArtifactIds.has(artifact.id));
+      }
       const newObjectiveRecords = {
         ...p.objectiveRecords,
-        [objectiveId]: { ...(p.objectiveRecords[objectiveId] || { status: ObjectiveStatus.Pending, note: '', artifacts: [] }), ...updates }
+        [objectiveId]: { ...previousObjective, ...updates }
       };
       
       const objectives = Object.values(newObjectiveRecords) as ObjectiveRecord[];
@@ -684,7 +740,8 @@ export const useCmmcData = (options: UseCmmcDataOptions = {}) => {
 
     if (updatedObjective) persistObjectiveRecord(practiceId, objectiveId, updatedObjective);
     if (updatedPractice) persistPracticeRecord(updatedPractice);
-  }, [persistObjectiveRecord, persistPracticeRecord]);
+    if (addedArtifacts.length) persistEvidenceRecords(practiceId, objectiveId, addedArtifacts);
+  }, [persistEvidenceRecords, persistObjectiveRecord, persistPracticeRecord]);
 
   const updatePoamItem = (item: PoamItem) => setPoamItems(prev => prev.map(p => p.id === item.id ? item : p));
   const addPoamItem = (item: Omit<PoamItem, 'id' | 'createdAt' | 'source'>) => {

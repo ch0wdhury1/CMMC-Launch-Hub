@@ -234,4 +234,40 @@ export async function saveObjectiveRecord(
   });
 }
 
+export async function saveEvidenceRecord(
+  orgId: string,
+  record: EvidenceRecord
+): Promise<void> {
+  const evidenceId = record.evidenceId;
+  const ref = doc(db, "orgs", orgId, "evidence", cleanDocId(evidenceId));
+  const payload = stripUndefined({
+    evidenceId,
+    orgId,
+    assessmentId: record.assessmentId,
+    practiceIds: record.practiceIds,
+    objectiveIds: record.objectiveIds,
+    title: record.title || record.name || record.fileName,
+    name: record.name,
+    description: record.description,
+    fileName: record.fileName,
+    fileType: record.fileType,
+    fileSize: record.fileSize,
+    ocrSummary: record.ocrSummary,
+    uploadedByUid: record.uploadedByUid,
+    reviewStatus: "uploaded",
+    source: "local_upload_metadata",
+    createdAt: record.createdAt || serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+
+  await setDoc(ref, payload, { merge: true });
+  console.info("[assessmentFirestore] saved evidence metadata", {
+    orgId,
+    assessmentId: record.assessmentId,
+    evidenceId,
+    practiceIds: record.practiceIds,
+    objectiveIds: record.objectiveIds,
+  });
+}
+
 export const toFirestoreDocId = cleanDocId;

@@ -19,7 +19,10 @@ export type TextBlock = string | string[];
 export interface Artifact {
   id: string;
   name: string;
+  description?: string;
+  fileName?: string;
   fileType: string;
+  fileSize?: number;
   ocrSummary: string;
   uploadedAt: string;
   isFinalForm: boolean;
