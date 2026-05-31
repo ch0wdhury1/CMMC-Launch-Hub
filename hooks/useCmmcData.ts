@@ -21,6 +21,7 @@ import {
   L2ExtractionResult,
   SubscriptionLevel,
   AssessmentLevel,
+  ActivityLogEntry,
   FirestoreObjectiveStatus,
   FirestorePracticeRecord,
   FirestoreObjectiveRecord,
@@ -43,6 +44,7 @@ import {
   savePoamItem,
   savePracticeRecord,
   saveAssessmentLastSavedAt,
+  saveActivityLogEntry,
   saveScoreSnapshot,
 } from "../src/assessmentFirestore";
 
@@ -165,6 +167,7 @@ const defaultCompanyProfile: CompanyProfile = {
 type UseCmmcDataOptions = {
   orgId?: string | null;
   uid?: string | null;
+  actorEmail?: string | null;
   firestoreEnabled?: boolean;
   assessmentLevel?: SubscriptionLevel | "COMM_L1" | "COMM_L2" | "SPONSORED" | string | null;
 };
@@ -329,6 +332,7 @@ export const useCmmcData = (options: UseCmmcDataOptions = {}) => {
   const firestoreEnabled = options.firestoreEnabled ?? isFirestoreAssessmentsEnabled();
   const orgId = firestoreEnabled ? options.orgId || null : null;
   const uid = firestoreEnabled ? options.uid || null : null;
+  const actorEmail = firestoreEnabled ? options.actorEmail || "" : "";
   const requestedAssessmentLevel = firestoreEnabled ? toAssessmentLevel(options.assessmentLevel) : 1;
   const [rawDomains, setRawDomains] = useState<Domain[]>([]);
   const [rawPractices, setRawPractices] = useState<Practice[]>([]);
@@ -338,6 +342,7 @@ export const useCmmcData = (options: UseCmmcDataOptions = {}) => {
   const practiceRecordsRef = useRef<PracticeRecord[]>([]);
   const scoreSnapshotBaselineRef = useRef<{ contextKey: string; fingerprint: string } | null>(null);
   const scoreSnapshotTimeoutRef = useRef<number | null>(null);
+  const noteActivityTimeoutsRef = useRef<Map<string, number>>(new Map());
   const [analyzerAnswers, setAnalyzerAnswers] = useState<ReadinessAnswers>(initialAnswers);
   const [savedReports, setSavedReports] = useState<SavedReport[]>([]);
   const [poamItems, setPoamItems] = useState<PoamItem[]>([]);
@@ -352,6 +357,11 @@ export const useCmmcData = (options: UseCmmcDataOptions = {}) => {
   useEffect(() => {
     practiceRecordsRef.current = practiceRecords;
   }, [practiceRecords]);
+
+  useEffect(() => () => {
+    noteActivityTimeoutsRef.current.forEach(timeoutId => window.clearTimeout(timeoutId));
+    noteActivityTimeoutsRef.current.clear();
+  }, []);
 
   useEffect(() => {
     const initializeData = async () => {
@@ -692,6 +702,29 @@ export const useCmmcData = (options: UseCmmcDataOptions = {}) => {
     });
   }, [firestoreEnabled, orgId, uid, requestedAssessmentLevel]);
 
+  const logActivity = useCallback((entry: Omit<ActivityLogEntry, "activityId" | "orgId" | "assessmentId" | "actorUid" | "actorEmail">) => {
+    if (!firestoreEnabled || !orgId || !uid) return;
+
+    const assessmentId = getDefaultAssessmentId(requestedAssessmentLevel);
+    const activityId = crypto.randomUUID();
+    void saveActivityLogEntry(orgId, assessmentId, {
+      ...entry,
+      activityId,
+      orgId,
+      assessmentId,
+      actorUid: uid,
+      actorEmail,
+    }).catch(error => {
+      console.error("[assessmentFirestore] activity log save failed; primary action retained", {
+        orgId,
+        assessmentId,
+        activityId,
+        action: entry.action,
+        error,
+      });
+    });
+  }, [actorEmail, firestoreEnabled, orgId, requestedAssessmentLevel, uid]);
+
   const persistEvidenceRecords = useCallback((practiceId: string, objectiveId: string, artifacts: Artifact[]) => {
     if (!firestoreEnabled || !orgId || !uid) return;
 
@@ -715,6 +748,20 @@ export const useCmmcData = (options: UseCmmcDataOptions = {}) => {
         uploadedByUid: uid,
         reviewStatus: "uploaded",
         source: "local_upload_metadata",
+      }).then(() => {
+        logActivity({
+          action: "evidence.uploaded",
+          targetType: "evidence",
+          targetId: artifact.id,
+          practiceId,
+          objectiveId,
+          summary: `Evidence metadata uploaded: ${artifact.name}`,
+          metadata: {
+            fileName: artifact.fileName || artifact.name,
+            fileType: artifact.fileType,
+            fileSize: artifact.fileSize,
+          },
+        });
       }).catch(error => {
         console.error("[assessmentFirestore] evidence metadata save failed; local state retained", {
           orgId,
@@ -726,7 +773,7 @@ export const useCmmcData = (options: UseCmmcDataOptions = {}) => {
         });
       });
     });
-  }, [firestoreEnabled, orgId, uid, requestedAssessmentLevel]);
+  }, [firestoreEnabled, logActivity, orgId, uid, requestedAssessmentLevel]);
 
   const persistObjectiveNote = useCallback((practiceId: string, objectiveId: string, content: string) => {
     if (!firestoreEnabled || !orgId || !uid) return;
@@ -770,9 +817,11 @@ export const useCmmcData = (options: UseCmmcDataOptions = {}) => {
     let updatedObjective: ObjectiveRecord | undefined;
     let updatedPractice: PracticeRecord | undefined;
     let addedArtifacts: Artifact[] = [];
+    let previousStatus: ObjectiveStatus | undefined;
     const nextRecords = practiceRecordsRef.current.map(p => {
       if (p.id !== practiceId) return p;
       const previousObjective = p.objectiveRecords[objectiveId] || { status: ObjectiveStatus.Pending, note: '', artifacts: [] };
+      previousStatus = previousObjective.status;
       if (updates.artifacts) {
         const existingArtifactIds = new Set(previousObjective.artifacts.map(artifact => artifact.id));
         addedArtifacts = updates.artifacts.filter(artifact => !existingArtifactIds.has(artifact.id));
@@ -804,9 +853,40 @@ export const useCmmcData = (options: UseCmmcDataOptions = {}) => {
     if (updatedPractice) persistPracticeRecord(updatedPractice);
     if (addedArtifacts.length) persistEvidenceRecords(practiceId, objectiveId, addedArtifacts);
     if (updates.note !== undefined) persistObjectiveNote(practiceId, objectiveId, updates.note);
-  }, [persistEvidenceRecords, persistObjectiveNote, persistObjectiveRecord, persistPracticeRecord]);
+    if (updates.status !== undefined && updates.status !== previousStatus) {
+      logActivity({
+        action: "objective.status.changed",
+        targetType: "objective",
+        targetId: getObjectiveRecordStorageKey(practiceId, objectiveId),
+        practiceId,
+        objectiveId,
+        summary: `Objective status changed from ${previousStatus || ObjectiveStatus.Pending} to ${updates.status}`,
+        metadata: {
+          previousStatus: previousStatus || ObjectiveStatus.Pending,
+          status: updates.status,
+        },
+      });
+    }
+    if (updates.note !== undefined) {
+      const activityKey = getObjectiveRecordStorageKey(practiceId, objectiveId);
+      const existingTimeout = noteActivityTimeoutsRef.current.get(activityKey);
+      if (existingTimeout !== undefined) window.clearTimeout(existingTimeout);
+      const timeoutId = window.setTimeout(() => {
+        noteActivityTimeoutsRef.current.delete(activityKey);
+        logActivity({
+          action: "objective.note.updated",
+          targetType: "objective",
+          targetId: activityKey,
+          practiceId,
+          objectiveId,
+          summary: "Objective assessor review note updated",
+        });
+      }, 1200);
+      noteActivityTimeoutsRef.current.set(activityKey, timeoutId);
+    }
+  }, [logActivity, persistEvidenceRecords, persistObjectiveNote, persistObjectiveRecord, persistPracticeRecord]);
 
-  const persistPoamItem = useCallback((item: PoamItem) => {
+  const persistPoamItem = useCallback((item: PoamItem, action: "poam.created" | "poam.updated") => {
     if (!firestoreEnabled || !orgId || !uid) return;
 
     const assessmentId = getDefaultAssessmentId(requestedAssessmentLevel);
@@ -818,6 +898,17 @@ export const useCmmcData = (options: UseCmmcDataOptions = {}) => {
       ownerName: item.owner,
       createdByUid: uid,
       updatedByUid: uid,
+    }).then(() => {
+      logActivity({
+        action,
+        targetType: "poam",
+        targetId: item.id,
+        summary: action === "poam.created" ? `POA&M item created: ${item.title}` : `POA&M item updated: ${item.title}`,
+        metadata: {
+          priority: item.priority,
+          status: item.status,
+        },
+      });
     }).catch(error => {
       console.error("[assessmentFirestore] POA&M item save failed; local state retained", {
         orgId,
@@ -826,16 +917,16 @@ export const useCmmcData = (options: UseCmmcDataOptions = {}) => {
         error,
       });
     });
-  }, [firestoreEnabled, orgId, uid, requestedAssessmentLevel]);
+  }, [firestoreEnabled, logActivity, orgId, uid, requestedAssessmentLevel]);
 
   const updatePoamItem = (item: PoamItem) => {
     setPoamItems(prev => prev.map(p => p.id === item.id ? item : p));
-    persistPoamItem(item);
+    persistPoamItem(item, "poam.updated");
   };
   const addPoamItem = (item: Omit<PoamItem, 'id' | 'createdAt' | 'source'>) => {
     const newItem = { ...item, id: crypto.randomUUID(), createdAt: new Date().toISOString(), source: 'manual' as const };
     setPoamItems(prev => [...prev, newItem]);
-    persistPoamItem(newItem);
+    persistPoamItem(newItem, "poam.created");
   };
 
   const updateResponsibilityMatrixEntry = (id: string, updates: Partial<ResponsibilityMatrixEntry>) => {
@@ -1035,11 +1126,21 @@ export const useCmmcData = (options: UseCmmcDataOptions = {}) => {
       saveAssessmentLastSavedAt(orgId, assessmentId, uid),
       saveScoreSnapshot(orgId, assessmentId, snapshot),
     ]);
+    logActivity({
+      action: "assessment.saved",
+      targetType: "assessment",
+      targetId: assessmentId,
+      summary: "Assessment saved",
+      metadata: {
+        snapshotId: snapshot.snapshotId,
+      },
+    });
   }, [
     analyzerAnswers,
     buildScoreSnapshot,
     companyProfile,
     firestoreEnabled,
+    logActivity,
     minedPractices,
     orgId,
     poamItems,

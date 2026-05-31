@@ -446,6 +446,28 @@ export interface ScoreSnapshot {
   createdAt?: any;
 }
 
+export interface ActivityLogEntry {
+  activityId: string;
+  orgId: string;
+  assessmentId: string;
+  actorUid: string;
+  actorEmail: string;
+  action:
+    | "objective.status.changed"
+    | "objective.note.updated"
+    | "evidence.uploaded"
+    | "poam.created"
+    | "poam.updated"
+    | "assessment.saved";
+  targetType: "assessment" | "objective" | "evidence" | "poam";
+  targetId: string;
+  practiceId?: string;
+  objectiveId?: string;
+  summary: string;
+  metadata?: Record<string, any>;
+  createdAt?: any;
+}
+
 export interface PersistedState {
   version: number;
   subscriptionLevel: SubscriptionLevel; // New field

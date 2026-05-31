@@ -183,6 +183,12 @@ match /orgs/{orgId} {
       allow create: if canWriteAssessmentShell(orgId);
       allow update, delete: if false;
     }
+
+    match /activityLog/{activityId} {
+      allow read: if canReadAssessmentData(orgId);
+      allow create: if canWriteAssessmentShell(orgId);
+      allow update, delete: if false;
+    }
   }
 
   match /evidence/{evidenceId} {

@@ -389,6 +389,7 @@ const getDomainDisplayLabel = (domainKey: string) => {
   } = useCmmcData({
     orgId: currentOrgId,
     uid: currentUid,
+    actorEmail: auth.currentUser?.email || (profile as any)?.email || "",
     firestoreEnabled: firestoreAssessmentsEnabled,
     assessmentLevel: effectiveSubscriptionLevel,
   });

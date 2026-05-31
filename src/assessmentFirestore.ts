@@ -13,6 +13,7 @@ import { db } from "./firebase";
 import type {
   AssessmentDoc,
   AssessmentLevel,
+  ActivityLogEntry,
   EvidenceRecord,
   FirestoreObjectiveRecord,
   FirestorePoamItem,
@@ -31,6 +32,7 @@ export type AssessmentState = {
   notes: NoteRecord[];
   poamItems: FirestorePoamItem[];
   scoreSnapshots: ScoreSnapshot[];
+  activityLogEntries: ActivityLogEntry[];
 };
 
 export type RecoverySummary = {
@@ -167,6 +169,7 @@ export async function loadAssessmentState(orgId: string, assessmentId: string): 
     notesSnap,
     poamItemsSnap,
     scoreSnapshotsSnap,
+    activityLogEntriesSnap,
   ] = await Promise.all([
     getDocs(collection(assessmentRef, "practiceRecords")),
     getDocs(collection(assessmentRef, "objectiveRecords")),
@@ -174,6 +177,7 @@ export async function loadAssessmentState(orgId: string, assessmentId: string): 
     loadNoteRecords(orgId, assessmentId),
     loadPoamItems(orgId, assessmentId),
     loadScoreSnapshots(orgId, assessmentId),
+    loadActivityLogEntries(orgId, assessmentId),
   ]);
 
   const state: AssessmentState = {
@@ -192,6 +196,7 @@ export async function loadAssessmentState(orgId: string, assessmentId: string): 
     notes: notesSnap,
     poamItems: poamItemsSnap,
     scoreSnapshots: scoreSnapshotsSnap,
+    activityLogEntries: activityLogEntriesSnap,
   };
 
   const summary = buildRecoverySummary(state);
@@ -227,6 +232,15 @@ export async function loadScoreSnapshots(orgId: string, assessmentId: string): P
   return snapshotsSnap.docs.map((d) => ({
     snapshotId: decodeURIComponent(d.id),
     ...(d.data() as Omit<ScoreSnapshot, "snapshotId">),
+  }));
+}
+
+export async function loadActivityLogEntries(orgId: string, assessmentId: string): Promise<ActivityLogEntry[]> {
+  const activityRef = collection(db, "orgs", orgId, "assessments", assessmentId, "activityLog");
+  const activitySnap = await getDocs(query(activityRef, orderBy("createdAt", "desc"), limit(50)));
+  return activitySnap.docs.map((d) => ({
+    activityId: decodeURIComponent(d.id),
+    ...(d.data() as Omit<ActivityLogEntry, "activityId">),
   }));
 }
 
@@ -453,6 +467,37 @@ export async function saveAssessmentLastSavedAt(
   console.info("[assessmentFirestore] updated assessment lastSavedAt", {
     orgId,
     assessmentId,
+  });
+}
+
+export async function saveActivityLogEntry(
+  orgId: string,
+  assessmentId: string,
+  entry: ActivityLogEntry
+): Promise<void> {
+  const ref = doc(db, "orgs", orgId, "assessments", assessmentId, "activityLog", cleanDocId(entry.activityId));
+  const payload = stripUndefined({
+    activityId: entry.activityId,
+    orgId,
+    assessmentId,
+    actorUid: entry.actorUid,
+    actorEmail: entry.actorEmail,
+    action: entry.action,
+    targetType: entry.targetType,
+    targetId: entry.targetId,
+    practiceId: entry.practiceId,
+    objectiveId: entry.objectiveId,
+    summary: entry.summary,
+    metadata: entry.metadata ? stripUndefined(entry.metadata) : undefined,
+    createdAt: serverTimestamp(),
+  });
+
+  await setDoc(ref, payload);
+  console.info("[assessmentFirestore] saved activity log entry", {
+    orgId,
+    assessmentId,
+    activityId: entry.activityId,
+    action: entry.action,
   });
 }
 
