@@ -147,7 +147,7 @@ export async function loadAssessmentState(orgId: string, assessmentId: string): 
     getDocs(collection(assessmentRef, "objectiveRecords")),
     getDocs(collection(db, "orgs", orgId, "evidence")),
     loadNoteRecords(orgId, assessmentId),
-    getDocs(collection(assessmentRef, "poamItems")),
+    loadPoamItems(orgId, assessmentId),
     getDocs(query(collection(assessmentRef, "scoreSnapshots"), orderBy("createdAt", "desc"))),
   ]);
 
@@ -165,11 +165,7 @@ export async function loadAssessmentState(orgId: string, assessmentId: string): 
       .map((d) => ({ evidenceId: d.id, ...(d.data() as Omit<EvidenceRecord, "evidenceId">) }))
       .filter((e) => e.assessmentId === assessmentId),
     notes: notesSnap,
-    poamItems: poamItemsSnap.docs.map((d) => ({
-      poamId: d.id,
-      id: d.id,
-      ...(d.data() as Omit<FirestorePoamItem, "poamId" | "id">),
-    })),
+    poamItems: poamItemsSnap,
     scoreSnapshots: scoreSnapshotsSnap.docs.map((d) => ({
       snapshotId: d.id,
       ...(d.data() as Omit<ScoreSnapshot, "snapshotId">),
@@ -182,6 +178,15 @@ export async function loadNoteRecords(orgId: string, assessmentId: string): Prom
   return notesSnap.docs
     .map((d) => ({ noteId: d.id, ...(d.data() as Omit<NoteRecord, "noteId">) }))
     .filter((note) => note.assessmentId === assessmentId);
+}
+
+export async function loadPoamItems(orgId: string, assessmentId: string): Promise<FirestorePoamItem[]> {
+  const poamItemsSnap = await getDocs(collection(db, "orgs", orgId, "assessments", assessmentId, "poamItems"));
+  return poamItemsSnap.docs.map((d) => ({
+    poamId: decodeURIComponent(d.id),
+    id: decodeURIComponent(d.id),
+    ...(d.data() as Omit<FirestorePoamItem, "poamId" | "id">),
+  }));
 }
 
 export async function savePracticeRecord(
@@ -308,6 +313,48 @@ export async function saveNoteRecord(
     noteId,
     practiceId: record.practiceId,
     objectiveId: record.objectiveId,
+  });
+}
+
+export async function savePoamItem(
+  orgId: string,
+  assessmentId: string,
+  record: FirestorePoamItem
+): Promise<void> {
+  const poamId = record.poamId;
+  const ref = doc(db, "orgs", orgId, "assessments", assessmentId, "poamItems", cleanDocId(poamId));
+  const snap = await getDoc(ref);
+  const payload = stripUndefined({
+    poamId,
+    orgId,
+    assessmentId,
+    title: record.title,
+    description: record.description,
+    relatedPracticeIds: record.relatedPracticeIds,
+    relatedObjectiveIds: record.relatedObjectiveIds,
+    priority: record.priority,
+    status: record.status,
+    ownerUid: record.ownerUid,
+    ownerName: record.ownerName || record.owner,
+    targetDate: record.targetDate,
+    completedDate: record.completedDate,
+    source: record.source,
+    riskStatement: record.riskStatement,
+    remediationPlan: record.remediationPlan,
+    milestones: record.milestones,
+    category: record.category,
+    notes: record.notes,
+    createdByUid: snap.exists() ? undefined : record.createdByUid,
+    updatedByUid: record.updatedByUid,
+    createdAt: snap.exists() ? undefined : record.createdAt || serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+
+  await setDoc(ref, payload, { merge: true });
+  console.info("[assessmentFirestore] saved POA&M item", {
+    orgId,
+    assessmentId,
+    poamId,
   });
 }
 

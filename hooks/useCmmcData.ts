@@ -39,6 +39,7 @@ import {
   saveEvidenceRecord,
   saveNoteRecord,
   saveObjectiveRecord,
+  savePoamItem,
   savePracticeRecord,
 } from "../src/assessmentFirestore";
 
@@ -223,6 +224,30 @@ const toEvidenceUploadedAt = (evidence: EvidenceRecord): string => {
   if (evidence.createdAt?.toDate) return evidence.createdAt.toDate().toISOString();
   return new Date().toISOString();
 };
+
+const toPoamDate = (value: any): string | undefined => {
+  if (typeof value === "string") return value;
+  if (value?.toDate) return value.toDate().toISOString();
+  return undefined;
+};
+
+const toLocalPoamItem = (item: FirestorePoamItem): PoamItem => ({
+  id: item.id || item.poamId,
+  title: item.title,
+  description: item.description,
+  relatedPracticeIds: item.relatedPracticeIds || [],
+  category: item.category || "other",
+  priority: item.priority,
+  status: item.status,
+  owner: item.owner || item.ownerName,
+  createdAt: toPoamDate(item.createdAt) || new Date().toISOString(),
+  targetDate: item.targetDate,
+  completedDate: item.completedDate,
+  source: item.source === "objective_gap" || item.source === "ai_generated" || item.source === "assessor"
+    ? "manual"
+    : item.source,
+  notes: item.notes,
+});
 
 const mergeFirestorePracticeRecords = (
   baseRecords: PracticeRecord[],
@@ -476,23 +501,14 @@ export const useCmmcData = (options: UseCmmcDataOptions = {}) => {
         ));
 
         if (firestoreState.poamItems.length > 0) {
-          setPoamItems(firestoreState.poamItems.map((item: FirestorePoamItem) => ({
-            id: item.id || item.poamId,
-            title: item.title,
-            description: item.description,
-            relatedPracticeIds: item.relatedPracticeIds || [],
-            category: item.category,
-            priority: item.priority,
-            status: item.status,
-            owner: item.owner || item.ownerName,
-            createdAt: item.createdAt,
-            targetDate: item.targetDate,
-            completedDate: item.completedDate,
-            source: item.source === "objective_gap" || item.source === "ai_generated" || item.source === "assessor"
-              ? "manual"
-              : item.source,
-            notes: item.notes,
-          })));
+          setPoamItems(prev => {
+            const merged = new Map(prev.map(item => [item.id, item]));
+            firestoreState.poamItems.forEach(item => {
+              const localItem = toLocalPoamItem(item);
+              merged.set(localItem.id, localItem);
+            });
+            return Array.from(merged.values());
+          });
         }
 
         setDataSourceInfo(prev => `${prev} | Firestore assessment: ${assessment.assessmentId}`);
@@ -780,9 +796,36 @@ export const useCmmcData = (options: UseCmmcDataOptions = {}) => {
     if (updates.note !== undefined) persistObjectiveNote(practiceId, objectiveId, updates.note);
   }, [persistEvidenceRecords, persistObjectiveNote, persistObjectiveRecord, persistPracticeRecord]);
 
-  const updatePoamItem = (item: PoamItem) => setPoamItems(prev => prev.map(p => p.id === item.id ? item : p));
+  const persistPoamItem = useCallback((item: PoamItem) => {
+    if (!firestoreEnabled || !orgId || !uid) return;
+
+    const assessmentId = getDefaultAssessmentId(requestedAssessmentLevel);
+    void savePoamItem(orgId, assessmentId, {
+      ...item,
+      poamId: item.id,
+      orgId,
+      assessmentId,
+      ownerName: item.owner,
+      createdByUid: uid,
+      updatedByUid: uid,
+    }).catch(error => {
+      console.error("[assessmentFirestore] POA&M item save failed; local state retained", {
+        orgId,
+        assessmentId,
+        poamId: item.id,
+        error,
+      });
+    });
+  }, [firestoreEnabled, orgId, uid, requestedAssessmentLevel]);
+
+  const updatePoamItem = (item: PoamItem) => {
+    setPoamItems(prev => prev.map(p => p.id === item.id ? item : p));
+    persistPoamItem(item);
+  };
   const addPoamItem = (item: Omit<PoamItem, 'id' | 'createdAt' | 'source'>) => {
-    setPoamItems(prev => [...prev, { ...item, id: crypto.randomUUID(), createdAt: new Date().toISOString(), source: 'manual' as const }]);
+    const newItem = { ...item, id: crypto.randomUUID(), createdAt: new Date().toISOString(), source: 'manual' as const };
+    setPoamItems(prev => [...prev, newItem]);
+    persistPoamItem(newItem);
   };
 
   const updateResponsibilityMatrixEntry = (id: string, updates: Partial<ResponsibilityMatrixEntry>) => {

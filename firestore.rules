@@ -174,7 +174,8 @@ match /orgs/{orgId} {
 
     match /poamItems/{poamId} {
       allow read: if canReadAssessmentData(orgId);
-      allow write: if false;
+      allow create, update: if canWriteAssessmentShell(orgId);
+      allow delete: if false;
     }
 
     match /scoreSnapshots/{snapshotId} {
