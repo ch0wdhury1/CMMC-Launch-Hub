@@ -33,6 +33,7 @@ import { ReadinessAnalyzerView } from "./components/readiness/ReadinessAnalyzerV
 import { SavedReportsView } from "./components/readiness/SavedReportsView";
 import { SystemSecurityPlan } from "./components/SystemSecurityPlan";
 import { Poam } from "./components/Poam";
+import { PoamReport } from "./components/PoamReport";
 import { ResponsibilityMatrixPage } from "./components/ResponsibilityMatrixPage";
 import { TrainingModule } from "./components/training/TrainingModule";
 import { NewsUpdates } from "./components/NewsUpdates";
@@ -133,6 +134,7 @@ type ViewState =
   | { type: "readinessReports" }
   | { type: "systemSecurityPlan" }
   | { type: "poam" }
+  | { type: "poamReport" }
   | { type: "responsibilityMatrix" }
   | { type: "training" }
   | { type: "newsUpdates" };
@@ -153,6 +155,7 @@ export type ActiveViewInfo =
   | { type: "readinessReports"; name: "readinessReports" }
   | { type: "systemSecurityPlan"; name: "systemSecurityPlan" }
   | { type: "poam"; name: "poam" }
+  | { type: "poamReport"; name: "poamReport" }
   | { type: "responsibilityMatrix"; name: "responsibilityMatrix" }
   | { type: "training"; name: "training" }
   | { type: "newsUpdates"; name: "newsUpdates" };
@@ -618,6 +621,7 @@ if (view.type === "domain") {
     if (view.type === "readinessReports") return { type: "readinessReports", name: "readinessReports" };
     if (view.type === "systemSecurityPlan") return { type: "systemSecurityPlan", name: "systemSecurityPlan" };
     if (view.type === "poam") return { type: "poam", name: "poam" };
+    if (view.type === "poamReport") return { type: "poamReport", name: "poamReport" };
     if (view.type === "responsibilityMatrix") return { type: "responsibilityMatrix", name: "responsibilityMatrix" };
     if (view.type === "training") return { type: "training", name: "training" };
     if (view.type === "newsUpdates") return { type: "newsUpdates", name: "newsUpdates" };
@@ -665,6 +669,7 @@ if (view.type === "domain") {
     if (view.type === "readinessReports") return "Readiness Vault";
     if (view.type === "systemSecurityPlan") return "System Security Plan";
     if (view.type === "poam") return "Remediation (POA&M)";
+    if (view.type === "poamReport") return "POA&M Report";
     if (view.type === "responsibilityMatrix") return "Responsibility Matrix";
     if (view.type === "training") return "Training Modules";
     if (view.type === "newsUpdates") return "News Updates";
@@ -992,6 +997,17 @@ case "domain": {
           />
         );
 
+      case "poamReport":
+        return (
+          <PoamReport
+            orgId={currentOrgId}
+            assessmentId={currentAssessmentId}
+            assessmentLevel={hasL2 ? "L2" : "L1"}
+            poamItems={poamItems}
+            canExport={isSuperAdmin || isOrgAdmin}
+          />
+        );
+
       case "training":
         return <TrainingModule />;
 
@@ -1059,6 +1075,7 @@ onDiagnosticsClick={isSuperAdmin ? () => setIsDiagnosticsOpen(true) : undefined}
           onReadinessReportsClick={() => setView({ type: "readinessReports" })}
           onSystemSecurityPlanClick={() => setView({ type: "systemSecurityPlan" })}
           onPoamClick={() => setView({ type: "poam" })}
+          onPoamReportClick={() => setView({ type: "poamReport" })}
           onResponsibilityMatrixClick={() => setView({ type: "responsibilityMatrix" })}
           onTrainingClick={() => setView({ type: "training" })}
           onNewsUpdatesClick={() => setView({ type: "newsUpdates" })}
