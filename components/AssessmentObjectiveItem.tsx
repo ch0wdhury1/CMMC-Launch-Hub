@@ -11,7 +11,7 @@ import {
 
 
 import { jsPDF } from 'jspdf';
-import { Paperclip, FileText, Trash2, Loader2, Bot, Volume2, Download, MessageSquare, Send, ChevronDown, ChevronUp, Save, Film, Clapperboard, X, ChevronLeft, ChevronRight, Sparkles, ClipboardCopy, CheckCircle2, XCircle, HelpCircle } from 'lucide-react';
+import { Paperclip, FileText, Trash2, Loader2, Bot, Volume2, Download, ExternalLink, MessageSquare, Send, ChevronDown, ChevronUp, Save, Film, Clapperboard, X, ChevronLeft, ChevronRight, Sparkles, ClipboardCopy, CheckCircle2, XCircle, HelpCircle } from 'lucide-react';
 
 type ChatMessage = {
   role: 'user' | 'model';
@@ -278,6 +278,31 @@ ${JSON.stringify(ctx, null, 2)}
   const removeArtifact = (artifactId: string) => {
     const updated = objective.artifacts.filter((a) => a.id !== artifactId);
     onUpdateObjective(objective.id, { artifacts: updated });
+  };
+
+  const formatFileSize = (bytes?: number) => {
+    if (typeof bytes !== "number") return "";
+    if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  };
+
+  const downloadArtifact = (artifact: Artifact) => {
+    if (!artifact.downloadUrl) return;
+    const link = document.createElement("a");
+    link.href = artifact.downloadUrl;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.download = artifact.fileName || artifact.name;
+    link.click();
+  };
+
+  const viewArtifact = (artifact: Artifact) => {
+    if (!artifact.downloadUrl) return;
+    if (artifact.fileType.startsWith("image/") || artifact.fileType === "application/pdf") {
+      window.open(artifact.downloadUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
+    downloadArtifact(artifact);
   };
 
   const handlePlaySummaryAudio = async () => {
@@ -579,7 +604,31 @@ Respond in a helpful, practical way:
                             <FileText className="h-8 w-8 text-gray-400 flex-shrink-0 mr-3" />
                             <div className="flex-1 min-w-0">
                                 <p className="text-sm font-medium text-gray-800 break-all">{artifact.name}</p>
+                                <p className="text-xs text-gray-500 mt-1">
+                                  {[formatFileSize(artifact.fileSize), `OCR: ${artifact.processingStatus?.replace("ocr_", "") || "pending"}`, `Storage: ${artifact.storageStatus === "upload_failed" ? "failed" : artifact.storageStatus || "unavailable"}`].filter(Boolean).join(" | ")}
+                                </p>
                                 <p className="text-xs text-gray-500 mt-1 italic">"{artifact.ocrSummary}"</p>
+                            </div>
+                            <div className="flex items-center gap-1 ml-2">
+                              <button
+                                type="button"
+                                onClick={() => viewArtifact(artifact)}
+                                disabled={!artifact.downloadUrl}
+                                title={artifact.downloadUrl ? "View evidence" : "File unavailable"}
+                                className="flex items-center text-xs px-2 py-1 text-blue-700 hover:bg-blue-50 rounded disabled:text-gray-400 disabled:hover:bg-transparent"
+                              >
+                                <ExternalLink className="h-3 w-3 mr-1" /> View
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => downloadArtifact(artifact)}
+                                disabled={!artifact.downloadUrl}
+                                title={artifact.downloadUrl ? "Download evidence" : "File unavailable"}
+                                className="flex items-center text-xs px-2 py-1 text-blue-700 hover:bg-blue-50 rounded disabled:text-gray-400 disabled:hover:bg-transparent"
+                              >
+                                <Download className="h-3 w-3 mr-1" /> Download
+                              </button>
+                              {!artifact.downloadUrl && <span className="text-xs text-gray-400">File unavailable</span>}
                             </div>
                             <button onClick={() => removeArtifact(artifact.id)} className="text-gray-400 hover:text-red-600 ml-2"><Trash2 className="h-4 w-4" /></button>
                         </div>
