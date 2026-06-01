@@ -1,7 +1,7 @@
 
 import React, { useMemo } from 'react';
 import { X, AlertTriangle, CheckCircle, Database, List, Hash, AlertCircle, Info, Zap, ShieldCheck, ArrowRight, Lock, Search, Cpu, Bot } from 'lucide-react';
-import { Domain, Practice, SubscriptionLevel, L2ExtractionResult } from '../types';
+import { Domain, Practice, SubscriptionLevel, L2ExtractionResult, EvidenceSummary } from '../types';
 import { L1_PRACTICE_COUNT, L2_PRACTICE_COUNT } from '../constants';
 import { L2DataMinerView } from './l2miner/L2DataMinerView';
 
@@ -11,6 +11,7 @@ interface DiagnosticsDrawerProps {
   domains: Domain[];
   allPractices: Practice[];
   dataSourceInfo: string;
+  evidenceSummary: EvidenceSummary;
   subscriptionLevel: SubscriptionLevel;
   onUpgrade: () => void;
   onCommitMinedRequirement: (mined: L2ExtractionResult) => void;
@@ -24,6 +25,7 @@ export const DiagnosticsDrawer: React.FC<DiagnosticsDrawerProps> = ({
   domains,
   allPractices,
   dataSourceInfo,
+  evidenceSummary,
   subscriptionLevel,
   onUpgrade,
   onCommitMinedRequirement,
@@ -183,6 +185,37 @@ export const DiagnosticsDrawer: React.FC<DiagnosticsDrawerProps> = ({
               <p className="text-xl font-bold">{diagnostics.l2Count}</p>
               <p className="text-[9px] text-gray-500 uppercase">Advanced Controls (In Engine)</p>
             </div>
+          </div>
+
+          <div className="space-y-3">
+            <h4 className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Evidence Summary</h4>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                ["Total Evidence", evidenceSummary.totalEvidenceCount],
+                ["Storage Uploaded", evidenceSummary.evidenceWithStorageCount],
+                ["Storage Missing", evidenceSummary.evidenceWithoutStorageCount],
+                ["OCR Completed", evidenceSummary.ocrCompletedCount],
+                ["OCR Failed", evidenceSummary.ocrFailedCount],
+                ["OCR Pending", evidenceSummary.ocrPendingCount],
+                ["Practices Without Evidence", evidenceSummary.practicesWithoutEvidence.length],
+                ["Objectives Without Evidence", evidenceSummary.objectivesWithoutEvidence.length],
+              ].map(([label, value]) => (
+                <div key={label} className="p-3 bg-gray-800 rounded-lg border border-gray-700">
+                  <p className="text-[9px] font-black uppercase tracking-wider text-gray-400">{label}</p>
+                  <p className="text-xl font-bold text-white">{value}</p>
+                </div>
+              ))}
+            </div>
+            {evidenceSummary.practicesWithoutEvidence.length > 0 && (
+              <div className="p-3 bg-black/30 rounded-lg border border-gray-800">
+                <p className="text-[9px] font-black uppercase tracking-wider text-gray-500 mb-2">First 5 Practices Without Evidence</p>
+                <ul className="space-y-1 text-xs font-mono text-gray-300">
+                  {evidenceSummary.practicesWithoutEvidence.slice(0, 5).map(practiceId => (
+                    <li key={practiceId}>{practiceId}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
 
           <div className="space-y-3">
