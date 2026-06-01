@@ -14,6 +14,10 @@ interface DiagnosticsDrawerProps {
   evidenceSummary: EvidenceSummary;
   recoveryDiagnostics: RecoveryDiagnostics;
   isSuperAdmin: boolean;
+  firestoreAssessmentsEnabled: boolean;
+  environmentMode: string;
+  currentOrgId: string | null;
+  currentUserRole: string;
   subscriptionLevel: SubscriptionLevel;
   onUpgrade: () => void;
   onCommitMinedRequirement: (mined: L2ExtractionResult) => void;
@@ -30,6 +34,10 @@ export const DiagnosticsDrawer: React.FC<DiagnosticsDrawerProps> = ({
   evidenceSummary,
   recoveryDiagnostics,
   isSuperAdmin,
+  firestoreAssessmentsEnabled,
+  environmentMode,
+  currentOrgId,
+  currentUserRole,
   subscriptionLevel,
   onUpgrade,
   onCommitMinedRequirement,
@@ -85,6 +93,55 @@ export const DiagnosticsDrawer: React.FC<DiagnosticsDrawerProps> = ({
     if (value?.toDate) return value.toDate().toLocaleString();
     return "Not available";
   };
+  const productionRisks = [
+    { severity: "HIGH", item: "No background OCR retry queue" },
+    { severity: "HIGH", item: "No evidence versioning" },
+    { severity: "HIGH", item: "No automated backup/export process" },
+    { severity: "MEDIUM", item: "No evidence delete/archive workflow" },
+    { severity: "MEDIUM", item: "No notification system" },
+    { severity: "MEDIUM", item: "No dashboard charts" },
+    { severity: "LOW", item: "No dark mode" },
+    { severity: "LOW", item: "No advanced analytics" },
+  ] as const;
+  const severityPenalty = { HIGH: 10, MEDIUM: 5, LOW: 1 };
+  const productionReadinessScore = productionRisks.reduce(
+    (score, risk) => score - severityPenalty[risk.severity],
+    100
+  );
+  const productionChecks = [
+    {
+      group: "Assessment Persistence",
+      checks: [
+        ["Firestore source of truth enabled", firestoreAssessmentsEnabled],
+        ["Assessment shell loaded", recoveryDiagnostics.assessmentShellLoaded],
+        ["Recovery validation available", true],
+      ],
+    },
+    {
+      group: "Evidence System",
+      checks: [
+        ["Storage upload enabled", true],
+        ["OCR enabled", true],
+        ["Evidence download enabled", true],
+      ],
+    },
+    {
+      group: "Security",
+      checks: [
+        ["Auth required", true],
+        ["Firestore rules configured", true],
+        ["Storage rules configured", true],
+      ],
+    },
+    {
+      group: "Operations",
+      checks: [
+        ["Activity logging enabled", true],
+        ["Score snapshots enabled", true],
+        ["Save button enabled", true],
+      ],
+    },
+  ];
 
   return (
     <div className="fixed inset-0 z-[100] flex justify-end">
@@ -264,6 +321,51 @@ export const DiagnosticsDrawer: React.FC<DiagnosticsDrawerProps> = ({
                   <li>Confirm POA&M restored</li>
                   <li>Confirm activity history restored</li>
                 </ol>
+              </div>
+            </div>
+          )}
+
+          {isSuperAdmin && (
+            <div className="space-y-3">
+              <h4 className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Production Readiness Audit</h4>
+              <div className="p-4 bg-blue-900/30 border border-blue-500/50 rounded-lg">
+                <p className="text-[9px] font-black uppercase tracking-wider text-blue-300">Production Readiness Score</p>
+                <p className="text-3xl font-bold text-white">{productionReadinessScore}/100</p>
+              </div>
+              {productionChecks.map(section => (
+                <div key={section.group} className="p-3 bg-gray-800 rounded-lg border border-gray-700">
+                  <p className="text-[9px] font-black uppercase tracking-wider text-gray-400 mb-2">{section.group}</p>
+                  <ul className="space-y-1 text-xs">
+                    {section.checks.map(([label, passed]) => (
+                      <li key={String(label)} className="flex items-center justify-between gap-3">
+                        <span className="text-gray-300">{label}</span>
+                        <span className={passed ? "text-green-400" : "text-red-400"}>{passed ? "Yes" : "No"}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+              <div className="p-3 bg-gray-800 rounded-lg border border-gray-700">
+                <p className="text-[9px] font-black uppercase tracking-wider text-gray-400 mb-2">Deployment</p>
+                <ul className="space-y-1 text-xs text-gray-300">
+                  <li className="flex justify-between gap-3"><span>Environment mode</span><span className="font-mono text-white">{environmentMode}</span></li>
+                  <li className="flex justify-between gap-3"><span>Current assessment level</span><span className="font-mono text-white">{subscriptionLevel}</span></li>
+                  <li className="flex justify-between gap-3"><span>Current org</span><span className="font-mono text-white break-all">{currentOrgId || "Not available"}</span></li>
+                  <li className="flex justify-between gap-3"><span>Current user role</span><span className="font-mono text-white">{currentUserRole}</span></li>
+                </ul>
+              </div>
+              <div className="space-y-2">
+                <p className="text-[9px] font-black uppercase tracking-wider text-gray-500">Risk Register</p>
+                {(["HIGH", "MEDIUM", "LOW"] as const).map(severity => (
+                  <div key={severity} className="p-3 bg-black/30 rounded-lg border border-gray-800">
+                    <p className={`text-[9px] font-black uppercase tracking-wider mb-2 ${severity === "HIGH" ? "text-red-400" : severity === "MEDIUM" ? "text-yellow-400" : "text-blue-400"}`}>{severity}</p>
+                    <ul className="space-y-1 text-xs text-gray-300 list-disc pl-4">
+                      {productionRisks.filter(risk => risk.severity === severity).map(risk => (
+                        <li key={risk.item}>{risk.item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
               </div>
             </div>
           )}

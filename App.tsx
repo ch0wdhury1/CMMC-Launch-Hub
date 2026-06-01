@@ -1075,6 +1075,10 @@ onDiagnosticsClick={isSuperAdmin ? () => setIsDiagnosticsOpen(true) : undefined}
         evidenceSummary={evidenceSummary}
         recoveryDiagnostics={recoveryDiagnostics}
         isSuperAdmin={isSuperAdmin}
+        firestoreAssessmentsEnabled={firestoreAssessmentsEnabled}
+        environmentMode={import.meta.env.MODE}
+        currentOrgId={currentOrgId}
+        currentUserRole={isSuperAdmin ? "superAdmin" : orgRole || "member"}
         subscriptionLevel={effectiveSubscriptionLevel}
         onUpgrade={() => setIsUpgradeModalOpen(true)}
         onCommitMinedRequirement={commitMinedRequirement}
