@@ -57,6 +57,12 @@ service firebase.storage {
       allow delete: if false;
     }
 
+    match /orgs/{orgId}/evidenceLibrary/{evidenceId}/{fileName} {
+      allow read: if canReadEvidence(orgId);
+      allow create, update: if canWriteEvidence(orgId);
+      allow delete: if false;
+    }
+
     match /{allPaths=**} {
       allow read, write: if false;
     }

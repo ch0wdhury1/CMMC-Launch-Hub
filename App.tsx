@@ -25,6 +25,7 @@ import { AppHeader } from "./components/AppHeader";
 import { AppFooter } from "./components/AppFooter";
 import { ProfilePage } from "./components/ProfilePage";
 import { SavedTemplates } from "./components/SavedTemplates";
+import { EvidenceLibrary } from "./components/EvidenceLibrary";
 import { TemplateAssist } from "./components/TemplateAssist";
 import { SprsScorecard } from "./components/SprsScorecard";
 import { SolutionsView } from "./components/SolutionsView";
@@ -124,6 +125,7 @@ type ViewState =
   | { type: "executive" }
   | { type: "profile" }
   | { type: "savedTemplates" }
+  | { type: "evidenceLibrary" }
   | { type: "templateAssist" }
   | { type: "sprs" }
   | { type: "solutions" }
@@ -143,6 +145,7 @@ export type ActiveViewInfo =
   | { type: "executive"; name: "executive" }
   | { type: "profile"; name: "profile" }
   | { type: "savedTemplates"; name: "savedTemplates" }
+  | { type: "evidenceLibrary"; name: "evidenceLibrary" }
   | { type: "templateAssist"; name: "templateAssist" }
   | { type: "sprs"; name: "sprs" }
   | { type: "solutions"; name: "solutions" }
@@ -605,6 +608,7 @@ if (view.type === "domain") {
     if (view.type === "executive") return { type: "executive", name: "executive" };
     if (view.type === "profile") return { type: "profile", name: "profile" };
     if (view.type === "savedTemplates") return { type: "savedTemplates", name: "savedTemplates" };
+    if (view.type === "evidenceLibrary") return { type: "evidenceLibrary", name: "evidenceLibrary" };
     if (view.type === "templateAssist") return { type: "templateAssist", name: "templateAssist" };
     if (view.type === "sprs") return { type: "sprs", name: "sprs" };
     if (view.type === "solutions") return { type: "solutions", name: "solutions" };
@@ -651,6 +655,7 @@ if (view.type === "domain") {
     if (view.type === "executive") return "Executive Narrative";
     if (view.type === "profile") return "Company Profile";
     if (view.type === "savedTemplates") return "Saved Templates";
+    if (view.type === "evidenceLibrary") return "Evidence Library";
     if (view.type === "templateAssist") return "Template Assist";
     if (view.type === "sprs") return "SPRS Scorecard";
     if (view.type === "solutions") return "Starter Kits";
@@ -707,6 +712,7 @@ if (view.type === "domain") {
           "executive",
           "profile",
           "savedTemplates",
+          "evidenceLibrary",
           "templateAssist",
           "solutions",
           "sprs",
@@ -913,6 +919,9 @@ case "domain": {
           />
         );
 
+      case "evidenceLibrary":
+        return <EvidenceLibrary orgId={currentOrgId} uid={currentUid} role={orgRole} isSuperAdmin={isSuperAdmin} />;
+
       case "templateAssist":
         return <TemplateAssist domains={domains} storeTemplate={storeTemplate} />;
 
@@ -1033,6 +1042,7 @@ onDiagnosticsClick={isSuperAdmin ? () => setIsDiagnosticsOpen(true) : undefined}
           onTemplateAssistClick={() => setView({ type: "templateAssist" })}
           onSprsClick={() => setView({ type: "sprs" })}
           onSolutionsClick={() => setView({ type: "solutions" })}
+          onEvidenceLibraryClick={() => setView({ type: "evidenceLibrary" })}
           onSecurityAnalyzerClick={() => setView({ type: "readinessAnalyzer" })}
           onReadinessReportsClick={() => setView({ type: "readinessReports" })}
           onSystemSecurityPlanClick={() => setView({ type: "systemSecurityPlan" })}

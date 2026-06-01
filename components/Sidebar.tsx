@@ -38,6 +38,7 @@ type Props = {
   onTemplateAssistClick: () => void;
   onSprsClick: () => void;
   onSolutionsClick: () => void;
+  onEvidenceLibraryClick: () => void;
   onSecurityAnalyzerClick: () => void;
   onReadinessReportsClick: () => void;
   onSystemSecurityPlanClick: () => void;
@@ -96,6 +97,7 @@ export function Sidebar(props: Props) {
     onTemplateAssistClick,
     onSprsClick,
     onSolutionsClick,
+    onEvidenceLibraryClick,
     onSecurityAnalyzerClick,
     onReadinessReportsClick,
     onSystemSecurityPlanClick,
@@ -474,6 +476,13 @@ useEffect(() => {
             >
               <span className="ml-7">Template Assist (Smart Fill)</span>
               {!access.tools.templateAssist && <Lock className="h-3 w-3 ml-auto text-gray-400" />}
+            </button>
+
+            <button
+              className={navClass(activeViewInfo?.type === "evidenceLibrary")}
+              onClick={onEvidenceLibraryClick}
+            >
+              <span className="ml-7">Evidence Library</span>
             </button>
           </div>
         )}

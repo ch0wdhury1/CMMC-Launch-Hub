@@ -468,6 +468,25 @@ export interface EvidenceRecord {
   updatedAt?: any;
 }
 
+export interface EvidenceLibraryItem {
+  id: string;
+  orgId: string;
+  fileName: string;
+  fileType?: string;
+  fileSize?: number;
+  storagePath: string;
+  downloadURL?: string;
+  category?: string;
+  description?: string;
+  tags?: string[];
+  status: "active" | "archived";
+  uploadedBy: string;
+  uploadedAt: any;
+  updatedAt: any;
+  archivedAt?: any;
+  archivedBy?: string;
+}
+
 export interface NoteRecord {
   noteId: string;
   orgId: string;
