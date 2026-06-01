@@ -104,6 +104,20 @@ export interface Domain {
   practices: Practice[];
 }
 
+export interface EvidenceSummary {
+  totalEvidenceCount: number;
+  evidenceWithStorageCount: number;
+  evidenceWithoutStorageCount: number;
+  ocrCompletedCount: number;
+  ocrFailedCount: number;
+  ocrPendingCount: number;
+  evidenceByPracticeId: Record<string, Artifact[]>;
+  evidenceByObjectiveId: Record<string, Artifact[]>;
+  evidenceByDomain: Record<string, Artifact[]>;
+  practicesWithoutEvidence: string[];
+  objectivesWithoutEvidence: string[];
+}
+
 export interface UserProfile {
   id: string;
   fullName: string;

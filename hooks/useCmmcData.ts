@@ -27,6 +27,7 @@ import {
   FirestoreObjectiveRecord,
   EvidenceRecord,
   EvidenceFileUpload,
+  EvidenceSummary,
   NoteRecord,
   FirestorePoamItem,
   Artifact,
@@ -1082,6 +1083,65 @@ export const useCmmcData = (options: UseCmmcDataOptions = {}) => {
       };
   }, [practiceRecords, allPractices]);
 
+  const evidenceSummary = useMemo((): EvidenceSummary => {
+    const recordMap = new Map(practiceRecords.map(record => [record.id, record]));
+    const evidenceById = new Map<string, Artifact>();
+    const evidenceByPracticeId: Record<string, Artifact[]> = {};
+    const evidenceByObjectiveId: Record<string, Artifact[]> = {};
+    const evidenceByDomain: Record<string, Artifact[]> = {};
+    const practicesWithoutEvidence: string[] = [];
+    const objectivesWithoutEvidence: string[] = [];
+
+    allPractices.forEach(practice => {
+      const practiceRecord = recordMap.get(practice.id);
+      const practiceEvidence = new Map<string, Artifact>();
+
+      practice.assessment_objectives.forEach(objective => {
+        const artifacts = practiceRecord?.objectiveRecords[objective.id]?.artifacts || [];
+        evidenceByObjectiveId[getObjectiveRecordStorageKey(practice.id, objective.id)] = artifacts;
+        if (artifacts.length === 0) {
+          objectivesWithoutEvidence.push(getObjectiveRecordStorageKey(practice.id, objective.id));
+        }
+
+        artifacts.forEach(artifact => {
+          evidenceById.set(artifact.id, artifact);
+          practiceEvidence.set(artifact.id, artifact);
+        });
+      });
+
+      const practiceArtifacts = Array.from(practiceEvidence.values());
+      evidenceByPracticeId[practice.id] = practiceArtifacts;
+      if (practiceArtifacts.length === 0) practicesWithoutEvidence.push(practice.id);
+
+      const domainArtifacts = new Map(
+        (evidenceByDomain[practice.domainName] || []).map(artifact => [artifact.id, artifact])
+      );
+      practiceArtifacts.forEach(artifact => domainArtifacts.set(artifact.id, artifact));
+      evidenceByDomain[practice.domainName] = Array.from(domainArtifacts.values());
+    });
+
+    const evidence = Array.from(evidenceById.values());
+    const summary = {
+      totalEvidenceCount: evidence.length,
+      evidenceWithStorageCount: evidence.filter(artifact => artifact.storageStatus === "uploaded" || Boolean(artifact.storagePath)).length,
+      evidenceWithoutStorageCount: evidence.filter(artifact => artifact.storageStatus !== "uploaded" && !artifact.storagePath).length,
+      ocrCompletedCount: evidence.filter(artifact => artifact.processingStatus === "ocr_completed").length,
+      ocrFailedCount: evidence.filter(artifact => artifact.processingStatus === "ocr_failed").length,
+      ocrPendingCount: evidence.filter(artifact => artifact.processingStatus !== "ocr_completed" && artifact.processingStatus !== "ocr_failed").length,
+      evidenceByPracticeId,
+      evidenceByObjectiveId,
+      evidenceByDomain,
+      practicesWithoutEvidence,
+      objectivesWithoutEvidence,
+    };
+    console.info("[EvidenceSummary] Built evidence summary", {
+      totalEvidenceCount: summary.totalEvidenceCount,
+      practicesWithoutEvidence: summary.practicesWithoutEvidence.length,
+      objectivesWithoutEvidence: summary.objectivesWithoutEvidence.length,
+    });
+    return summary;
+  }, [allPractices, practiceRecords]);
+
   const scoreSnapshotFingerprint = useMemo(() => {
     const activePracticeIds = new Set(allPractices.map(practice => practice.id));
     return JSON.stringify({
@@ -1314,6 +1374,7 @@ export const useCmmcData = (options: UseCmmcDataOptions = {}) => {
     analyzerAnswers, 
     savedReports, 
     scores, 
+    evidenceSummary,
     poamItems, 
     activityLogEntries,
     responsibilityMatrix,
