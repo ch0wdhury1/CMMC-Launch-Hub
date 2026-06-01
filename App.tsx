@@ -322,6 +322,8 @@ useEffect(() => {
   const currentUid = auth.currentUser?.uid || (profile as any)?.uid || null;
   const firestoreAssessmentsEnabled =
     String(import.meta.env.VITE_FIRESTORE_ASSESSMENTS || "false").toLowerCase() === "true";
+  const currentAssessmentId = hasL2 ? "default_l2" : "default_l1";
+  const canManageEvidence = isSuperAdmin || ["orgOwner", "orgAdmin", "assessor", "contributor"].includes(orgRole || "");
 
 
 
@@ -878,6 +880,12 @@ case "domain": {
             onUpdateNote={updatePracticeNote}
             onUpdateObjective={updateObjectiveRecord}
             onArchiveEvidence={archiveEvidence}
+            libraryEvidenceContext={firestoreAssessmentsEnabled && currentOrgId && currentUid ? {
+              orgId: currentOrgId,
+              assessmentId: currentAssessmentId,
+              uid: currentUid,
+              canManage: canManageEvidence,
+            } : undefined}
             onApplySuggestion={applyAnalyzerSuggestion}
             onAssistClick={handleAssistClick}
             storeTemplate={storeTemplate}

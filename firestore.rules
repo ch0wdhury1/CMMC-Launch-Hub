@@ -167,12 +167,24 @@ match /orgs/{orgId} {
       allow read: if canReadAssessmentData(orgId);
       allow create, update: if canWriteAssessmentShell(orgId);
       allow delete: if false;
+
+      match /evidenceRefs/{evidenceId} {
+        allow read: if canReadAssessmentData(orgId);
+        allow create, update: if canWriteAssessmentShell(orgId);
+        allow delete: if false;
+      }
     }
 
     match /objectiveRecords/{objectiveId} {
       allow read: if canReadAssessmentData(orgId);
       allow create, update: if canWriteAssessmentShell(orgId);
       allow delete: if false;
+
+      match /evidenceRefs/{evidenceId} {
+        allow read: if canReadAssessmentData(orgId);
+        allow create, update: if canWriteAssessmentShell(orgId);
+        allow delete: if false;
+      }
     }
 
     match /poamItems/{poamId} {

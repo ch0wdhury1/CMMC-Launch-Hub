@@ -487,6 +487,24 @@ export interface EvidenceLibraryItem {
   archivedBy?: string;
 }
 
+export interface EvidenceReference {
+  evidenceId: string;
+  orgId: string;
+  assessmentId: string;
+  practiceId: string;
+  objectiveId?: string;
+  source: "evidenceLibrary";
+  attachedBy: string;
+  attachedAt: any;
+  status: "active" | "detached";
+  detachedAt?: any;
+  detachedBy?: string;
+}
+
+export interface AttachedLibraryEvidence extends EvidenceReference {
+  libraryItem: EvidenceLibraryItem | null;
+}
+
 export interface NoteRecord {
   noteId: string;
   orgId: string;

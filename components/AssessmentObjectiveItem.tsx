@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { AssessmentObjective, Artifact, EvidenceFileUpload, ObjectiveStatus, Practice, SavedTemplate, ObjectiveRecord } from '../types';
+import { AssessmentObjective, Artifact, AttachedLibraryEvidence, EvidenceFileUpload, EvidenceLibraryItem, ObjectiveStatus, Practice, SavedTemplate, ObjectiveRecord } from '../types';
 
 
 import { callGemini } from '../src/lib/geminiClient';
@@ -11,7 +11,9 @@ import {
 
 
 import { jsPDF } from 'jspdf';
-import { Paperclip, FileText, Archive, Loader2, Bot, Volume2, Download, ExternalLink, MessageSquare, Send, ChevronDown, ChevronUp, Save, Film, Clapperboard, X, ChevronLeft, ChevronRight, Sparkles, ClipboardCopy, CheckCircle2, XCircle, HelpCircle } from 'lucide-react';
+import { Paperclip, FileText, Archive, Loader2, Bot, Volume2, Download, ExternalLink, MessageSquare, Send, ChevronDown, ChevronUp, Save, Film, Clapperboard, X, ChevronLeft, ChevronRight, Sparkles, ClipboardCopy, CheckCircle2, XCircle, HelpCircle, Link2, Unlink } from 'lucide-react';
+import { EvidenceLibraryPickerModal } from './EvidenceLibraryPickerModal';
+import { attachEvidenceLibraryItem, detachEvidenceLibraryItem, subscribeAttachedLibraryEvidence } from '../src/evidenceReferences';
 
 type ChatMessage = {
   role: 'user' | 'model';
@@ -116,6 +118,12 @@ interface AssessmentObjectiveItemProps {
   slideshow?: string[];
   isSlideshowLoading: boolean;
   onGenerateSlideshow: (objectiveId: string, actionPointsText: string) => void;
+  libraryEvidenceContext?: {
+    orgId: string;
+    assessmentId: string;
+    uid: string;
+    canManage: boolean;
+  };
 }
 
 type Template = NonNullable<AssessmentObjective['templates']>[0];
@@ -129,6 +137,7 @@ export const AssessmentObjectiveItem: React.FC<AssessmentObjectiveItemProps> = (
   slideshow,
   isSlideshowLoading,
   onGenerateSlideshow,
+  libraryEvidenceContext,
 }) => {
   // UI State
   const [isUploading, setIsUploading] = useState(false);
@@ -138,6 +147,9 @@ export const AssessmentObjectiveItem: React.FC<AssessmentObjectiveItemProps> = (
   const [isSlideshowModalOpen, setIsSlideshowModalOpen] = useState(false);
   const [showArchivedEvidence, setShowArchivedEvidence] = useState(false);
   const [archivingEvidenceId, setArchivingEvidenceId] = useState<string | null>(null);
+  const [isLibraryPickerOpen, setIsLibraryPickerOpen] = useState(false);
+  const [attachedLibraryEvidence, setAttachedLibraryEvidence] = useState<AttachedLibraryEvidence[]>([]);
+  const [detachingLibraryEvidenceId, setDetachingLibraryEvidenceId] = useState<string | null>(null);
   
   // Deep Dive Chat State
   const [deepDiveHistory, setDeepDiveHistory] = useState<ChatMessage[]>([]);
@@ -330,6 +342,66 @@ ${JSON.stringify(ctx, null, 2)}
 
   const archivedArtifactCount = objective.artifacts.filter(artifact => artifact.archived).length;
   const visibleArtifacts = objective.artifacts.filter(artifact => showArchivedEvidence || !artifact.archived);
+
+  useEffect(() => {
+    if (!libraryEvidenceContext) {
+      setAttachedLibraryEvidence([]);
+      return;
+    }
+    return subscribeAttachedLibraryEvidence({
+      orgId: libraryEvidenceContext.orgId,
+      assessmentId: libraryEvidenceContext.assessmentId,
+      practiceId: practice.id,
+      objectiveId: objective.id,
+    }, setAttachedLibraryEvidence, error => console.warn("[evidence-library] attached evidence load failed", error));
+  }, [libraryEvidenceContext?.assessmentId, libraryEvidenceContext?.orgId, objective.id, practice.id]);
+
+  const attachLibraryEvidence = async (item: EvidenceLibraryItem) => {
+    if (!libraryEvidenceContext?.canManage) return;
+    await attachEvidenceLibraryItem({
+      orgId: libraryEvidenceContext.orgId,
+      assessmentId: libraryEvidenceContext.assessmentId,
+      practiceId: practice.id,
+      objectiveId: objective.id,
+    }, item.id, libraryEvidenceContext.uid);
+  };
+
+  const detachLibraryEvidence = async (reference: AttachedLibraryEvidence) => {
+    if (!libraryEvidenceContext?.canManage) return;
+    if (!window.confirm("Detach this evidence from this practice/objective? The original library file will remain available.")) return;
+    setDetachingLibraryEvidenceId(reference.evidenceId);
+    try {
+      await detachEvidenceLibraryItem({
+        orgId: libraryEvidenceContext.orgId,
+        assessmentId: libraryEvidenceContext.assessmentId,
+        practiceId: practice.id,
+        objectiveId: objective.id,
+      }, reference.evidenceId, libraryEvidenceContext.uid);
+    } catch (error) {
+      console.warn("[evidence-library] detach failed", error);
+    } finally {
+      setDetachingLibraryEvidenceId(null);
+    }
+  };
+
+  const downloadLibraryEvidence = async (item: EvidenceLibraryItem) => {
+    if (!item.downloadURL) return;
+    try {
+      const response = await fetch(item.downloadURL);
+      if (!response.ok) throw new Error(`Download failed with status ${response.status}`);
+      const blobUrl = URL.createObjectURL(await response.blob());
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = item.fileName || "evidence-file";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.setTimeout(() => URL.revokeObjectURL(blobUrl), 0);
+    } catch (error) {
+      console.warn("[evidence-library] blob download failed; opening file", error);
+      window.open(item.downloadURL, "_blank", "noopener,noreferrer");
+    }
+  };
 
   const handlePlaySummaryAudio = async () => {
     if (!objective.actionPointsSummary) {
@@ -688,6 +760,50 @@ Respond in a helpful, practical way:
                 </div>
                 )}
 
+                {libraryEvidenceContext && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <h4 className="text-sm font-semibold text-gray-700">Attached Library Evidence</h4>
+                      {libraryEvidenceContext.canManage && (
+                        <button type="button" onClick={() => setIsLibraryPickerOpen(true)} className="flex items-center text-xs px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700">
+                          <Link2 className="h-3 w-3 mr-1" /> Attach Existing Evidence
+                        </button>
+                      )}
+                    </div>
+                    {attachedLibraryEvidence.length === 0 ? (
+                      <p className="text-xs text-gray-500">No library evidence attached.</p>
+                    ) : (
+                      <div className="space-y-2 max-h-40 overflow-y-auto p-2 bg-blue-50 rounded-md">
+                        {attachedLibraryEvidence.map(reference => {
+                          const item = reference.libraryItem;
+                          return (
+                            <div key={reference.evidenceId} className="flex items-start gap-3 p-2 bg-white border border-blue-100 rounded-md">
+                              <FileText className="h-6 w-6 text-blue-400 flex-shrink-0" />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-gray-800 break-all">{item?.fileName || reference.evidenceId}</p>
+                                <p className="text-xs text-blue-700 font-semibold">Library Evidence</p>
+                                <p className="text-xs text-gray-500">{item?.category || "Other"}{item?.tags?.length ? ` | ${item.tags.join(", ")}` : ""}</p>
+                                <p className="text-xs text-gray-500">Attached: {typeof reference.attachedAt === "string" ? new Date(reference.attachedAt).toLocaleDateString() : reference.attachedAt?.toDate ? reference.attachedAt.toDate().toLocaleDateString() : "Pending"}</p>
+                                {item?.description && <p className="text-xs text-gray-600 mt-1">{item.description}</p>}
+                                {item?.status === "archived" && <p className="text-xs font-semibold text-amber-700 mt-1">Archived in Library</p>}
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <button type="button" disabled={!item?.downloadURL} onClick={() => item?.downloadURL && window.open(item.downloadURL, "_blank", "noopener,noreferrer")} title="View library evidence" className="p-1 text-blue-700 disabled:text-gray-300"><ExternalLink className="h-4 w-4" /></button>
+                                <button type="button" disabled={!item?.downloadURL} onClick={() => item && downloadLibraryEvidence(item)} title="Download library evidence" className="p-1 text-blue-700 disabled:text-gray-300"><Download className="h-4 w-4" /></button>
+                                {libraryEvidenceContext.canManage && (
+                                  <button type="button" disabled={detachingLibraryEvidenceId === reference.evidenceId} onClick={() => detachLibraryEvidence(reference)} title="Detach library evidence" className="p-1 text-gray-600 disabled:text-gray-300">
+                                    {detachingLibraryEvidenceId === reference.evidenceId ? <Loader2 className="h-4 w-4 animate-spin" /> : <Unlink className="h-4 w-4" />}
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* Chat Assist Button */}
                 <div className="flex justify-end">
                     <button onClick={() => setIsDeepDiveOpen(!isDeepDiveOpen)} className="flex items-center text-sm px-3 py-1 bg-purple-600 text-white rounded-md hover:bg-purple-700">
@@ -723,6 +839,15 @@ Respond in a helpful, practical way:
             onClose={() => setIsSlideshowModalOpen(false)}
             images={slideshow || []}
         />
+        {libraryEvidenceContext && (
+          <EvidenceLibraryPickerModal
+            isOpen={isLibraryPickerOpen}
+            orgId={libraryEvidenceContext.orgId}
+            attachedEvidenceIds={new Set(attachedLibraryEvidence.map(reference => reference.evidenceId))}
+            onClose={() => setIsLibraryPickerOpen(false)}
+            onAttach={attachLibraryEvidence}
+          />
+        )}
     </div>
   );
 };

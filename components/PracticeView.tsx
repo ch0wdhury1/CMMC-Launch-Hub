@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { Practice, AssessmentObjective, Artifact, EvidenceFileUpload, SavedTemplate, PracticeRecord, PracticeStatus, StatusSource, ObjectiveRecord, ObjectiveStatus } from '../types';
 import { AssessmentObjectiveItem } from './AssessmentObjectiveItem';
+import { PracticeLibraryEvidence } from './PracticeLibraryEvidence';
 import { CollapsibleSection } from './CollapsibleSection';
 
 import { generateSlideshow } from '../services/geminiService';
@@ -18,6 +19,12 @@ interface PracticeViewProps {
   onUpdateNote: (practiceId: string, note: string) => void;
   onUpdateObjective: (practiceId: string, objectiveId: string, updates: Partial<ObjectiveRecord>, evidenceFiles?: EvidenceFileUpload[]) => void;
   onArchiveEvidence: (practiceId: string, objectiveId: string, artifact: Artifact, archiveReason: string) => Promise<void>;
+  libraryEvidenceContext?: {
+    orgId: string;
+    assessmentId: string;
+    uid: string;
+    canManage: boolean;
+  };
   onApplySuggestion: (practiceId: string) => void;
   onAssistClick: (practiceId: string) => void;
   storeTemplate: (template: SavedTemplate) => void;
@@ -29,6 +36,7 @@ export const PracticeView: React.FC<PracticeViewProps> = ({
   onUpdateNote,
   onUpdateObjective,
   onArchiveEvidence,
+  libraryEvidenceContext,
   onApplySuggestion,
   onAssistClick,
   storeTemplate,
@@ -513,6 +521,8 @@ ${objList}
         </div>
 
         {/* Assessment Objectives (Granular level) */}
+        {libraryEvidenceContext && <PracticeLibraryEvidence practiceId={String((practice as any)?.id ?? "")} context={libraryEvidenceContext} />}
+
         <div className="mb-3 flex items-center">
             <h4 className="font-bold text-lg text-gray-800">Assessment Objectives</h4>
             <span className="ml-3 text-[10px] bg-blue-100 text-blue-800 px-2 py-0.5 rounded font-bold uppercase tracking-wider">Level 2 Granularity</span>
@@ -557,6 +567,7 @@ ${objList}
         slideshow={slideshowImages[mergedObjective.id]}
         isSlideshowLoading={loadingSlideshow === mergedObjective.id}
         onGenerateSlideshow={handleGenerateSlideshow}
+        libraryEvidenceContext={libraryEvidenceContext}
       />
     );
   })
