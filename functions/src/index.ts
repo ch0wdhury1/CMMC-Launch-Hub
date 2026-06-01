@@ -135,6 +135,65 @@ function parseEvidenceValidation(text: string) {
   };
 }
 
+function requiredString(value: unknown, fieldName: string) {
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error(`Gemini returned an invalid ${fieldName}`);
+  }
+  return value.trim().slice(0, 1600);
+}
+
+function requiredStringArray(value: unknown, fieldName: string) {
+  const result = stringArray(value);
+  if (!result) throw new Error(`Gemini returned an invalid ${fieldName}`);
+  return result;
+}
+
+function parsePracticeCopilot(text: string) {
+  const normalized = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+  const parsed = JSON.parse(normalized);
+  return {
+    explanation: requiredString(parsed?.explanation, "explanation"),
+    whyItMatters: requiredString(parsed?.whyItMatters, "whyItMatters"),
+    expectedEvidence: requiredStringArray(parsed?.expectedEvidence, "expectedEvidence"),
+    commonGaps: requiredStringArray(parsed?.commonGaps, "commonGaps"),
+    suggestedActions: requiredStringArray(parsed?.suggestedActions, "suggestedActions"),
+    caution: requiredString(parsed?.caution, "caution"),
+  };
+}
+
+async function generateGeminiJson(prompt: string) {
+  const apiKey = GEMINI_API_KEY.value();
+  if (!apiKey) throw new Error("Missing GEMINI_API_KEY");
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+    EVIDENCE_OCR_MODEL
+  )}:generateContent`;
+  const geminiResponse = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-goog-api-key": apiKey,
+    },
+    body: JSON.stringify({
+      contents: [{role: "user", parts: [{text: prompt}]}],
+      generationConfig: {
+        temperature: 0.1,
+        responseMimeType: "application/json",
+      },
+    }),
+  });
+  const data: any = await geminiResponse.json();
+  if (!geminiResponse.ok) {
+    throw new Error(data?.error?.message || "Gemini JSON request failed");
+  }
+  const text = data?.candidates?.[0]?.content?.parts
+    ?.map((part: any) => part?.text)
+    ?.filter(Boolean)
+    ?.join("")
+    ?.trim() || "";
+  if (!text) throw new Error("Gemini returned no JSON result");
+  return text;
+}
+
 async function updateEvidenceOcrFailure(
   orgId: string,
   evidenceId: string,
@@ -436,6 +495,247 @@ app.post("/api/evidence/validate", requireAuth, async (req: any, res) => {
       error: safeErrorMessage(error, "Evidence validation failed"),
     });
     return res.status(500).json({error: "Evidence validation failed"});
+  }
+});
+
+app.post("/api/practice/copilot", requireAuth, async (req: any, res) => {
+  const {
+    orgId,
+    assessmentId,
+    assessmentLevel,
+    practiceId,
+    practiceTitle,
+    domain,
+    currentStatus,
+  } = req.body || {};
+  console.info("[practice-copilot] request received", {
+    authenticatedUid: req.user.uid,
+    orgId,
+    practiceId,
+  });
+
+  const missingFields = [
+    typeof orgId !== "string" || !orgId.trim() ? "orgId" : null,
+    typeof assessmentId !== "string" || !assessmentId.trim() ? "assessmentId" : null,
+    typeof practiceId !== "string" || !practiceId.trim() ? "practiceId" : null,
+  ].filter((field): field is string => Boolean(field));
+
+  if (
+    missingFields.length > 0
+    || !isSafePathSegment(orgId)
+    || !isSafePathSegment(assessmentId)
+    || (assessmentLevel !== undefined && (typeof assessmentLevel !== "number" || ![1, 2].includes(assessmentLevel)))
+    || (practiceTitle !== undefined && typeof practiceTitle !== "string")
+    || (domain !== undefined && typeof domain !== "string")
+    || (currentStatus !== undefined && typeof currentStatus !== "string")
+  ) {
+    console.warn("Invalid Practice Copilot request payload", {
+      hasOrgId: !!orgId,
+      hasAssessmentId: !!assessmentId,
+      hasPracticeId: !!practiceId,
+      bodyKeys: Object.keys(req.body || {}),
+    });
+    return res.status(400).json({
+      success: false,
+      errorCode: "INVALID_REQUEST",
+      errorMessage: "Missing required fields: orgId, assessmentId, or practiceId.",
+      missingFields,
+    });
+  }
+
+  try {
+    if (!(await canValidateEvidence(req.user.uid, orgId))) {
+      return res.status(403).json({
+        success: false,
+        errorCode: "NOT_AUTHORIZED",
+        errorMessage: "Not authorized to generate Practice Copilot guidance",
+      });
+    }
+
+    const orgRef = db.doc(`orgs/${orgId}`);
+    const assessmentRef = orgRef.collection("assessments").doc(assessmentId);
+    const practiceRef = assessmentRef.collection("practiceRecords").doc(cleanDocId(practiceId));
+    const [
+      orgSnap,
+      practiceSnap,
+      objectivesSnap,
+      evidenceSnap,
+      notesSnap,
+      poamSnap,
+      practiceValidationsSnap,
+      practiceEvidenceRefsSnap,
+    ] = await Promise.all([
+      orgRef.get(),
+      practiceRef.get(),
+      assessmentRef.collection("objectiveRecords").where("practiceId", "==", practiceId).get(),
+      orgRef.collection("evidence").where("assessmentId", "==", assessmentId).get(),
+      orgRef.collection("notes").where("assessmentId", "==", assessmentId).get(),
+      assessmentRef.collection("poamItems").get(),
+      practiceRef.collection("evidenceValidations").get(),
+      practiceRef.collection("evidenceRefs").get(),
+    ]);
+
+    const objectives = objectivesSnap.docs.slice(0, 30).map(snapshot => snapshot.data());
+    const objectiveContext = await Promise.all(objectivesSnap.docs.slice(0, 30).map(async snapshot => {
+      const [validations, evidenceRefs] = await Promise.all([
+        snapshot.ref.collection("evidenceValidations").get(),
+        snapshot.ref.collection("evidenceRefs").get(),
+      ]);
+      return {
+        validations: validations.docs.slice(0, 12).map(validation => validation.data()),
+        evidenceRefs: evidenceRefs.docs
+          .map(reference => reference.data())
+          .filter(reference => reference.status === "active")
+          .slice(0, 12),
+      };
+    }));
+    const objectiveValidations = objectiveContext.flatMap(context => context.validations);
+    const libraryEvidenceIds = Array.from(new Set([
+      ...practiceEvidenceRefsSnap.docs
+        .map(snapshot => snapshot.data())
+        .filter(reference => reference.status === "active")
+        .map(reference => reference.evidenceId),
+      ...objectiveContext.flatMap(context => context.evidenceRefs.map(reference => reference.evidenceId)),
+    ].filter((evidenceId): evidenceId is string => typeof evidenceId === "string"))).slice(0, 30);
+    const libraryEvidence = (await Promise.all(libraryEvidenceIds.map(async evidenceId => {
+      const snapshot = await orgRef.collection("evidenceLibrary").doc(cleanDocId(evidenceId)).get();
+      return snapshot.exists ? {evidenceId, ...snapshot.data()} : null;
+    }))).filter(Boolean);
+    const evidence = evidenceSnap.docs
+      .map(snapshot => snapshot.data())
+      .filter(item => Array.isArray(item.practiceIds) && item.practiceIds.includes(practiceId))
+      .slice(0, 30);
+    const notes = notesSnap.docs
+      .map(snapshot => snapshot.data())
+      .filter(item => item.practiceId === practiceId)
+      .slice(0, 30);
+    const poamItems = poamSnap.docs
+      .map(snapshot => snapshot.data())
+      .filter(item => Array.isArray(item.relatedPracticeIds) && item.relatedPracticeIds.includes(practiceId))
+      .slice(0, 30);
+    const validations = [
+      ...practiceValidationsSnap.docs.slice(0, 12).map(snapshot => snapshot.data()),
+      ...objectiveValidations,
+    ].slice(0, 40);
+
+    const prompt = [
+      "You are providing CMMC practice guidance.",
+      "Guidance is advisory only. Do not say the organization is compliant.",
+      "Do not say evidence proves compliance. Do not guarantee certification.",
+      "Human review is required.",
+      "Return JSON only with exactly these keys:",
+      '{"explanation":"string","whyItMatters":"string","expectedEvidence":["string"],"commonGaps":["string"],"suggestedActions":["string"],"caution":"string"}',
+      "",
+      "Practice context:",
+      JSON.stringify({
+        assessmentLevel,
+        practiceId,
+        practiceTitle,
+        domain: domain || null,
+        currentStatus: currentStatus || practiceSnap.data()?.status || null,
+        practiceRecord: practiceSnap.exists ? practiceSnap.data() : null,
+        objectives,
+        evidence: evidence.map(item => ({
+          evidenceId: item.evidenceId,
+          fileName: item.fileName || item.name,
+          description: item.description,
+          ocrSummary: item.ocrSummary,
+          processingStatus: item.processingStatus,
+        })),
+        reusedLibraryEvidence: libraryEvidence.map((item: any) => ({
+          evidenceId: item.evidenceId,
+          fileName: item.fileName,
+          category: item.category,
+          description: item.description,
+          tags: item.tags,
+          ocrSummary: item.ocrSummary,
+          status: item.status,
+        })),
+        evidenceValidations: validations.map(item => ({
+          evidenceId: item.evidenceId,
+          validationStatus: item.validationStatus,
+          confidence: item.confidence,
+          summary: item.summary,
+          gaps: item.gaps,
+        })),
+        notes: notes.map(item => ({
+          objectiveId: item.objectiveId,
+          content: item.content || item.body,
+        })),
+        poamItems: poamItems.map(item => ({
+          title: item.title,
+          description: item.description,
+          priority: item.priority,
+          status: item.status,
+          remediationPlan: item.remediationPlan,
+        })),
+        companyProfile: orgSnap.data()?.companyProfile || null,
+      }),
+    ].join("\n");
+
+    const geminiRawResponse = await generateGeminiJson(prompt);
+    console.info("[practice-copilot] Gemini raw response", {
+      orgId,
+      practiceId,
+      response: geminiRawResponse,
+    });
+    let aiResult;
+    try {
+      aiResult = parsePracticeCopilot(geminiRawResponse);
+    } catch (error) {
+      console.error("[practice-copilot] JSON parse error", {
+        orgId,
+        practiceId,
+        error: safeErrorMessage(error, "Practice Copilot JSON parse failed"),
+      });
+      return res.status(502).json({
+        success: false,
+        errorCode: "GEMINI_JSON_PARSE_ERROR",
+        errorMessage: "Unable to parse Practice Copilot guidance",
+      });
+    }
+    const generatedAt = admin.firestore.FieldValue.serverTimestamp();
+    const result = {
+      id: "latest",
+      orgId,
+      assessmentId,
+      practiceId,
+      ...aiResult,
+      generatedBy: "ai",
+      generatedAt,
+      model: EVIDENCE_OCR_MODEL,
+    };
+    try {
+      await practiceRef.collection("copilot").doc("latest").set(result, {merge: true});
+    } catch (error) {
+      console.error("[practice-copilot] Firestore write error", {
+        orgId,
+        practiceId,
+        error: safeErrorMessage(error, "Practice Copilot Firestore write failed"),
+      });
+      return res.status(500).json({
+        success: false,
+        errorCode: "FIRESTORE_WRITE_ERROR",
+        errorMessage: "Unable to save Practice Copilot guidance",
+      });
+    }
+
+    return res.json({
+      ...result,
+      generatedAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.warn("[practice-copilot] generation failed", {
+      orgId,
+      assessmentId,
+      practiceId,
+      error: safeErrorMessage(error, "Practice Copilot generation failed"),
+    });
+    return res.status(500).json({
+      success: false,
+      errorCode: "COPILOT_GENERATION_ERROR",
+      errorMessage: "Unable to generate guidance",
+    });
   }
 });
 

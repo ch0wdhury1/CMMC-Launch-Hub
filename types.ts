@@ -536,6 +536,22 @@ export interface EvidenceValidationResult {
   model?: string;
 }
 
+export interface PracticeCopilotResult {
+  id: string;
+  orgId: string;
+  assessmentId: string;
+  practiceId: string;
+  explanation: string;
+  whyItMatters: string;
+  expectedEvidence: string[];
+  commonGaps: string[];
+  suggestedActions: string[];
+  caution: string;
+  generatedBy: "ai";
+  generatedAt: any;
+  model?: string;
+}
+
 export interface EvidenceReference {
   evidenceId: string;
   orgId: string;

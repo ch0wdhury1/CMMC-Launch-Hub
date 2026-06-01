@@ -5,6 +5,7 @@ import { AssessmentObjectiveItem } from './AssessmentObjectiveItem';
 import { PracticeLibraryEvidence } from './PracticeLibraryEvidence';
 import { CollapsibleSection } from './CollapsibleSection';
 import { ResponsibilityAssignmentSelect, type ResponsibilityAssignmentContext } from './ResponsibilityAssignmentSelect';
+import { PracticeCopilotPanel } from './PracticeCopilotPanel';
 
 import { generateSlideshow } from '../services/geminiService';
 // import { generatePracticeExplanationAudio, generateSlideshow } from '../services/geminiService';
@@ -462,6 +463,21 @@ ${objList}
                 </div>
             </div>
         </div>
+
+        {libraryEvidenceContext && (
+          <PracticeCopilotPanel
+            canGenerate={libraryEvidenceContext.canManage}
+            request={{
+              orgId: libraryEvidenceContext.orgId,
+              assessmentId: libraryEvidenceContext.assessmentId,
+              assessmentLevel: practice.level,
+              practiceId: practice.id,
+              practiceTitle: practice.name,
+              domain: practice.domainName,
+              currentStatus: practiceRecord.status,
+            }}
+          />
+        )}
 
         {/* Audio Explanation */}
         <div className="bg-white p-4 rounded-lg shadow-md border border-gray-200 mb-6">

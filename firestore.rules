@@ -270,6 +270,11 @@ match /orgs/{orgId} {
         allow read: if canReadAssessmentData(orgId);
         allow write: if false;
       }
+
+      match /copilot/{copilotId} {
+        allow read: if canReadAssessmentData(orgId);
+        allow write: if false;
+      }
     }
 
     match /objectiveRecords/{objectiveId} {
