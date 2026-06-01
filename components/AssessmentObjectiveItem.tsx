@@ -300,11 +300,12 @@ ${JSON.stringify(ctx, null, 2)}
   };
 
   const downloadArtifact = async (artifact: Artifact) => {
-    if (!artifact.downloadUrl) return;
+    const downloadUrl = artifact.downloadUrl?.trim();
+    if (!downloadUrl) return;
     const fileName = artifact.fileName || artifact.name || "evidence-file";
 
     try {
-      const response = await fetch(artifact.downloadUrl);
+      const response = await fetch(downloadUrl);
       if (!response.ok) throw new Error(`Download failed with status ${response.status}`);
       const blobUrl = URL.createObjectURL(await response.blob());
       const blobLink = document.createElement("a");
@@ -314,20 +315,17 @@ ${JSON.stringify(ctx, null, 2)}
       document.body.appendChild(blobLink);
       blobLink.click();
       document.body.removeChild(blobLink);
-      URL.revokeObjectURL(blobUrl);
+      window.setTimeout(() => URL.revokeObjectURL(blobUrl), 0);
     } catch (error) {
       console.warn("Evidence blob download failed; opening file in a new tab.", error);
-      window.open(artifact.downloadUrl, "_blank", "noopener,noreferrer");
+      window.open(downloadUrl, "_blank", "noopener,noreferrer");
     }
   };
 
   const viewArtifact = (artifact: Artifact) => {
-    if (!artifact.downloadUrl) return;
-    if (artifact.fileType.startsWith("image/") || artifact.fileType === "application/pdf") {
-      window.open(artifact.downloadUrl, "_blank", "noopener,noreferrer");
-      return;
-    }
-    downloadArtifact(artifact);
+    const downloadUrl = artifact.downloadUrl?.trim();
+    if (!downloadUrl) return;
+    window.open(downloadUrl, "_blank", "noopener,noreferrer");
   };
 
   const archivedArtifactCount = objective.artifacts.filter(artifact => artifact.archived).length;
