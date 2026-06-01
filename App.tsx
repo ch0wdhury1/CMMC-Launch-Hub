@@ -308,7 +308,6 @@ useEffect(() => {
 
   // NOTE: legacy helper-based admin gating retained for compatibility (currently unused)
   const canAdmin = isSuperAdminRole(rolesAny) && can(ent, "admin_panel");
-  const isDev = import.meta.env.DEV;
 
   // ✅ Effective subscription level for Sidebar gating
   // Priority: org tier -> (optional) user tier -> default COMM_L1
@@ -1011,7 +1010,7 @@ case "domain": {
         saveMessage={assessmentSaveMessage}
         onSavedTemplatesClick={() => setView({ type: "savedTemplates" })}
         onProfileClick={() => setView({ type: "profile" })}
-onDiagnosticsClick={isDev ? () => setIsDiagnosticsOpen(true) : undefined}
+onDiagnosticsClick={isSuperAdmin ? () => setIsDiagnosticsOpen(true) : undefined}
         overallCompletion={scores.practiceCompletionScore}
         sprsScore={sprsScore}
         onLogout={onLogout}

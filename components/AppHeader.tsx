@@ -30,8 +30,6 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   onAdminClick,
   onSuperAdminClick, // ✅ NEW
 }) => {
-  const isDev = process.env.NODE_ENV === "development";
-
   return (
     <header className="w-full bg-blue-800 border-b border-blue-900 h-20 flex items-center px-6 justify-between shadow-md z-50 flex-shrink-0">
       {/* LEFT */}
@@ -90,7 +88,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
 
 
 
-        {isDev && onDiagnosticsClick && (
+        {onDiagnosticsClick && (
           <button
             onClick={onDiagnosticsClick}
             className="flex items-center px-3 py-1.5 bg-gray-700 text-blue-300 text-xs rounded-md hover:bg-gray-600 transition-colors border border-blue-400/30 mr-2"
