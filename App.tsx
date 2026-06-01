@@ -1080,6 +1080,7 @@ onDiagnosticsClick={isSuperAdmin ? () => setIsDiagnosticsOpen(true) : undefined}
         firestoreAssessmentsEnabled={firestoreAssessmentsEnabled}
         environmentMode={import.meta.env.MODE}
         currentOrgId={currentOrgId}
+        currentUserId={currentUid}
         currentUserRole={isSuperAdmin ? "superAdmin" : orgRole || "member"}
         subscriptionLevel={effectiveSubscriptionLevel}
         onUpgrade={() => setIsUpgradeModalOpen(true)}

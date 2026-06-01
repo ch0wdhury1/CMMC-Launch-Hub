@@ -1,10 +1,12 @@
 
-import React, { useMemo, useState } from 'react';
-import { X, AlertTriangle, CheckCircle, Database, List, Hash, AlertCircle, Info, Zap, ShieldCheck, ArrowRight, Lock, Search, Cpu, Bot, Download, Loader2 } from 'lucide-react';
+import React, { useMemo, useRef, useState } from 'react';
+import { X, AlertTriangle, CheckCircle, Database, List, Hash, AlertCircle, Info, Zap, ShieldCheck, ArrowRight, Lock, Search, Cpu, Bot, Download, Loader2, Upload } from 'lucide-react';
 import { Domain, Practice, SubscriptionLevel, L2ExtractionResult, EvidenceSummary, RecoveryDiagnostics } from '../types';
 import { L1_PRACTICE_COUNT, L2_PRACTICE_COUNT } from '../constants';
 import { L2DataMinerView } from './l2miner/L2DataMinerView';
 import { exportAssessmentBackup } from '../src/assessmentBackup';
+import { RestoreValidationResult, validateRestoreBackupJson } from '../src/restoreValidation';
+import { RestoreExecutionResult, restoreAssessmentBackup } from '../src/restoreEngine';
 
 interface DiagnosticsDrawerProps {
   isOpen: boolean;
@@ -18,6 +20,7 @@ interface DiagnosticsDrawerProps {
   firestoreAssessmentsEnabled: boolean;
   environmentMode: string;
   currentOrgId: string | null;
+  currentUserId: string | null;
   currentUserRole: string;
   subscriptionLevel: SubscriptionLevel;
   onUpgrade: () => void;
@@ -38,6 +41,7 @@ export const DiagnosticsDrawer: React.FC<DiagnosticsDrawerProps> = ({
   firestoreAssessmentsEnabled,
   environmentMode,
   currentOrgId,
+  currentUserId,
   currentUserRole,
   subscriptionLevel,
   onUpgrade,
@@ -45,6 +49,11 @@ export const DiagnosticsDrawer: React.FC<DiagnosticsDrawerProps> = ({
 }) => {
   const [isExportingBackup, setIsExportingBackup] = useState(false);
   const [backupExportError, setBackupExportError] = useState("");
+  const [restoreValidation, setRestoreValidation] = useState<RestoreValidationResult | null>(null);
+  const [parsedRestoreBackup, setParsedRestoreBackup] = useState<any | null>(null);
+  const [isRestoringBackup, setIsRestoringBackup] = useState(false);
+  const [restoreExecution, setRestoreExecution] = useState<RestoreExecutionResult | null>(null);
+  const restoreFileInputRef = useRef<HTMLInputElement>(null);
   const diagnostics = useMemo(() => {
     const domainIdsLoaded = domains.map(d => {
       const match = d.name.match(/\(([A-Z]+)\)/);
@@ -172,6 +181,66 @@ export const DiagnosticsDrawer: React.FC<DiagnosticsDrawerProps> = ({
       console.warn("[admin-export] assessment backup download failed", error);
     } finally {
       setIsExportingBackup(false);
+    }
+  };
+
+  const handleValidateRestoreFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    try {
+      const contents = await file.text();
+      const validation = validateRestoreBackupJson(contents);
+      setRestoreValidation(validation);
+      setParsedRestoreBackup(validation.valid ? JSON.parse(contents) : null);
+      setRestoreExecution(null);
+    } catch (error) {
+      console.warn("[restore-validation] could not read backup file", error);
+      setParsedRestoreBackup(null);
+      setRestoreExecution(null);
+      setRestoreValidation({
+        valid: false,
+        assessmentCount: 0,
+        practiceCount: 0,
+        objectiveCount: 0,
+        noteCount: 0,
+        poamCount: 0,
+        evidenceCount: 0,
+        errors: ["Backup file could not be read."],
+        warnings: [],
+      });
+    }
+  };
+
+  const handleRestoreAssessmentBackup = async () => {
+    if (!restoreValidation?.valid || !parsedRestoreBackup || !currentOrgId || !currentUserId || !isSuperAdmin) return;
+    if (!window.confirm("You are about to restore this assessment backup into Firestore. This may overwrite existing assessment records with the same IDs. This action should only be performed by a SuperAdmin. Continue?")) return;
+
+    setIsRestoringBackup(true);
+    setRestoreExecution(null);
+    try {
+      setRestoreExecution(await restoreAssessmentBackup({
+        backup: parsedRestoreBackup,
+        orgId: currentOrgId,
+        userId: currentUserId,
+        isSuperAdmin,
+      }));
+    } catch (error) {
+      console.warn("[assessment-restore] restore failed", error);
+      setRestoreExecution({
+        success: false,
+        assessmentWritten: false,
+        practicesWritten: 0,
+        objectivesWritten: 0,
+        notesWritten: 0,
+        poamsWritten: 0,
+        evidenceMetadataWritten: 0,
+        warnings: [],
+        errors: [error instanceof Error ? error.message : "Assessment restore failed."],
+      });
+    } finally {
+      setIsRestoringBackup(false);
     }
   };
 
@@ -375,7 +444,113 @@ export const DiagnosticsDrawer: React.FC<DiagnosticsDrawerProps> = ({
                   {isExportingBackup ? "Exporting..." : "Export Assessment Backup"}
                 </button>
                 {backupExportError && <p className="text-xs text-red-400">{backupExportError}</p>}
+                <input
+                  ref={restoreFileInputRef}
+                  type="file"
+                  accept="application/json,.json"
+                  onChange={handleValidateRestoreFile}
+                  className="hidden"
+                />
+                <button
+                  type="button"
+                  onClick={() => restoreFileInputRef.current?.click()}
+                  className="flex items-center px-3 py-2 bg-gray-700 text-white text-xs font-semibold rounded-md hover:bg-gray-600"
+                >
+                  <Upload className="h-4 w-4 mr-2" />
+                  Validate Restore File
+                </button>
               </div>
+              {restoreValidation && (
+                <div className="p-3 bg-gray-800 rounded-lg border border-gray-700 space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-[9px] font-black uppercase tracking-wider text-gray-400">Restore Validation</p>
+                    <span className={`text-[10px] font-black uppercase ${restoreValidation.valid ? "text-green-400" : "text-red-400"}`}>
+                      {restoreValidation.valid ? "Ready for Restore" : "Restore Blocked"}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    {[
+                      ["Backup Version", restoreValidation.version || "Unavailable"],
+                      ["Assessment Count", restoreValidation.assessmentCount],
+                      ["Practice Count", restoreValidation.practiceCount],
+                      ["Objective Count", restoreValidation.objectiveCount],
+                      ["Note Count", restoreValidation.noteCount],
+                      ["POA&M Count", restoreValidation.poamCount],
+                      ["Evidence Count", restoreValidation.evidenceCount],
+                    ].map(([label, value]) => (
+                      <div key={label} className="p-2 bg-black/20 rounded border border-gray-700">
+                        <p className="text-[9px] font-black uppercase tracking-wider text-gray-500">{label}</p>
+                        <p className="font-semibold text-white break-words">{value}</p>
+                      </div>
+                    ))}
+                  </div>
+                  {restoreValidation.warnings.length > 0 && (
+                    <div>
+                      <p className="text-[9px] font-black uppercase tracking-wider text-yellow-400 mb-1">Warnings</p>
+                      <ul className="list-disc pl-4 text-xs text-yellow-200 space-y-1">
+                        {restoreValidation.warnings.map((warning, index) => <li key={`${warning}-${index}`}>{warning}</li>)}
+                      </ul>
+                    </div>
+                  )}
+                  {restoreValidation.errors.length > 0 && (
+                    <div>
+                      <p className="text-[9px] font-black uppercase tracking-wider text-red-400 mb-1">Errors</p>
+                      <ul className="list-disc pl-4 text-xs text-red-200 space-y-1">
+                        {restoreValidation.errors.map((error, index) => <li key={`${error}-${index}`}>{error}</li>)}
+                      </ul>
+                    </div>
+                  )}
+                  {restoreValidation.valid && (
+                    <button
+                      type="button"
+                      onClick={handleRestoreAssessmentBackup}
+                      disabled={!parsedRestoreBackup || !currentUserId || !isSuperAdmin || isRestoringBackup}
+                      className="flex items-center px-3 py-2 bg-red-700 text-white text-xs font-semibold rounded-md hover:bg-red-600 disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      {isRestoringBackup && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                      {isRestoringBackup ? "Restoring..." : "Restore This Backup"}
+                    </button>
+                  )}
+                </div>
+              )}
+              {restoreExecution && (
+                <div className="p-3 bg-gray-800 rounded-lg border border-gray-700 space-y-3">
+                  <p className={`text-xs font-black uppercase ${restoreExecution.success ? "text-green-400" : "text-red-400"}`}>
+                    {restoreExecution.success ? "Restore Complete" : "Restore Failed"}
+                  </p>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    {[
+                      ["Assessment ID", restoreExecution.restoredAssessmentId || "Unavailable"],
+                      ["Practices Restored", restoreExecution.practicesWritten],
+                      ["Objectives Restored", restoreExecution.objectivesWritten],
+                      ["Notes Restored", restoreExecution.notesWritten],
+                      ["POA&M Restored", restoreExecution.poamsWritten],
+                      ["Evidence Metadata Restored", restoreExecution.evidenceMetadataWritten],
+                    ].map(([label, value]) => (
+                      <div key={label} className="p-2 bg-black/20 rounded border border-gray-700">
+                        <p className="text-[9px] font-black uppercase tracking-wider text-gray-500">{label}</p>
+                        <p className="font-semibold text-white break-words">{value}</p>
+                      </div>
+                    ))}
+                  </div>
+                  {restoreExecution.warnings.length > 0 && (
+                    <div>
+                      <p className="text-[9px] font-black uppercase tracking-wider text-yellow-400 mb-1">Warnings</p>
+                      <ul className="list-disc pl-4 text-xs text-yellow-200 space-y-1">
+                        {restoreExecution.warnings.map((warning, index) => <li key={`${warning}-${index}`}>{warning}</li>)}
+                      </ul>
+                    </div>
+                  )}
+                  {restoreExecution.errors.length > 0 && (
+                    <div>
+                      <p className="text-[9px] font-black uppercase tracking-wider text-red-400 mb-1">Errors</p>
+                      <ul className="list-disc pl-4 text-xs text-red-200 space-y-1">
+                        {restoreExecution.errors.map((error, index) => <li key={`${error}-${index}`}>{error}</li>)}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
               {productionChecks.map(section => (
                 <div key={section.group} className="p-3 bg-gray-800 rounded-lg border border-gray-700">
                   <p className="text-[9px] font-black uppercase tracking-wider text-gray-400 mb-2">{section.group}</p>
