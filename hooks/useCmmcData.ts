@@ -297,7 +297,9 @@ const mergeFirestorePracticeRecords = (
         const evidenceArtifacts = (evidenceByObjective.get(getObjectiveRecordStorageKey(record.id, objectiveId)) || []).map(e => ({
           id: e.evidenceId,
           name: e.name || e.fileName || e.title || "Evidence",
+          fileName: e.fileName,
           fileType: e.fileType || "",
+          fileSize: e.fileSize,
           ocrSummary: e.ocrSummary || "",
           processingStatus: e.processingStatus,
           processingError: e.processingError,
@@ -823,6 +825,16 @@ export const useCmmcData = (options: UseCmmcDataOptions = {}) => {
       };
 
       void persistRecord().then(savedRecord => {
+        updateCachedArtifact(practiceId, objectiveId, artifact.id, {
+          name: savedRecord.name || savedRecord.fileName || artifact.name,
+          fileName: savedRecord.fileName || artifact.fileName,
+          fileType: savedRecord.fileType || artifact.fileType,
+          fileSize: savedRecord.fileSize ?? artifact.fileSize,
+          storagePath: savedRecord.storagePath,
+          downloadUrl: savedRecord.downloadUrl,
+          storageStatus: savedRecord.storageStatus,
+          storageError: savedRecord.storageError,
+        });
         logActivity({
           action: "evidence.uploaded",
           targetType: "evidence",
