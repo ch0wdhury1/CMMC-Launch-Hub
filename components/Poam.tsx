@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { PoamItem, PoamStatus, PoamPriority, CompanyProfile, Practice, ResponsibilityMatrixEntry } from '../types';
 import { generatePoamPdf } from '../services/poamGenerator';
 import { Download, PlusCircle, Filter, X, Save, Calendar, User, Tag, ArrowUpCircle, Clock, CheckCircle } from 'lucide-react';
+import { ResponsibilityAssignmentSelect, type ResponsibilityAssignmentContext } from './ResponsibilityAssignmentSelect';
 
 interface PoamProps {
   poamItems: PoamItem[];
@@ -10,6 +11,7 @@ interface PoamProps {
   updatePoamItem: (item: PoamItem) => void;
   addPoamItem: (item: Omit<PoamItem, 'id' | 'createdAt' | 'source'>) => void;
   responsibilityMatrix: ResponsibilityMatrixEntry[];
+  assignmentContext?: ResponsibilityAssignmentContext;
 }
 
 // --- PoamItemModal Sub-component ---
@@ -18,9 +20,10 @@ interface PoamItemModalProps {
   allPractices: Practice[];
   onClose: () => void;
   onSave: (item: PoamItem | Omit<PoamItem, 'id' | 'createdAt' | 'source'>) => void;
+  assignmentContext?: ResponsibilityAssignmentContext;
 }
 
-const PoamItemModal: React.FC<PoamItemModalProps> = ({ item, allPractices, onClose, onSave }) => {
+const PoamItemModal: React.FC<PoamItemModalProps> = ({ item, allPractices, onClose, onSave, assignmentContext }) => {
   const [formData, setFormData] = useState(item);
   const isNew = !('id' in item);
 
@@ -99,6 +102,13 @@ const PoamItemModal: React.FC<PoamItemModalProps> = ({ item, allPractices, onClo
               <label className="block text-sm font-medium text-gray-700">Owner</label>
               <input type="text" name="owner" value={formData.owner || ''} onChange={handleChange} className="w-full border p-2 rounded bg-white text-black" />
             </div>
+            <ResponsibilityAssignmentSelect
+              value={formData.assignedTo}
+              assignedToName={formData.assignedToName}
+              assignedToEmail={formData.assignedToEmail}
+              context={assignmentContext}
+              onChange={assignment => setFormData(previous => ({ ...previous, ...assignment }))}
+            />
             <div>
               <label className="block text-sm font-medium text-gray-700">Target Date</label>
               <input type="date" name="targetDate" value={formData.targetDate || ''} onChange={handleChange} className="w-full border p-2 rounded bg-white text-black" />
@@ -120,9 +130,10 @@ const PoamItemModal: React.FC<PoamItemModalProps> = ({ item, allPractices, onClo
 };
 
 // --- Main POA&M Component ---
-export const Poam: React.FC<PoamProps> = ({ poamItems, allPractices, companyProfile, updatePoamItem, addPoamItem, responsibilityMatrix }) => {
+export const Poam: React.FC<PoamProps> = ({ poamItems, allPractices, companyProfile, updatePoamItem, addPoamItem, responsibilityMatrix, assignmentContext }) => {
   const [statusFilter, setStatusFilter] = useState<PoamStatus | 'all'>('all');
   const [priorityFilter, setPriorityFilter] = useState<PoamPriority | 'all'>('all');
+  const [assigneeFilter, setAssigneeFilter] = useState('all');
   const [selectedItem, setSelectedItem] = useState<PoamItem | 'new' | null>(null);
 
   const summary = useMemo(() => {
@@ -137,8 +148,14 @@ export const Poam: React.FC<PoamProps> = ({ poamItems, allPractices, companyProf
     return poamItems
       .filter(item => statusFilter === 'all' || item.status === statusFilter)
       .filter(item => priorityFilter === 'all' || item.priority === priorityFilter)
+      .filter(item => {
+        if (assigneeFilter === 'all') return true;
+        if (assigneeFilter === 'unassigned') return !item.assignedTo;
+        if (assigneeFilter === 'me') return item.assignedTo === assignmentContext?.uid;
+        return item.assignedTo === assigneeFilter;
+      })
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [poamItems, statusFilter, priorityFilter]);
+  }, [assignmentContext?.uid, assigneeFilter, poamItems, statusFilter, priorityFilter]);
   
   const handleSaveItem = (item: PoamItem | Omit<PoamItem, 'id' | 'createdAt' | 'source'>) => {
     if ('id' in item) {
@@ -213,6 +230,17 @@ export const Poam: React.FC<PoamProps> = ({ poamItems, allPractices, companyProf
                     <option value="all">All</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option>
                 </select>
             </div>
+            {assignmentContext && (
+              <div>
+                <label className="text-sm font-medium mr-2">Assigned To:</label>
+                <select value={assigneeFilter} onChange={e => setAssigneeFilter(e.target.value)} className="border p-1.5 rounded text-sm bg-white text-black">
+                  <option value="all">All</option>
+                  <option value="unassigned">Unassigned</option>
+                  <option value="me">Me</option>
+                  {assignmentContext.members.map(member => <option key={member.uid} value={member.uid}>{member.name}</option>)}
+                </select>
+              </div>
+            )}
         </div>
 
         {/* Table */}
@@ -226,6 +254,7 @@ export const Poam: React.FC<PoamProps> = ({ poamItems, allPractices, companyProf
                 <th className="p-3">Status</th>
                 <th className="p-3">Target Date</th>
                 <th className="p-3">Owner</th>
+                <th className="p-3">Assigned To</th>
                 <th className="p-3">Source</th>
               </tr>
             </thead>
@@ -249,6 +278,7 @@ export const Poam: React.FC<PoamProps> = ({ poamItems, allPractices, companyProf
                     <td className="p-3">{getStatusChip(item.status)}</td>
                     <td className="p-3">{item.targetDate ? new Date(item.targetDate).toLocaleDateString() : 'N/A'}</td>
                     <td className="p-3 text-gray-600">{item.owner || 'N/A'}</td>
+                    <td className="p-3 text-gray-600">{item.assignedToName || item.assignedToEmail || item.assignedTo || 'Unassigned'}</td>
                     <td className="p-3 capitalize">{item.source}</td>
                   </tr>
                 )
@@ -276,6 +306,7 @@ export const Poam: React.FC<PoamProps> = ({ poamItems, allPractices, companyProf
             allPractices={allPractices}
             onClose={() => setSelectedItem(null)}
             onSave={handleSaveItem}
+            assignmentContext={assignmentContext}
         />
       )}
     </>

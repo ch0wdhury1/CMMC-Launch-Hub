@@ -14,6 +14,7 @@ import { jsPDF } from 'jspdf';
 import { Paperclip, FileText, Archive, Loader2, Bot, Volume2, Download, ExternalLink, MessageSquare, Send, ChevronDown, ChevronUp, Save, Film, Clapperboard, X, ChevronLeft, ChevronRight, Sparkles, ClipboardCopy, CheckCircle2, XCircle, HelpCircle, Link2, Unlink } from 'lucide-react';
 import { EvidenceLibraryPickerModal } from './EvidenceLibraryPickerModal';
 import { attachEvidenceLibraryItem, detachEvidenceLibraryItem, subscribeAttachedLibraryEvidence } from '../src/evidenceReferences';
+import { ResponsibilityAssignmentSelect, type ResponsibilityAssignmentContext } from './ResponsibilityAssignmentSelect';
 
 type ChatMessage = {
   role: 'user' | 'model';
@@ -124,6 +125,7 @@ interface AssessmentObjectiveItemProps {
     uid: string;
     canManage: boolean;
   };
+  assignmentContext?: ResponsibilityAssignmentContext;
 }
 
 type Template = NonNullable<AssessmentObjective['templates']>[0];
@@ -138,6 +140,7 @@ export const AssessmentObjectiveItem: React.FC<AssessmentObjectiveItemProps> = (
   isSlideshowLoading,
   onGenerateSlideshow,
   libraryEvidenceContext,
+  assignmentContext,
 }) => {
   // UI State
   const [isUploading, setIsUploading] = useState(false);
@@ -631,6 +634,14 @@ Respond in a helpful, practical way:
             </div>
 
             <div className="p-4 space-y-4">
+                <ResponsibilityAssignmentSelect
+                  value={objective.assignedTo}
+                  assignedToName={objective.assignedToName}
+                  assignedToEmail={objective.assignedToEmail}
+                  context={assignmentContext}
+                  onChange={assignment => onUpdateObjective(objective.id, assignment)}
+                  className="max-w-xs"
+                />
                 {/* ROW 2: Action Points & Notes */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {/* Left Column: Action Points */}

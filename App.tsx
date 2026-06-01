@@ -48,6 +48,7 @@ import { useSspData } from "./hooks/useSspData";
 
 import { Practice } from "./types";
 import { SPRS_CONTROLS } from "./data/sprsControls";
+import { subscribeActiveOrgMembers, type ActiveOrgMember } from "./src/responsibilityAssignments";
 
 import { Home, ChevronRight, Key, ShieldAlert, Database, Loader2 } from "lucide-react";
 
@@ -336,6 +337,27 @@ useEffect(() => {
     String(import.meta.env.VITE_FIRESTORE_ASSESSMENTS || "false").toLowerCase() === "true";
   const currentAssessmentId = hasL2 ? "default_l2" : "default_l1";
   const canManageEvidence = isSuperAdmin || ["orgOwner", "orgAdmin", "assessor", "contributor"].includes(orgRole || "");
+  const canAssignResponsibilities = isSuperAdmin || ["orgOwner", "orgAdmin", "assessor", "contributor"].includes(orgRole || "");
+  const [activeOrgMembers, setActiveOrgMembers] = useState<ActiveOrgMember[]>([]);
+
+  useEffect(() => {
+    if (!firestoreAssessmentsEnabled || !currentOrgId) {
+      setActiveOrgMembers([]);
+      return;
+    }
+
+    return subscribeActiveOrgMembers(
+      currentOrgId,
+      setActiveOrgMembers,
+      error => console.warn("[responsibilityAssignments] active org members load failed", error),
+    );
+  }, [currentOrgId, firestoreAssessmentsEnabled]);
+
+  const assignmentContext = firestoreAssessmentsEnabled && currentUid ? {
+    members: activeOrgMembers,
+    uid: currentUid,
+    canAssign: canAssignResponsibilities,
+  } : undefined;
 
 
 
@@ -393,6 +415,7 @@ const getDomainDisplayLabel = (domainKey: string) => {
     getSavedTemplates,
     deleteSavedTemplate,
     updatePracticeNote,
+    updatePracticeAssignment,
     updateObjectiveRecord,
     archiveEvidence,
     applyAnalyzerSuggestion,
@@ -894,6 +917,7 @@ case "domain": {
             practice={practice}
             practiceRecord={practiceRecord}
             onUpdateNote={updatePracticeNote}
+            onUpdateAssignment={updatePracticeAssignment}
             onUpdateObjective={updateObjectiveRecord}
             onArchiveEvidence={archiveEvidence}
             libraryEvidenceContext={firestoreAssessmentsEnabled && currentOrgId && currentUid ? {
@@ -902,6 +926,7 @@ case "domain": {
               uid: currentUid,
               canManage: canManageEvidence,
             } : undefined}
+            assignmentContext={assignmentContext}
             onApplySuggestion={applyAnalyzerSuggestion}
             onAssistClick={handleAssistClick}
             storeTemplate={storeTemplate}
@@ -1008,6 +1033,7 @@ case "domain": {
             updatePoamItem={updatePoamItem}
             addPoamItem={addPoamItem}
             responsibilityMatrix={responsibilityMatrix}
+            assignmentContext={assignmentContext}
           />
         );
 

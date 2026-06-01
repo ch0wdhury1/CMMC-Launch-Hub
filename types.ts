@@ -48,6 +48,11 @@ export interface ObjectiveRecord {
   status: ObjectiveStatus;
   note: string;
   artifacts: Artifact[];
+  assignedTo?: string | null;
+  assignedToName?: string | null;
+  assignedToEmail?: string | null;
+  assignedAt?: any;
+  assignedBy?: string | null;
   actionPoints?: string;
   actionPointsSummary?: string;
   templates?: Array<{
@@ -65,6 +70,11 @@ export interface AssessmentObjective {
   status: ObjectiveStatus;
   note: string;
   artifacts: Artifact[];
+  assignedTo?: string | null;
+  assignedToName?: string | null;
+  assignedToEmail?: string | null;
+  assignedAt?: any;
+  assignedBy?: string | null;
   actionPoints?: string;
   actionPointsSummary?: string;
   templates?: Array<{
@@ -96,6 +106,11 @@ export interface PracticeRecord {
   status: PracticeStatus;
   statusSource: StatusSource;
   lastUpdated: string;
+  assignedTo?: string | null;
+  assignedToName?: string | null;
+  assignedToEmail?: string | null;
+  assignedAt?: any;
+  assignedBy?: string | null;
   analyzerSuggestion?: {
     status: PracticeStatus;
     reason: string;
@@ -215,6 +230,11 @@ export interface PoamItem {
   priority: PoamPriority;
   status: PoamStatus;
   owner?: string;
+  assignedTo?: string | null;
+  assignedToName?: string | null;
+  assignedToEmail?: string | null;
+  assignedAt?: any;
+  assignedBy?: string | null;
   createdAt: string;
   targetDate?: string;
   completedDate?: string;
@@ -386,6 +406,11 @@ export interface FirestorePracticeRecord {
   responsibility?: ResponsibilityType;
   providerName?: string;
   ownerUid?: string;
+  assignedTo?: string | null;
+  assignedToName?: string | null;
+  assignedToEmail?: string | null;
+  assignedAt?: any;
+  assignedBy?: string | null;
   riskRating?: "low" | "medium" | "high" | "critical";
   evidenceCount?: number;
   openPoamCount?: number;
@@ -418,6 +443,11 @@ export interface FirestoreObjectiveRecord {
   evidenceIds?: string[];
   evidenceCount?: number;
   ownerUid?: string;
+  assignedTo?: string | null;
+  assignedToName?: string | null;
+  assignedToEmail?: string | null;
+  assignedAt?: any;
+  assignedBy?: string | null;
   lastReviewedByUid?: string;
   lastReviewedAt?: any;
   createdByUid?: string;

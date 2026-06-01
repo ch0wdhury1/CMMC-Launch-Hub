@@ -253,6 +253,11 @@ const toLocalPoamItem = (item: FirestorePoamItem): PoamItem => ({
   priority: item.priority,
   status: item.status,
   owner: item.owner || item.ownerName,
+  assignedTo: item.assignedTo,
+  assignedToName: item.assignedToName,
+  assignedToEmail: item.assignedToEmail,
+  assignedAt: item.assignedAt,
+  assignedBy: item.assignedBy,
   createdAt: toPoamDate(item.createdAt) || new Date().toISOString(),
   targetDate: item.targetDate,
   completedDate: item.completedDate,
@@ -330,6 +335,11 @@ const mergeFirestorePracticeRecords = (
           note: objectiveNote ?? fsObjective?.note ?? fsObjective?.noteSummary ?? objective.note,
           actionPoints: fsObjective?.actionPoints ?? objective.actionPoints,
           actionPointsSummary: fsObjective?.actionPointsSummary ?? fsObjective?.aiGuidanceSummary ?? objective.actionPointsSummary,
+          assignedTo: fsObjective?.assignedTo ?? objective.assignedTo,
+          assignedToName: fsObjective?.assignedToName ?? objective.assignedToName,
+          assignedToEmail: fsObjective?.assignedToEmail ?? objective.assignedToEmail,
+          assignedAt: fsObjective?.assignedAt ?? objective.assignedAt,
+          assignedBy: fsObjective?.assignedBy ?? objective.assignedBy,
           artifacts: Array.from(mergedArtifacts.values()),
         }];
       })
@@ -341,6 +351,11 @@ const mergeFirestorePracticeRecords = (
       statusSource: fsPractice?.statusSource ?? record.statusSource,
       lastUpdated: fsPractice?.lastUpdated ?? record.lastUpdated,
       note: fsPractice?.note ?? practiceNote ?? record.note,
+      assignedTo: fsPractice?.assignedTo ?? record.assignedTo,
+      assignedToName: fsPractice?.assignedToName ?? record.assignedToName,
+      assignedToEmail: fsPractice?.assignedToEmail ?? record.assignedToEmail,
+      assignedAt: fsPractice?.assignedAt ?? record.assignedAt,
+      assignedBy: fsPractice?.assignedBy ?? record.assignedBy,
       objectiveRecords,
     };
   });
@@ -710,6 +725,11 @@ export const useCmmcData = (options: UseCmmcDataOptions = {}) => {
       statusSource: record.statusSource,
       note: record.note,
       lastUpdated: record.lastUpdated,
+      assignedTo: record.assignedTo,
+      assignedToName: record.assignedToName,
+      assignedToEmail: record.assignedToEmail,
+      assignedAt: record.assignedAt,
+      assignedBy: record.assignedBy,
       updatedByUid: uid,
     }).catch(error => {
       console.error("[assessmentFirestore] practice record save failed; local state retained", {
@@ -734,6 +754,11 @@ export const useCmmcData = (options: UseCmmcDataOptions = {}) => {
       note: record.note,
       actionPoints: record.actionPoints,
       actionPointsSummary: record.actionPointsSummary,
+      assignedTo: record.assignedTo,
+      assignedToName: record.assignedToName,
+      assignedToEmail: record.assignedToEmail,
+      assignedAt: record.assignedAt,
+      assignedBy: record.assignedBy,
       updatedByUid: uid,
     }).catch(error => {
       console.error("[assessmentFirestore] objective record save failed; local state retained", {
@@ -993,6 +1018,21 @@ export const useCmmcData = (options: UseCmmcDataOptions = {}) => {
   const updatePracticeNote = useCallback((id: string, note: string) => {
     const nextRecords = practiceRecordsRef.current.map(p => p.id === id
       ? { ...p, note, lastUpdated: new Date().toISOString() }
+      : p
+    );
+    practiceRecordsRef.current = nextRecords;
+    setPracticeRecords(nextRecords);
+
+    const updatedRecord = nextRecords.find(p => p.id === id);
+    if (updatedRecord) persistPracticeRecord(updatedRecord);
+  }, [persistPracticeRecord]);
+
+  const updatePracticeAssignment = useCallback((id: string, assignment: Pick<
+    PracticeRecord,
+    "assignedTo" | "assignedToName" | "assignedToEmail" | "assignedAt" | "assignedBy"
+  >) => {
+    const nextRecords = practiceRecordsRef.current.map(p => p.id === id
+      ? { ...p, ...assignment, lastUpdated: new Date().toISOString() }
       : p
     );
     practiceRecordsRef.current = nextRecords;
@@ -1448,6 +1488,7 @@ export const useCmmcData = (options: UseCmmcDataOptions = {}) => {
     updateCompanyProfile, 
     addUserToCompany, 
     updatePracticeNote, 
+    updatePracticeAssignment,
     updateObjectiveRecord,
     archiveEvidence,
     updatePoamItem, 

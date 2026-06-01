@@ -4,6 +4,7 @@ import { Practice, AssessmentObjective, Artifact, EvidenceFileUpload, SavedTempl
 import { AssessmentObjectiveItem } from './AssessmentObjectiveItem';
 import { PracticeLibraryEvidence } from './PracticeLibraryEvidence';
 import { CollapsibleSection } from './CollapsibleSection';
+import { ResponsibilityAssignmentSelect, type ResponsibilityAssignmentContext } from './ResponsibilityAssignmentSelect';
 
 import { generateSlideshow } from '../services/geminiService';
 // import { generatePracticeExplanationAudio, generateSlideshow } from '../services/geminiService';
@@ -17,6 +18,10 @@ interface PracticeViewProps {
   practice: Practice;
   practiceRecord: PracticeRecord;
   onUpdateNote: (practiceId: string, note: string) => void;
+  onUpdateAssignment: (practiceId: string, assignment: Pick<
+    PracticeRecord,
+    "assignedTo" | "assignedToName" | "assignedToEmail" | "assignedAt" | "assignedBy"
+  >) => void;
   onUpdateObjective: (practiceId: string, objectiveId: string, updates: Partial<ObjectiveRecord>, evidenceFiles?: EvidenceFileUpload[]) => void;
   onArchiveEvidence: (practiceId: string, objectiveId: string, artifact: Artifact, archiveReason: string) => Promise<void>;
   libraryEvidenceContext?: {
@@ -25,6 +30,7 @@ interface PracticeViewProps {
     uid: string;
     canManage: boolean;
   };
+  assignmentContext?: ResponsibilityAssignmentContext;
   onApplySuggestion: (practiceId: string) => void;
   onAssistClick: (practiceId: string) => void;
   storeTemplate: (template: SavedTemplate) => void;
@@ -34,9 +40,11 @@ export const PracticeView: React.FC<PracticeViewProps> = ({
   practice,
   practiceRecord,
   onUpdateNote,
+  onUpdateAssignment,
   onUpdateObjective,
   onArchiveEvidence,
   libraryEvidenceContext,
+  assignmentContext,
   onApplySuggestion,
   onAssistClick,
   storeTemplate,
@@ -387,6 +395,14 @@ ${objList}
             </div>
             <p className="text-xs text-gray-500">{practice.id}</p>
             <p className="text-gray-600 mt-2">{practice.brief_description}</p>
+            <ResponsibilityAssignmentSelect
+              value={practiceRecord.assignedTo}
+              assignedToName={practiceRecord.assignedToName}
+              assignedToEmail={practiceRecord.assignedToEmail}
+              context={assignmentContext}
+              onChange={assignment => onUpdateAssignment(practice.id, assignment)}
+              className="mt-3 max-w-xs"
+            />
           </div>
           <button
             onClick={() => onAssistClick(practice.id)}
@@ -568,6 +584,7 @@ ${objList}
         isSlideshowLoading={loadingSlideshow === mergedObjective.id}
         onGenerateSlideshow={handleGenerateSlideshow}
         libraryEvidenceContext={libraryEvidenceContext}
+        assignmentContext={assignmentContext}
       />
     );
   })
