@@ -186,7 +186,7 @@ console.log("L1_FILTER_DEBUG", { tier, tierBase, l1Count: l1Domains.length, l1Na
         templateAssist: isL1 || isL2,
       },
       reporting: {
-        executiveNarrative: isL2,
+        executiveNarrative: true,
         readinessVault: isL2,
         sprsScorecard: true,
         ssp: isL1 || isL2,
@@ -197,7 +197,6 @@ console.log("L1_FILTER_DEBUG", { tier, tierBase, l1Count: l1Domains.length, l1Na
     // sponsored vs comm_l1 share same except templateAssist + ssp
     if (isSponsored) {
       can.tools.templateAssist = false;
-      can.reporting.executiveNarrative = false;
       can.reporting.readinessVault = false;
       can.reporting.ssp = false;
       can.reporting.poam = false;
@@ -502,7 +501,7 @@ useEffect(() => {
               className={navClass(activeViewInfo?.type === "executive")}
               onClick={() => clickOrLock(access.reporting.executiveNarrative, onExecutiveSummaryClick)}
             >
-              <span className="ml-7">Executive Narrative</span>
+              <span className="ml-7">Executive Readiness Report</span>
               {!access.reporting.executiveNarrative && <Lock className="h-3 w-3 ml-auto text-gray-400" />}
             </button>
 

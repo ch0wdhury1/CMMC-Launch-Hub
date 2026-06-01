@@ -20,7 +20,7 @@ import { Dashboard } from "./components/Dashboard";
 import { DomainView } from "./components/DomainView";
 import { PracticeView } from "./components/PracticeView";
 import { AssistMePanel } from "./components/AssistMePanel";
-import { ExecutiveSummary } from "./components/ExecutiveSummary";
+import { ExecutiveReadinessReport } from "./components/ExecutiveReadinessReport";
 import { AppHeader } from "./components/AppHeader";
 import { AppFooter } from "./components/AppFooter";
 import { ProfilePage } from "./components/ProfilePage";
@@ -654,7 +654,7 @@ if (view.type === "domain") {
       const p = practiceMap.get(view.practiceId);
       return p ? `Practice: ${p.id}` : "Practice";
     }
-    if (view.type === "executive") return "Executive Narrative";
+    if (view.type === "executive") return "Executive Readiness Report";
     if (view.type === "profile") return "Company Profile";
     if (view.type === "savedTemplates") return "Saved Templates";
     if (view.type === "evidenceLibrary") return "Evidence Library";
@@ -908,12 +908,16 @@ case "domain": {
 
       case "executive":
         return (
-          <ExecutiveSummary
+          <ExecutiveReadinessReport
+            orgId={currentOrgId}
+            assessmentId={currentAssessmentId}
+            assessmentLevel={hasL2 ? "L2" : "L1"}
             domains={domains}
             practiceRecords={practiceRecords}
-            scores={scores}
+            poamItems={poamItems}
+            evidenceSummary={evidenceSummary}
             getDomainCompletion={getDomainCompletion}
-            companyProfile={companyProfile}
+            canExport={isSuperAdmin || isOrgAdmin}
           />
         );
 
