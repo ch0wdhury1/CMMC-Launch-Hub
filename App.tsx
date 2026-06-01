@@ -377,6 +377,7 @@ const getDomainDisplayLabel = (domainKey: string) => {
     deleteSavedTemplate,
     updatePracticeNote,
     updateObjectiveRecord,
+    archiveEvidence,
     applyAnalyzerSuggestion,
     setAnalyzerAnswers,
     runAnalyzer,
@@ -870,6 +871,7 @@ case "domain": {
             practiceRecord={practiceRecord}
             onUpdateNote={updatePracticeNote}
             onUpdateObjective={updateObjectiveRecord}
+            onArchiveEvidence={archiveEvidence}
             onApplySuggestion={applyAnalyzerSuggestion}
             onAssistClick={handleAssistClick}
             storeTemplate={storeTemplate}

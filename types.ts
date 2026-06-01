@@ -32,6 +32,11 @@ export interface Artifact {
   storageError?: string;
   uploadedAt: string;
   isFinalForm: boolean;
+  archived?: boolean;
+  active?: boolean;
+  archivedAt?: any;
+  archivedByUid?: string;
+  archiveReason?: string;
 }
 
 export interface EvidenceFileUpload {
@@ -408,6 +413,11 @@ export interface EvidenceRecord {
   reviewedByUid?: string;
   reviewedAt?: any;
   tags?: string[];
+  archived?: boolean;
+  active?: boolean;
+  archivedAt?: any;
+  archivedByUid?: string;
+  archiveReason?: string;
   source?: string;
   createdAt?: any;
   updatedAt?: any;
@@ -498,6 +508,7 @@ export interface ActivityLogEntry {
     | "objective.status.changed"
     | "objective.note.updated"
     | "evidence.uploaded"
+    | "evidence.archived"
     | "poam.created"
     | "poam.updated"
     | "assessment.saved";

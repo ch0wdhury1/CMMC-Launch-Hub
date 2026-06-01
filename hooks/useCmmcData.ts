@@ -49,6 +49,7 @@ import {
   savePracticeRecord,
   saveAssessmentLastSavedAt,
   saveActivityLogEntry,
+  archiveEvidenceRecord,
   saveScoreSnapshot,
 } from "../src/assessmentFirestore";
 import { uploadEvidenceFile } from "../src/evidenceStorage";
@@ -310,6 +311,11 @@ const mergeFirestorePracticeRecords = (
           downloadUrl: e.downloadUrl,
           storageStatus: e.storageStatus,
           storageError: e.storageError,
+          archived: e.archived,
+          active: e.active,
+          archivedAt: e.archivedAt,
+          archivedByUid: e.archivedByUid,
+          archiveReason: e.archiveReason,
           uploadedAt: toEvidenceUploadedAt(e),
           isFinalForm: e.isFinalForm ?? true,
         }));
@@ -925,6 +931,39 @@ export const useCmmcData = (options: UseCmmcDataOptions = {}) => {
     });
   }, [firestoreEnabled, logActivity, orgId, uid, requestedAssessmentLevel, updateCachedArtifact]);
 
+  const archiveEvidence = useCallback(async (
+    practiceId: string,
+    objectiveId: string,
+    artifact: Artifact,
+    archiveReason: string
+  ) => {
+    if (!firestoreEnabled || !orgId || !uid) {
+      throw new Error("Evidence archive requires Firestore assessment mode.");
+    }
+
+    await archiveEvidenceRecord(orgId, artifact.id, uid, archiveReason);
+    updateCachedArtifact(practiceId, objectiveId, artifact.id, {
+      archived: true,
+      active: false,
+      archivedAt: new Date().toISOString(),
+      archivedByUid: uid,
+      archiveReason,
+    });
+    logActivity({
+      action: "evidence.archived",
+      targetType: "evidence",
+      targetId: artifact.id,
+      practiceId,
+      objectiveId,
+      summary: "Evidence archived",
+      metadata: {
+        evidenceId: artifact.id,
+        fileName: artifact.fileName || artifact.name,
+        archiveReason,
+      },
+    });
+  }, [firestoreEnabled, logActivity, orgId, uid, updateCachedArtifact]);
+
   const persistObjectiveNote = useCallback((practiceId: string, objectiveId: string, content: string) => {
     if (!firestoreEnabled || !orgId || !uid) return;
 
@@ -1410,6 +1449,7 @@ export const useCmmcData = (options: UseCmmcDataOptions = {}) => {
     addUserToCompany, 
     updatePracticeNote, 
     updateObjectiveRecord,
+    archiveEvidence,
     updatePoamItem, 
     addPoamItem, 
     updateResponsibilityMatrixEntry, 

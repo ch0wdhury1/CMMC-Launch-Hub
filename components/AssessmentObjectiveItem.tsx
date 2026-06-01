@@ -11,7 +11,7 @@ import {
 
 
 import { jsPDF } from 'jspdf';
-import { Paperclip, FileText, Trash2, Loader2, Bot, Volume2, Download, ExternalLink, MessageSquare, Send, ChevronDown, ChevronUp, Save, Film, Clapperboard, X, ChevronLeft, ChevronRight, Sparkles, ClipboardCopy, CheckCircle2, XCircle, HelpCircle } from 'lucide-react';
+import { Paperclip, FileText, Archive, Loader2, Bot, Volume2, Download, ExternalLink, MessageSquare, Send, ChevronDown, ChevronUp, Save, Film, Clapperboard, X, ChevronLeft, ChevronRight, Sparkles, ClipboardCopy, CheckCircle2, XCircle, HelpCircle } from 'lucide-react';
 
 type ChatMessage = {
   role: 'user' | 'model';
@@ -111,6 +111,7 @@ interface AssessmentObjectiveItemProps {
   objective: AssessmentObjective; 
   practice: Practice;
   onUpdateObjective: (objectiveId: string, updates: Partial<ObjectiveRecord>, evidenceFiles?: EvidenceFileUpload[]) => void;
+  onArchiveEvidence: (objectiveId: string, artifact: Artifact, archiveReason: string) => Promise<void>;
   storeTemplate: (template: SavedTemplate) => void;
   slideshow?: string[];
   isSlideshowLoading: boolean;
@@ -123,6 +124,7 @@ export const AssessmentObjectiveItem: React.FC<AssessmentObjectiveItemProps> = (
   objective,
   practice,
   onUpdateObjective,
+  onArchiveEvidence,
   storeTemplate,
   slideshow,
   isSlideshowLoading,
@@ -134,6 +136,8 @@ export const AssessmentObjectiveItem: React.FC<AssessmentObjectiveItemProps> = (
   const [isSummaryAudioLoading, setIsSummaryAudioLoading] = useState(false);
   const [isDeepDiveOpen, setIsDeepDiveOpen] = useState(false);
   const [isSlideshowModalOpen, setIsSlideshowModalOpen] = useState(false);
+  const [showArchivedEvidence, setShowArchivedEvidence] = useState(false);
+  const [archivingEvidenceId, setArchivingEvidenceId] = useState<string | null>(null);
   
   // Deep Dive Chat State
   const [deepDiveHistory, setDeepDiveHistory] = useState<ChatMessage[]>([]);
@@ -275,9 +279,18 @@ ${JSON.stringify(ctx, null, 2)}
     finally { setIsUploading(false); e.target.value = ""; }
   };
 
-  const removeArtifact = (artifactId: string) => {
-    const updated = objective.artifacts.filter((a) => a.id !== artifactId);
-    onUpdateObjective(objective.id, { artifacts: updated });
+  const archiveArtifact = async (artifact: Artifact) => {
+    if (artifact.archived) return;
+    if (!window.confirm("Archive this evidence? It will be hidden from the active evidence list but not deleted.")) return;
+    const archiveReason = window.prompt("Reason for archive")?.trim() || "";
+    setArchivingEvidenceId(artifact.id);
+    try {
+      await onArchiveEvidence(objective.id, artifact, archiveReason);
+    } catch (error) {
+      console.warn("Evidence archive failed; artifact retained.", error);
+    } finally {
+      setArchivingEvidenceId(null);
+    }
   };
 
   const formatFileSize = (bytes?: number) => {
@@ -316,6 +329,9 @@ ${JSON.stringify(ctx, null, 2)}
     }
     downloadArtifact(artifact);
   };
+
+  const archivedArtifactCount = objective.artifacts.filter(artifact => artifact.archived).length;
+  const visibleArtifacts = objective.artifacts.filter(artifact => showArchivedEvidence || !artifact.archived);
 
   const handlePlaySummaryAudio = async () => {
     if (!objective.actionPointsSummary) {
@@ -609,13 +625,27 @@ Respond in a helpful, practical way:
                 {/* Artifacts Display */}
                 {objective.artifacts?.length > 0 && (
                 <div>
-                    <h4 className="text-sm font-semibold text-gray-700 mb-2">Verified Artifacts (Evidence)</h4>
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className="text-sm font-semibold text-gray-700">Verified Artifacts (Evidence)</h4>
+                      {archivedArtifactCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setShowArchivedEvidence(current => !current)}
+                          className="text-xs text-blue-700 hover:text-blue-900"
+                        >
+                          {showArchivedEvidence ? "Hide archived evidence" : "Show archived evidence"}
+                        </button>
+                      )}
+                    </div>
                     <div className="space-y-2 max-h-40 overflow-y-auto p-2 bg-gray-100 rounded-md">
-                        {objective.artifacts.map((artifact) => (
-                        <div key={artifact.id} className="flex items-start p-2 bg-white border border-gray-200 rounded-md">
+                        {visibleArtifacts.map((artifact) => (
+                        <div key={artifact.id} className={`flex items-start p-2 border border-gray-200 rounded-md ${artifact.archived ? "bg-gray-50 opacity-70" : "bg-white"}`}>
                             <FileText className="h-8 w-8 text-gray-400 flex-shrink-0 mr-3" />
                             <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium text-gray-800 break-all">{artifact.name}</p>
+                                <p className="text-sm font-medium text-gray-800 break-all">
+                                  {artifact.name}
+                                  {artifact.archived && <span className="ml-2 text-xs font-semibold text-gray-500">Archived</span>}
+                                </p>
                                 <p className="text-xs text-gray-500 mt-1">
                                   {[formatFileSize(artifact.fileSize), `OCR: ${artifact.processingStatus?.replace("ocr_", "") || "pending"}`, `Storage: ${artifact.storageStatus === "upload_failed" ? "failed" : artifact.storageStatus || "unavailable"}`].filter(Boolean).join(" | ")}
                                 </p>
@@ -641,8 +671,19 @@ Respond in a helpful, practical way:
                                 <Download className="h-3 w-3 mr-1" /> Download
                               </button>
                               {!artifact.downloadUrl && <span className="text-xs text-gray-400">File unavailable</span>}
+                              <button
+                                type="button"
+                                onClick={() => archiveArtifact(artifact)}
+                                disabled={artifact.archived || archivingEvidenceId === artifact.id}
+                                title={artifact.archived ? "Evidence archived" : "Archive evidence"}
+                                className="flex items-center text-xs px-2 py-1 text-gray-600 hover:bg-gray-100 rounded disabled:text-gray-400 disabled:hover:bg-transparent"
+                              >
+                                {archivingEvidenceId === artifact.id
+                                  ? <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                  : <Archive className="h-3 w-3 mr-1" />}
+                                Archive
+                              </button>
                             </div>
-                            <button onClick={() => removeArtifact(artifact.id)} className="text-gray-400 hover:text-red-600 ml-2"><Trash2 className="h-4 w-4" /></button>
                         </div>
                         ))}
                     </div>

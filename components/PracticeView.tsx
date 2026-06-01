@@ -17,6 +17,7 @@ interface PracticeViewProps {
   practiceRecord: PracticeRecord;
   onUpdateNote: (practiceId: string, note: string) => void;
   onUpdateObjective: (practiceId: string, objectiveId: string, updates: Partial<ObjectiveRecord>, evidenceFiles?: EvidenceFileUpload[]) => void;
+  onArchiveEvidence: (practiceId: string, objectiveId: string, artifact: Artifact, archiveReason: string) => Promise<void>;
   onApplySuggestion: (practiceId: string) => void;
   onAssistClick: (practiceId: string) => void;
   storeTemplate: (template: SavedTemplate) => void;
@@ -27,6 +28,7 @@ export const PracticeView: React.FC<PracticeViewProps> = ({
   practiceRecord,
   onUpdateNote,
   onUpdateObjective,
+  onArchiveEvidence,
   onApplySuggestion,
   onAssistClick,
   storeTemplate,
@@ -547,6 +549,9 @@ ${objList}
         practice={practice}
         onUpdateObjective={(objectiveId, updates, evidenceFiles) =>
           onUpdateObjective(String((practice as any)?.id ?? ""), objectiveId, updates, evidenceFiles)
+        }
+        onArchiveEvidence={(objectiveId, artifact, archiveReason) =>
+          onArchiveEvidence(String((practice as any)?.id ?? ""), objectiveId, artifact, archiveReason)
         }
         storeTemplate={storeTemplate}
         slideshow={slideshowImages[mergedObjective.id]}

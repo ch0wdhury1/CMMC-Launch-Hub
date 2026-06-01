@@ -342,6 +342,11 @@ export async function saveEvidenceRecord(
     ocrSummary: record.ocrSummary,
     processingStatus: record.processingStatus,
     processingError: record.processingError,
+    archived: record.archived,
+    active: record.active,
+    archivedAt: record.archivedAt,
+    archivedByUid: record.archivedByUid,
+    archiveReason: record.archiveReason,
     uploadedByUid: record.uploadedByUid,
     uploadedAt: record.uploadedAt,
     reviewStatus: "uploaded",
@@ -357,6 +362,27 @@ export async function saveEvidenceRecord(
     evidenceId,
     practiceIds: record.practiceIds,
     objectiveIds: record.objectiveIds,
+  });
+}
+
+export async function archiveEvidenceRecord(
+  orgId: string,
+  evidenceId: string,
+  archivedByUid: string,
+  archiveReason: string
+): Promise<void> {
+  const ref = doc(db, "orgs", orgId, "evidence", cleanDocId(evidenceId));
+  await setDoc(ref, stripUndefined({
+    archived: true,
+    active: false,
+    archivedAt: serverTimestamp(),
+    archivedByUid,
+    archiveReason,
+    updatedAt: serverTimestamp(),
+  }), { merge: true });
+  console.info("[assessmentFirestore] archived evidence metadata", {
+    orgId,
+    evidenceId,
   });
 }
 
