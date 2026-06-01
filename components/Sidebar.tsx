@@ -39,6 +39,8 @@ type Props = {
   onSprsClick: () => void;
   onSolutionsClick: () => void;
   onEvidenceLibraryClick: () => void;
+  onOrgInvitationsClick: () => void;
+  canManageInvitations: boolean;
   onSecurityAnalyzerClick: () => void;
   onReadinessReportsClick: () => void;
   onSystemSecurityPlanClick: () => void;
@@ -99,6 +101,8 @@ export function Sidebar(props: Props) {
     onSprsClick,
     onSolutionsClick,
     onEvidenceLibraryClick,
+    onOrgInvitationsClick,
+    canManageInvitations,
     onSecurityAnalyzerClick,
     onReadinessReportsClick,
     onSystemSecurityPlanClick,
@@ -486,6 +490,15 @@ useEffect(() => {
             >
               <span className="ml-7">Evidence Library</span>
             </button>
+
+            {canManageInvitations && (
+              <button
+                className={navClass(activeViewInfo?.type === "orgInvitations")}
+                onClick={onOrgInvitationsClick}
+              >
+                <span className="ml-7">Organization Invitations</span>
+              </button>
+            )}
           </div>
         )}
 

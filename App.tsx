@@ -26,6 +26,8 @@ import { AppFooter } from "./components/AppFooter";
 import { ProfilePage } from "./components/ProfilePage";
 import { SavedTemplates } from "./components/SavedTemplates";
 import { EvidenceLibrary } from "./components/EvidenceLibrary";
+import { InvitationAcceptancePanel } from "./components/InvitationAcceptancePanel";
+import { OrgInvitations } from "./components/OrgInvitations";
 import { TemplateAssist } from "./components/TemplateAssist";
 import { SprsScorecard } from "./components/SprsScorecard";
 import { SolutionsView } from "./components/SolutionsView";
@@ -127,6 +129,7 @@ type ViewState =
   | { type: "profile" }
   | { type: "savedTemplates" }
   | { type: "evidenceLibrary" }
+  | { type: "orgInvitations" }
   | { type: "templateAssist" }
   | { type: "sprs" }
   | { type: "solutions" }
@@ -148,6 +151,7 @@ export type ActiveViewInfo =
   | { type: "profile"; name: "profile" }
   | { type: "savedTemplates"; name: "savedTemplates" }
   | { type: "evidenceLibrary"; name: "evidenceLibrary" }
+  | { type: "orgInvitations"; name: "orgInvitations" }
   | { type: "templateAssist"; name: "templateAssist" }
   | { type: "sprs"; name: "sprs" }
   | { type: "solutions"; name: "solutions" }
@@ -219,7 +223,12 @@ export default function App() {
     return <Login />;
   }
 
-  return <AuthedApp onLogout={handleLogout} />;
+  return (
+    <>
+      <InvitationAcceptancePanel uid={authUser.uid} email={authUser.email} />
+      <AuthedApp onLogout={handleLogout} />
+    </>
+  );
 }
 
 /**
@@ -614,6 +623,7 @@ if (view.type === "domain") {
     if (view.type === "profile") return { type: "profile", name: "profile" };
     if (view.type === "savedTemplates") return { type: "savedTemplates", name: "savedTemplates" };
     if (view.type === "evidenceLibrary") return { type: "evidenceLibrary", name: "evidenceLibrary" };
+    if (view.type === "orgInvitations") return { type: "orgInvitations", name: "orgInvitations" };
     if (view.type === "templateAssist") return { type: "templateAssist", name: "templateAssist" };
     if (view.type === "sprs") return { type: "sprs", name: "sprs" };
     if (view.type === "solutions") return { type: "solutions", name: "solutions" };
@@ -662,6 +672,7 @@ if (view.type === "domain") {
     if (view.type === "profile") return "Company Profile";
     if (view.type === "savedTemplates") return "Saved Templates";
     if (view.type === "evidenceLibrary") return "Evidence Library";
+    if (view.type === "orgInvitations") return "Organization Invitations";
     if (view.type === "templateAssist") return "Template Assist";
     if (view.type === "sprs") return "SPRS Scorecard";
     if (view.type === "solutions") return "Starter Kits";
@@ -939,6 +950,9 @@ case "domain": {
       case "evidenceLibrary":
         return <EvidenceLibrary orgId={currentOrgId} uid={currentUid} role={orgRole} isSuperAdmin={isSuperAdmin} />;
 
+      case "orgInvitations":
+        return <OrgInvitations orgId={currentOrgId} uid={currentUid} role={orgRole} isSuperAdmin={isSuperAdmin} />;
+
       case "templateAssist":
         return <TemplateAssist domains={domains} storeTemplate={storeTemplate} />;
 
@@ -1071,6 +1085,8 @@ onDiagnosticsClick={isSuperAdmin ? () => setIsDiagnosticsOpen(true) : undefined}
           onSprsClick={() => setView({ type: "sprs" })}
           onSolutionsClick={() => setView({ type: "solutions" })}
           onEvidenceLibraryClick={() => setView({ type: "evidenceLibrary" })}
+          onOrgInvitationsClick={() => setView({ type: "orgInvitations" })}
+          canManageInvitations={isSuperAdmin || isOrgAdmin}
           onSecurityAnalyzerClick={() => setView({ type: "readinessAnalyzer" })}
           onReadinessReportsClick={() => setView({ type: "readinessReports" })}
           onSystemSecurityPlanClick={() => setView({ type: "systemSecurityPlan" })}

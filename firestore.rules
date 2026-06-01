@@ -63,6 +63,43 @@ function isOrgOwnerOrAdmin(orgId) {
   return isOrgOwner(orgId) || isOrgAdmin(orgId) || isSuperAdmin();
 }
 
+function canManageOrgInvitations(orgId) {
+  return isSuperAdmin()
+    || isOrgOwner(orgId)
+    || (
+      isActiveOrgMember(orgId)
+      && orgMemberDoc(orgId).role == "orgAdmin"
+    );
+}
+
+function invitationDoc(orgId, invitationId) {
+  return get(
+    /databases/$(database)/documents/orgs/$(orgId)/invitations/$(invitationId)
+  ).data;
+}
+
+function acceptedInvitationAfterWrite(orgId, invitationId, memberUid) {
+  return exists(/databases/$(database)/documents/orgs/$(orgId)/invitations/$(invitationId))
+    && invitationDoc(orgId, invitationId).status == "pending"
+    && invitationDoc(orgId, invitationId).email == request.auth.token.email
+    && invitationDoc(orgId, invitationId).role == request.resource.data.role
+    && getAfter(
+      /databases/$(database)/documents/orgs/$(orgId)/invitations/$(invitationId)
+    ).data.status == "accepted"
+    && getAfter(
+      /databases/$(database)/documents/orgs/$(orgId)/invitations/$(invitationId)
+    ).data.acceptedBy == memberUid;
+}
+
+function validAcceptedInvitationMembership(orgId, invitationId, memberUid) {
+  return isSignedIn()
+    && request.auth.uid == memberUid
+    && request.resource.data.invitationId is string
+    && request.resource.data.status == "active"
+    && request.resource.data.role in ["orgAdmin", "contributor", "viewer", "assessor"]
+    && acceptedInvitationAfterWrite(orgId, invitationId, memberUid);
+}
+
 function canReadAssessmentData(orgId) {
   return isSuperAdmin() || isActiveOrgMember(orgId);
 }
@@ -150,11 +187,66 @@ match /orgs/{orgId} {
     // - super admin
     // - org owner
     // - org members
-    allow read: if isSuperAdmin() || isOrgOwner(orgId) || isOrgMember(orgId);
+    allow read: if isSuperAdmin() || isOrgOwner(orgId) || isOrgMember(orgId)
+      || (isSignedIn() && request.auth.uid == memberUid);
 
-    // WRITE members:
-    // - super admin only (Admin Panel will handle later)
-    allow create, update, delete: if isSuperAdmin();
+    allow create: if isSuperAdmin()
+      || (
+        validAcceptedInvitationMembership(orgId, request.resource.data.invitationId, memberUid)
+        && request.resource.data.keys().hasOnly([
+          "role", "status", "active", "email", "invitationId", "createdAt", "updatedAt"
+        ])
+      );
+    allow update: if isSuperAdmin()
+      || (
+        validAcceptedInvitationMembership(orgId, request.resource.data.invitationId, memberUid)
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly([
+          "role", "status", "active", "email", "invitationId", "createdAt", "updatedAt"
+        ])
+      );
+    allow delete: if isSuperAdmin();
+  }
+
+  match /invitations/{invitationId} {
+    allow read: if canManageOrgInvitations(orgId)
+      || (
+        isSignedIn()
+        && request.auth.token.email != null
+        && resource.data.email == request.auth.token.email
+      );
+
+    allow create: if canManageOrgInvitations(orgId)
+      && request.resource.data.keys().hasOnly([
+        "id", "orgId", "orgName", "email", "role", "status", "invitedBy", "invitedAt"
+      ])
+      && request.resource.data.id == invitationId
+      && request.resource.data.orgId == orgId
+      && request.resource.data.email is string
+      && request.resource.data.role in ["orgAdmin", "contributor", "viewer", "assessor"]
+      && request.resource.data.status == "pending"
+      && request.resource.data.invitedBy == request.auth.uid;
+
+    allow update: if (
+        canManageOrgInvitations(orgId)
+        && resource.data.status == "pending"
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly([
+          "status", "cancelledBy", "cancelledAt"
+        ])
+        && request.resource.data.status == "cancelled"
+        && request.resource.data.cancelledBy == request.auth.uid
+      ) || (
+        isSignedIn()
+        && request.auth.token.email != null
+        && resource.data.email == request.auth.token.email
+        && resource.data.status == "pending"
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly([
+          "status", "acceptedBy", "acceptedAt"
+        ])
+        && request.resource.data.status == "accepted"
+        && request.resource.data.acceptedBy == request.auth.uid
+      );
+
+    allow delete: if false;
   }
 
   // --- assessment shell (Phase 4A) ---

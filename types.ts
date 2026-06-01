@@ -505,6 +505,23 @@ export interface AttachedLibraryEvidence extends EvidenceReference {
   libraryItem: EvidenceLibraryItem | null;
 }
 
+export type OrgInvitationRole = "orgAdmin" | "contributor" | "viewer" | "assessor";
+
+export interface OrgInvitation {
+  id: string;
+  orgId: string;
+  orgName?: string;
+  email: string;
+  role: OrgInvitationRole;
+  status: "pending" | "accepted" | "cancelled";
+  invitedBy: string;
+  invitedAt: any;
+  acceptedBy?: string;
+  acceptedAt?: any;
+  cancelledBy?: string;
+  cancelledAt?: any;
+}
+
 export interface NoteRecord {
   noteId: string;
   orgId: string;
