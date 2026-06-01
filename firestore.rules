@@ -265,6 +265,11 @@ match /orgs/{orgId} {
         allow create, update: if canWriteAssessmentShell(orgId);
         allow delete: if false;
       }
+
+      match /evidenceValidations/{evidenceId} {
+        allow read: if canReadAssessmentData(orgId);
+        allow write: if false;
+      }
     }
 
     match /objectiveRecords/{objectiveId} {
@@ -276,6 +281,11 @@ match /orgs/{orgId} {
         allow read: if canReadAssessmentData(orgId);
         allow create, update: if canWriteAssessmentShell(orgId);
         allow delete: if false;
+      }
+
+      match /evidenceValidations/{evidenceId} {
+        allow read: if canReadAssessmentData(orgId);
+        allow write: if false;
       }
     }
 

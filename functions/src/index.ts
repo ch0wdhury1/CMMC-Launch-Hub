@@ -58,9 +58,81 @@ async function canAccessOrg(uid: string, orgId: string) {
   return isSuperAdmin || isActiveMember;
 }
 
+async function canValidateEvidence(uid: string, orgId: string) {
+  const [userSnap, membershipSnap] = await Promise.all([
+    db.doc(`users/${uid}`).get(),
+    db.doc(`orgs/${orgId}/members/${uid}`).get(),
+  ]);
+  if (userSnap.exists && userSnap.data()?.roles?.superAdmin === true) return true;
+  const membership = membershipSnap.data();
+  return membershipSnap.exists
+    && membership?.status === "active"
+    && ["orgOwner", "orgAdmin", "assessor", "contributor"].includes(membership?.role);
+}
+
 async function isSuperAdminUser(uid: string) {
   const userSnap = await db.doc(`users/${uid}`).get();
   return userSnap.exists && userSnap.data()?.roles?.superAdmin === true;
+}
+
+const EVIDENCE_VALIDATION_STATUSES = new Set([
+  "supportive",
+  "partial",
+  "weak",
+  "not_relevant",
+  "needs_review",
+]);
+const EVIDENCE_VALIDATION_CONFIDENCE = new Set(["high", "medium", "low"]);
+
+function objectiveRecordDocId(practiceId: string, objectiveId: string) {
+  return cleanDocId(`${practiceId}::${objectiveId}`);
+}
+
+function evidenceValidationDoc(
+  orgId: string,
+  assessmentId: string,
+  practiceId: string,
+  objectiveId: string | undefined,
+  evidenceId: string
+) {
+  const recordPath = objectiveId
+    ? `objectiveRecords/${objectiveRecordDocId(practiceId, objectiveId)}`
+    : `practiceRecords/${cleanDocId(practiceId)}`;
+  return db.doc(
+    `orgs/${orgId}/assessments/${assessmentId}/${recordPath}/evidenceValidations/${cleanDocId(evidenceId)}`
+  );
+}
+
+function stringArray(value: unknown): string[] | null {
+  if (!Array.isArray(value) || !value.every(item => typeof item === "string")) return null;
+  return value.map(item => item.trim()).filter(Boolean).slice(0, 12);
+}
+
+function parseEvidenceValidation(text: string) {
+  const normalized = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+  const parsed = JSON.parse(normalized);
+  const strengths = stringArray(parsed?.strengths);
+  const gaps = stringArray(parsed?.gaps);
+  const recommendedActions = stringArray(parsed?.recommendedActions);
+  if (
+    !EVIDENCE_VALIDATION_STATUSES.has(parsed?.validationStatus)
+    || !EVIDENCE_VALIDATION_CONFIDENCE.has(parsed?.confidence)
+    || typeof parsed?.summary !== "string"
+    || !parsed.summary.trim()
+    || !strengths
+    || !gaps
+    || !recommendedActions
+  ) {
+    throw new Error("Gemini returned an invalid evidence validation result");
+  }
+  return {
+    validationStatus: parsed.validationStatus,
+    confidence: parsed.confidence,
+    summary: parsed.summary.trim().slice(0, 1200),
+    strengths,
+    gaps,
+    recommendedActions,
+  };
 }
 
 async function updateEvidenceOcrFailure(
@@ -226,6 +298,144 @@ app.post("/api/evidence/ocr", requireAuth, async (req: any, res) => {
       error: processingError,
       processingStatus: "ocr_failed",
     });
+  }
+});
+
+app.post("/api/evidence/validate", requireAuth, async (req: any, res) => {
+  const {
+    orgId,
+    assessmentId,
+    practiceId,
+    objectiveId,
+    evidenceId,
+    evidenceSource,
+    practiceTitle,
+    objectiveTitle,
+    fileName,
+    category,
+    description,
+    tags,
+    ocrSummary,
+  } = req.body || {};
+
+  if (
+    typeof orgId !== "string"
+    || typeof assessmentId !== "string"
+    || typeof practiceId !== "string"
+    || typeof evidenceId !== "string"
+    || typeof evidenceSource !== "string"
+    || typeof practiceTitle !== "string"
+    || typeof fileName !== "string"
+    || !isSafePathSegment(orgId)
+    || !isSafePathSegment(assessmentId)
+    || practiceId.trim().length === 0
+    || evidenceId.trim().length === 0
+    || practiceTitle.trim().length === 0
+    || fileName.trim().length === 0
+    || (objectiveId !== undefined && typeof objectiveId !== "string")
+    || !["uploaded", "evidenceLibrary"].includes(evidenceSource)
+    || (tags !== undefined && stringArray(tags) === null)
+  ) {
+    return res.status(400).json({error: "Invalid evidence validation request"});
+  }
+
+  try {
+    if (!(await canValidateEvidence(req.user.uid, orgId))) {
+      return res.status(403).json({error: "Not authorized to validate evidence for this organization"});
+    }
+
+    const sourceRef = evidenceSource === "evidenceLibrary"
+      ? db.doc(`orgs/${orgId}/evidenceLibrary/${cleanDocId(evidenceId)}`)
+      : evidenceDoc(orgId, evidenceId);
+    const sourceSnap = await sourceRef.get();
+    if (!sourceSnap.exists) {
+      return res.status(404).json({error: "Evidence metadata not found"});
+    }
+    const source = sourceSnap.data() || {};
+    const apiKey = GEMINI_API_KEY.value();
+    if (!apiKey) throw new Error("Missing GEMINI_API_KEY");
+
+    const prompt = [
+      "You are reviewing evidence for CMMC readiness support.",
+      "Do not state that evidence proves compliance. Do not make certification claims. Do not give legal assurance.",
+      "Use cautious language and make clear that human review is required.",
+      "Return JSON only with exactly these keys:",
+      '{"validationStatus":"supportive|partial|weak|not_relevant|needs_review","confidence":"high|medium|low","summary":"string","strengths":["string"],"gaps":["string"],"recommendedActions":["string"]}',
+      "",
+      "Review context:",
+      JSON.stringify({
+        practiceId,
+        practiceTitle,
+        objectiveId: objectiveId || null,
+        objectiveTitle: typeof objectiveTitle === "string" ? objectiveTitle : null,
+        evidenceId,
+        evidenceSource,
+        fileName: source.fileName || fileName,
+        category: source.category || category || null,
+        description: source.description || description || null,
+        tags: source.tags || stringArray(tags) || [],
+        ocrSummary: source.ocrSummary || ocrSummary || "",
+      }),
+    ].join("\n");
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+      EVIDENCE_OCR_MODEL
+    )}:generateContent`;
+    const geminiResponse = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": apiKey,
+      },
+      body: JSON.stringify({
+        contents: [{role: "user", parts: [{text: prompt}]}],
+        generationConfig: {
+          temperature: 0.1,
+          responseMimeType: "application/json",
+        },
+      }),
+    });
+    const data: any = await geminiResponse.json();
+    if (!geminiResponse.ok) {
+      throw new Error(data?.error?.message || "Gemini evidence validation request failed");
+    }
+    const text = data?.candidates?.[0]?.content?.parts
+      ?.map((part: any) => part?.text)
+      ?.filter(Boolean)
+      ?.join("")
+      ?.trim() || "";
+    if (!text) throw new Error("Gemini returned no evidence validation result");
+
+    const aiResult = parseEvidenceValidation(text);
+    const reviewedAt = admin.firestore.FieldValue.serverTimestamp();
+    const result = {
+      id: evidenceId,
+      evidenceId,
+      orgId,
+      assessmentId,
+      practiceId,
+      ...(objectiveId ? {objectiveId} : {}),
+      ...aiResult,
+      reviewedBy: "ai",
+      reviewedAt,
+      model: EVIDENCE_OCR_MODEL,
+    };
+    await evidenceValidationDoc(orgId, assessmentId, practiceId, objectiveId, evidenceId)
+      .set(result, {merge: true});
+
+    return res.json({
+      ...result,
+      reviewedAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.warn("[evidence-validation] validation failed", {
+      orgId,
+      assessmentId,
+      practiceId,
+      objectiveId,
+      evidenceId,
+      error: safeErrorMessage(error, "Evidence validation failed"),
+    });
+    return res.status(500).json({error: "Evidence validation failed"});
   }
 });
 

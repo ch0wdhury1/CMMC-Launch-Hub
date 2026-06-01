@@ -515,6 +515,25 @@ export interface EvidenceLibraryItem {
   updatedAt: any;
   archivedAt?: any;
   archivedBy?: string;
+  ocrSummary?: string;
+}
+
+export interface EvidenceValidationResult {
+  id: string;
+  evidenceId: string;
+  orgId: string;
+  assessmentId: string;
+  practiceId: string;
+  objectiveId?: string;
+  validationStatus: "supportive" | "partial" | "weak" | "not_relevant" | "needs_review";
+  confidence: "high" | "medium" | "low";
+  summary: string;
+  strengths: string[];
+  gaps: string[];
+  recommendedActions: string[];
+  reviewedBy: "ai";
+  reviewedAt: any;
+  model?: string;
 }
 
 export interface EvidenceReference {

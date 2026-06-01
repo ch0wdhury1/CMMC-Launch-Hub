@@ -537,7 +537,7 @@ ${objList}
         </div>
 
         {/* Assessment Objectives (Granular level) */}
-        {libraryEvidenceContext && <PracticeLibraryEvidence practiceId={String((practice as any)?.id ?? "")} context={libraryEvidenceContext} />}
+        {libraryEvidenceContext && <PracticeLibraryEvidence practiceId={String((practice as any)?.id ?? "")} practiceTitle={friendlyName} context={libraryEvidenceContext} />}
 
         <div className="mb-3 flex items-center">
             <h4 className="font-bold text-lg text-gray-800">Assessment Objectives</h4>

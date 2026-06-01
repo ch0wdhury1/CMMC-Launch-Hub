@@ -3,9 +3,11 @@ import { Download, ExternalLink, FileText, Link2, Loader2, Unlink } from "lucide
 import type { AttachedLibraryEvidence, EvidenceLibraryItem } from "../types";
 import { EvidenceLibraryPickerModal } from "./EvidenceLibraryPickerModal";
 import { attachEvidenceLibraryItem, detachEvidenceLibraryItem, subscribeAttachedLibraryEvidence } from "../src/evidenceReferences";
+import { EvidenceValidationPanel } from "./EvidenceValidationPanel";
 
 type PracticeLibraryEvidenceProps = {
   practiceId: string;
+  practiceTitle: string;
   context: {
     orgId: string;
     assessmentId: string;
@@ -36,7 +38,7 @@ const downloadEvidence = async (item: EvidenceLibraryItem) => {
 const formatDate = (value: any) =>
   typeof value === "string" ? new Date(value).toLocaleDateString() : value?.toDate ? value.toDate().toLocaleDateString() : "Pending";
 
-export const PracticeLibraryEvidence: React.FC<PracticeLibraryEvidenceProps> = ({ practiceId, context }) => {
+export const PracticeLibraryEvidence: React.FC<PracticeLibraryEvidenceProps> = ({ practiceId, practiceTitle, context }) => {
   const [items, setItems] = useState<AttachedLibraryEvidence[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [detachingId, setDetachingId] = useState<string | null>(null);
@@ -72,7 +74,7 @@ export const PracticeLibraryEvidence: React.FC<PracticeLibraryEvidenceProps> = (
         const item = reference.libraryItem;
         return <div key={reference.evidenceId} className="flex items-start gap-2 bg-white border border-blue-100 rounded p-2">
           <FileText className="h-5 w-5 text-blue-400" />
-          <div className="flex-1 min-w-0"><p className="text-sm font-medium break-all">{item?.fileName || reference.evidenceId}</p><p className="text-xs text-blue-700 font-semibold">Library Evidence</p><p className="text-xs text-gray-500">{item?.category || "Other"}{item?.tags?.length ? ` | ${item.tags.join(", ")}` : ""}</p>{item?.description && <p className="text-xs text-gray-600">{item.description}</p>}<p className="text-xs text-gray-500">Attached: {formatDate(reference.attachedAt)}</p>{item?.status === "archived" && <p className="text-xs font-semibold text-amber-700">Archived in Library</p>}</div>
+          <div className="flex-1 min-w-0"><p className="text-sm font-medium break-all">{item?.fileName || reference.evidenceId}</p><p className="text-xs text-blue-700 font-semibold">Library Evidence</p><p className="text-xs text-gray-500">{item?.category || "Other"}{item?.tags?.length ? ` | ${item.tags.join(", ")}` : ""}</p>{item?.description && <p className="text-xs text-gray-600">{item.description}</p>}<p className="text-xs text-gray-500">Attached: {formatDate(reference.attachedAt)}</p>{item?.status === "archived" && <p className="text-xs font-semibold text-amber-700">Archived in Library</p>}<EvidenceValidationPanel canValidate={context.canManage} request={{ orgId: context.orgId, assessmentId: context.assessmentId, practiceId, evidenceId: reference.evidenceId, evidenceSource: "evidenceLibrary", practiceTitle, fileName: item?.fileName || reference.evidenceId, category: item?.category, description: item?.description, tags: item?.tags, ocrSummary: item?.ocrSummary }} /></div>
           <button type="button" disabled={!item?.downloadURL} onClick={() => item?.downloadURL && window.open(item.downloadURL, "_blank", "noopener,noreferrer")} className="p-1 text-blue-700 disabled:text-gray-300" title="View library evidence"><ExternalLink className="h-4 w-4" /></button>
           <button type="button" disabled={!item?.downloadURL} onClick={() => item && downloadEvidence(item)} className="p-1 text-blue-700 disabled:text-gray-300" title="Download library evidence"><Download className="h-4 w-4" /></button>
           {context.canManage && <button type="button" disabled={detachingId === reference.evidenceId} onClick={() => detach(reference)} className="p-1 text-gray-600 disabled:text-gray-300" title="Detach library evidence">{detachingId === reference.evidenceId ? <Loader2 className="h-4 w-4 animate-spin" /> : <Unlink className="h-4 w-4" />}</button>}

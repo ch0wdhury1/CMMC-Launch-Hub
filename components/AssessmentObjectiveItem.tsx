@@ -15,6 +15,7 @@ import { Paperclip, FileText, Archive, Loader2, Bot, Volume2, Download, External
 import { EvidenceLibraryPickerModal } from './EvidenceLibraryPickerModal';
 import { attachEvidenceLibraryItem, detachEvidenceLibraryItem, subscribeAttachedLibraryEvidence } from '../src/evidenceReferences';
 import { ResponsibilityAssignmentSelect, type ResponsibilityAssignmentContext } from './ResponsibilityAssignmentSelect';
+import { EvidenceValidationPanel } from './EvidenceValidationPanel';
 
 type ChatMessage = {
   role: 'user' | 'model';
@@ -731,6 +732,24 @@ Respond in a helpful, practical way:
                                   {[formatFileSize(artifact.fileSize), `OCR: ${artifact.processingStatus?.replace("ocr_", "") || "pending"}`, `Storage: ${artifact.storageStatus === "upload_failed" ? "failed" : artifact.storageStatus || "unavailable"}`].filter(Boolean).join(" | ")}
                                 </p>
                                 <p className="text-xs text-gray-500 mt-1 italic">"{artifact.ocrSummary}"</p>
+                                {libraryEvidenceContext && (
+                                  <EvidenceValidationPanel
+                                    canValidate={libraryEvidenceContext.canManage}
+                                    request={{
+                                      orgId: libraryEvidenceContext.orgId,
+                                      assessmentId: libraryEvidenceContext.assessmentId,
+                                      practiceId: practice.id,
+                                      objectiveId: objective.id,
+                                      evidenceId: artifact.id,
+                                      evidenceSource: "uploaded",
+                                      practiceTitle: practice.name,
+                                      objectiveTitle: objective.text,
+                                      fileName: artifact.fileName || artifact.name,
+                                      description: artifact.description,
+                                      ocrSummary: artifact.ocrSummary,
+                                    }}
+                                  />
+                                )}
                             </div>
                             <div className="flex items-center gap-1 ml-2">
                               <button
@@ -797,6 +816,24 @@ Respond in a helpful, practical way:
                                 <p className="text-xs text-gray-500">Attached: {typeof reference.attachedAt === "string" ? new Date(reference.attachedAt).toLocaleDateString() : reference.attachedAt?.toDate ? reference.attachedAt.toDate().toLocaleDateString() : "Pending"}</p>
                                 {item?.description && <p className="text-xs text-gray-600 mt-1">{item.description}</p>}
                                 {item?.status === "archived" && <p className="text-xs font-semibold text-amber-700 mt-1">Archived in Library</p>}
+                                <EvidenceValidationPanel
+                                  canValidate={libraryEvidenceContext.canManage}
+                                  request={{
+                                    orgId: libraryEvidenceContext.orgId,
+                                    assessmentId: libraryEvidenceContext.assessmentId,
+                                    practiceId: practice.id,
+                                    objectiveId: objective.id,
+                                    evidenceId: reference.evidenceId,
+                                    evidenceSource: "evidenceLibrary",
+                                    practiceTitle: practice.name,
+                                    objectiveTitle: objective.text,
+                                    fileName: item?.fileName || reference.evidenceId,
+                                    category: item?.category,
+                                    description: item?.description,
+                                    tags: item?.tags,
+                                    ocrSummary: item?.ocrSummary,
+                                  }}
+                                />
                               </div>
                               <div className="flex items-center gap-1">
                                 <button type="button" disabled={!item?.downloadURL} onClick={() => item?.downloadURL && window.open(item.downloadURL, "_blank", "noopener,noreferrer")} title="View library evidence" className="p-1 text-blue-700 disabled:text-gray-300"><ExternalLink className="h-4 w-4" /></button>
