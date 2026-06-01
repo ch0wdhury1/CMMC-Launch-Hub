@@ -127,9 +127,15 @@ function canWriteAssessmentShell(orgId) {
     }
 
 // --- system config (super admin only) ---
-match /system/{docId} {
-  allow read, write: if isSuperAdmin();
-}
+    match /system/{docId} {
+      allow read, write: if isSuperAdmin();
+    }
+
+    // Firestore document paths require the immutable cleanup entries subcollection.
+    match /system/cleanupActivity/entries/{activityId} {
+      allow read, create: if isSuperAdmin();
+      allow update, delete: if false;
+    }
 
 
 // --- user profiles ---

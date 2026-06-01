@@ -739,6 +739,623 @@ app.post("/api/practice/copilot", requireAuth, async (req: any, res) => {
   }
 });
 
+app.get("/api/admin/cleanup-audit", requireAuth, async (req: any, res) => {
+  try {
+    if (!(await isSuperAdminUser(req.user.uid))) {
+      return res.status(403).json({error: "Super admin access required"});
+    }
+
+    const generatedAt = new Date().toISOString();
+    const findings: any[] = [];
+    let findingSequence = 0;
+    const addFinding = (finding: Omit<any, "id" | "detectedAt">) => {
+      findings.push({
+        id: `cleanup-audit-${++findingSequence}`,
+        ...finding,
+        detectedAt: generatedAt,
+      });
+    };
+    const normalize = (value: unknown) => String(value || "").trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+    const timestampMillis = (value: any) => value?.toMillis?.() || (value ? new Date(value).getTime() : 0);
+    const isStale = (value: any) => {
+      const millis = timestampMillis(value);
+      return millis > 0 && Date.now() - millis > 14 * 24 * 60 * 60 * 1000;
+    };
+    const docs = (snapshot: admin.firestore.QuerySnapshot) =>
+      snapshot.docs.map(document => ({id: document.id, ...document.data()} as any));
+
+    const [orgsSnap, usersSnap, accessRequestsSnap, legacyOrgRefs] = await Promise.all([
+      db.collection("orgs").limit(250).get(),
+      db.collection("users").limit(1000).get(),
+      db.collection("accessRequests").limit(1000).get(),
+      db.collection("orgMembers").listDocuments(),
+    ]);
+    const orgs = docs(orgsSnap);
+    const users = docs(usersSnap);
+    const accessRequests = docs(accessRequestsSnap);
+    const orgIds = new Set(orgs.map(org => org.id));
+    const usersById = new Map(users.map(user => [user.id, user]));
+    const orgAuditData = new Map<string, any>();
+
+    await Promise.all(orgs.map(async org => {
+      const orgRef = db.collection("orgs").doc(org.id);
+      const legacyMemberRef = db.collection("orgMembers").doc(org.id);
+      const [membersSnap, legacyMembersSnap, invitationsSnap, assessmentsSnap, evidenceSnap, evidenceLibrarySnap] = await Promise.all([
+        orgRef.collection("members").limit(500).get(),
+        legacyMemberRef.collection("members").limit(500).get(),
+        orgRef.collection("invitations").limit(500).get(),
+        orgRef.collection("assessments").limit(50).get(),
+        orgRef.collection("evidence").limit(1000).get(),
+        orgRef.collection("evidenceLibrary").limit(1000).get(),
+      ]);
+      const members = docs(membersSnap);
+      const legacyMembers = docs(legacyMembersSnap);
+      const invitations = docs(invitationsSnap);
+      const assessments = docs(assessmentsSnap);
+      orgAuditData.set(org.id, {members, legacyMembers, invitations, assessments});
+
+      const profile = org.companyProfile || {};
+      const primaryEmail = profile.contacts?.primary?.email || org.primaryContactEmail;
+      const missingFields = [
+        !(org.name || org.orgName || profile.legalName) ? "orgName/companyProfile.legalName" : null,
+        !(org.ownerUid || org.owner) ? "ownerUid/owner" : null,
+        !org.tier ? "tier" : null,
+        !org.status ? "status" : null,
+        !primaryEmail ? "primary contact email" : null,
+        Object.prototype.hasOwnProperty.call(org, "subscriptionStatus") && !org.subscriptionStatus ? "subscriptionStatus" : null,
+      ].filter(Boolean);
+      if (missingFields.length) {
+        addFinding({
+          category: "missing_org_fields", severity: "medium", recommendation: "needs_review",
+          title: "Organization is missing critical fields",
+          description: `Missing: ${missingFields.join(", ")}.`,
+          orgId: org.id,
+        });
+      }
+
+      const activeMembers = members.filter(member => member.status === "active" || member.active === true);
+      if (activeMembers.length === 0) {
+        addFinding({
+          category: "no_active_members", severity: "high", recommendation: "needs_review",
+          title: "Organization has no active members",
+          description: members.length === 0 ? "No org-scoped member records exist." : "Member records exist, but none are active.",
+          orgId: org.id,
+        });
+      }
+
+      const memberMap = new Map(members.map(member => [member.id, member]));
+      const legacyMemberMap = new Map(legacyMembers.map(member => [member.id, member]));
+      for (const member of members) {
+        if (!usersById.has(member.id)) {
+          addFinding({
+            category: "orphaned_membership", severity: "medium", recommendation: "needs_review",
+            title: "Membership references missing user",
+            description: "Org-scoped membership exists without a matching users document.",
+            orgId: org.id, userId: member.id,
+          });
+        }
+        const legacy = legacyMemberMap.get(member.id);
+        if (legacy && (legacy.role !== member.role || legacy.status !== member.status)) {
+          addFinding({
+            category: "orphaned_membership", severity: "medium", recommendation: "needs_review",
+            title: "Legacy and current memberships disagree",
+            description: "Role or status differs between orgMembers and orgs/{orgId}/members.",
+            orgId: org.id, userId: member.id,
+          });
+        }
+      }
+      for (const member of legacyMembers) {
+        if (!memberMap.has(member.id)) {
+          addFinding({
+            category: "orphaned_membership", severity: "medium", recommendation: "needs_review",
+            title: "Legacy membership has no current membership",
+            description: "Legacy orgMembers record has no matching orgs/{orgId}/members record.",
+            orgId: org.id, userId: member.id,
+          });
+        }
+      }
+
+      for (const invitation of invitations) {
+        const normalizedEmail = normalize(invitation.email);
+        const activeMember = members.find(member =>
+          (member.id === invitation.acceptedBy || normalize(member.email) === normalizedEmail)
+          && (member.status === "active" || member.active === true)
+        );
+        if (invitation.status === "pending" && isStale(invitation.invitedAt)) {
+          addFinding({
+            category: "stale_request", severity: "low", recommendation: "safe_to_archive",
+            title: "Stale pending invitation",
+            description: "Pending organization invitation is older than 14 days.",
+            orgId: org.id, relatedIds: [invitation.id],
+          });
+        }
+        if (invitation.status === "accepted" && !activeMember) {
+          addFinding({
+            category: "invitation_membership_issue", severity: "high", recommendation: "needs_review",
+            title: "Accepted invitation has no active membership",
+            description: "Invitation is accepted, but no matching active member record was found.",
+            orgId: org.id, relatedIds: [invitation.id],
+          });
+        }
+        if (invitation.status === "pending" && activeMember) {
+          addFinding({
+            category: "invitation_membership_issue", severity: "low", recommendation: "safe_to_archive",
+            title: "Pending invitation targets active member",
+            description: "The invited email already belongs to an active organization member.",
+            orgId: org.id, userId: activeMember.id, relatedIds: [invitation.id],
+          });
+        }
+        if (invitation.status === "pending" && invitation.cancelledAt) {
+          addFinding({
+            category: "invitation_membership_issue", severity: "low", recommendation: "needs_review",
+            title: "Cancelled invitation still appears pending",
+            description: "Invitation has cancellation metadata but its status remains pending.",
+            orgId: org.id, relatedIds: [invitation.id],
+          });
+        }
+      }
+
+      const inspectEvidence = (items: any[], source: string) => items.forEach(item => {
+        const issues = [
+          !item.storagePath ? "missing storagePath" : null,
+          !item.fileName ? "missing fileName" : null,
+          source === "evidence" && !item.orgId ? "missing orgId" : null,
+          source === "evidence" && !item.assessmentId ? "missing assessmentId" : null,
+          item.archived === true && item.active === true ? "archived evidence is still active" : null,
+        ].filter(Boolean);
+        if (issues.length) {
+          addFinding({
+            category: "evidence_metadata_issue", severity: "medium", recommendation: "needs_review",
+            title: `${source} metadata issue`,
+            description: `Evidence metadata has: ${issues.join(", ")}.`,
+            orgId: org.id, relatedIds: [item.id],
+          });
+        }
+      });
+      inspectEvidence(docs(evidenceSnap), "evidence");
+      inspectEvidence(docs(evidenceLibrarySnap), "evidenceLibrary");
+
+      await Promise.all(assessments.map(async assessment => {
+        const assessmentRef = orgRef.collection("assessments").doc(assessment.id);
+        const [practicesSnap, objectivesSnap, poamSnap] = await Promise.all([
+          assessmentRef.collection("practiceRecords").limit(500).get(),
+          assessmentRef.collection("objectiveRecords").limit(1000).get(),
+          assessmentRef.collection("poamItems").limit(500).get(),
+        ]);
+        const practices = docs(practicesSnap);
+        if (!assessment.level || !assessment.orgId) {
+          addFinding({
+            category: "assessment_integrity_issue", severity: "high", recommendation: "needs_review",
+            title: "Assessment shell is incomplete",
+            description: `Missing: ${[!assessment.level ? "level" : null, !assessment.orgId ? "orgId" : null].filter(Boolean).join(", ")}.`,
+            orgId: org.id, relatedIds: [assessment.id],
+          });
+        }
+        if (practices.length === 0) {
+          addFinding({
+            category: "assessment_integrity_issue", severity: "medium", recommendation: "needs_review",
+            title: "Assessment has zero practice records",
+            description: "Assessment shell exists but has no practice records.",
+            orgId: org.id, relatedIds: [assessment.id],
+          });
+        }
+        practices.filter(practice => !practice.practiceId).forEach(practice => addFinding({
+          category: "assessment_integrity_issue", severity: "medium", recommendation: "needs_review",
+          title: "Practice record is missing practiceId", description: "Practice document does not contain practiceId.",
+          orgId: org.id, relatedIds: [assessment.id, practice.id],
+        }));
+        docs(objectivesSnap).filter(objective => !objective.objectiveId || !objective.practiceId).forEach(objective => addFinding({
+          category: "assessment_integrity_issue", severity: "medium", recommendation: "needs_review",
+          title: "Objective record is incomplete", description: "Objective document is missing objectiveId or practiceId.",
+          orgId: org.id, relatedIds: [assessment.id, objective.id],
+        }));
+        docs(poamSnap).filter(item => (!Array.isArray(item.relatedPracticeIds) || item.relatedPracticeIds.length === 0) && !item.practiceId).forEach(item => addFinding({
+          category: "assessment_integrity_issue", severity: "medium", recommendation: "needs_review",
+          title: "POA&M item has no related practice", description: "POA&M item is not linked to a practice.",
+          orgId: org.id, relatedIds: [assessment.id, item.id],
+        }));
+      }));
+    }));
+
+    const duplicateKeys = new Map<string, any[]>();
+    for (const org of orgs) {
+      const profile = org.companyProfile || {};
+      const values = [
+        ["name", org.name || org.orgName || profile.legalName],
+        ["email", profile.contacts?.primary?.email || org.primaryContactEmail || org.ownerEmail],
+        ["cage", profile.cageCode || org.cageCode],
+        ["uei", profile.uei || org.uei],
+      ];
+      values.forEach(([kind, value]) => {
+        const normalized = normalize(value);
+        if (!normalized) return;
+        const key = `${kind}:${normalized}`;
+        duplicateKeys.set(key, [...(duplicateKeys.get(key) || []), org]);
+      });
+    }
+    for (const [reason, matchedOrgs] of duplicateKeys) {
+      if (matchedOrgs.length < 2) continue;
+      const relatedIds = matchedOrgs.map(org => org.id);
+      matchedOrgs.forEach(org => addFinding({
+        category: "duplicate_org", severity: "high", recommendation: "do_not_touch",
+        title: "Likely duplicate organization",
+        description: `Multiple organizations share normalized ${reason.split(":")[0]}. Review owner, tier, status, and createdAt before any cleanup.`,
+        orgId: org.id, relatedIds,
+      }));
+    }
+
+    const orgById = new Map(orgs.map(org => [org.id, org]));
+    for (const user of users) {
+      const isSuperAdmin = user.roles?.superAdmin === true;
+      if (user.orgId && !orgIds.has(user.orgId)) {
+        addFinding({
+          category: "orphaned_user", severity: "high", recommendation: "needs_review",
+          title: "User references missing organization", description: "User orgId does not match an existing organization.",
+          orgId: user.orgId, userId: user.id,
+        });
+      } else if (!user.orgId && !isSuperAdmin) {
+        addFinding({
+          category: "orphaned_user", severity: "medium", recommendation: "needs_review",
+          title: "User has no organization", description: "Non-SuperAdmin user does not have an orgId.",
+          userId: user.id,
+        });
+      } else if (user.orgId && ["inactive", "deleted", "disabled"].includes(orgById.get(user.orgId)?.status)) {
+        addFinding({
+          category: "orphaned_user", severity: "high", recommendation: "needs_review",
+          title: "User references inactive organization", description: "User orgId points to an organization marked inactive, deleted, or disabled.",
+          orgId: user.orgId, userId: user.id,
+        });
+      } else if (user.orgId && orgIds.has(user.orgId)) {
+        const members = orgAuditData.get(user.orgId)?.members || [];
+        if (!members.some((member: any) => member.id === user.id)) {
+          addFinding({
+            category: "orphaned_user", severity: "medium", recommendation: "needs_review",
+            title: "User has no matching org membership", description: "User references an organization but lacks an org-scoped membership.",
+            orgId: user.orgId, userId: user.id,
+          });
+        }
+      }
+    }
+
+    const pendingRequestKeys = new Map<string, any[]>();
+    for (const request of accessRequests.filter(request => request.status === "pending")) {
+      if (isStale(request.createdAt)) {
+        addFinding({
+          category: "stale_request", severity: "low", recommendation: "safe_to_archive",
+          title: "Stale pending access request", description: "Pending access request is older than 14 days.",
+          orgId: request.orgId, userId: request.requestedByUid, relatedIds: [request.id],
+        });
+      }
+      const key = `${request.type || "unknown"}:${request.orgId || normalize(request.orgName)}:${normalize(request.email || request.ownerEmail)}`;
+      pendingRequestKeys.set(key, [...(pendingRequestKeys.get(key) || []), request]);
+    }
+    for (const requests of pendingRequestKeys.values()) {
+      if (requests.length < 2) continue;
+      addFinding({
+        category: "stale_request", severity: "medium", recommendation: "needs_review",
+        title: "Duplicate pending access requests", description: "Multiple pending requests have the same type, organization, and email.",
+        orgId: requests[0].orgId, relatedIds: requests.map(request => request.id),
+      });
+    }
+
+    for (const legacyRef of legacyOrgRefs) {
+      if (orgIds.has(legacyRef.id)) continue;
+      const legacyMembers = docs(await legacyRef.collection("members").limit(500).get());
+      legacyMembers.forEach(member => addFinding({
+        category: "orphaned_membership", severity: "high", recommendation: "needs_review",
+        title: "Legacy membership references missing organization",
+        description: "Legacy orgMembers parent has no matching organization.",
+        orgId: legacyRef.id, userId: member.id,
+      }));
+    }
+
+    return res.json({
+      generatedAt,
+      totalFindings: findings.length,
+      highCount: findings.filter(finding => finding.severity === "high").length,
+      mediumCount: findings.filter(finding => finding.severity === "medium").length,
+      lowCount: findings.filter(finding => finding.severity === "low").length,
+      safeToArchiveCount: findings.filter(finding => finding.recommendation === "safe_to_archive").length,
+      needsReviewCount: findings.filter(finding => finding.recommendation === "needs_review").length,
+      doNotTouchCount: findings.filter(finding => finding.recommendation === "do_not_touch").length,
+      findings,
+    });
+  } catch (error) {
+    console.error("[cleanup-audit] audit failed", error);
+    return res.status(500).json({error: "Cleanup audit failed"});
+  }
+});
+
+const CLEANUP_ORG_STATUSES = new Set(["active", "inactive", "archived"]);
+const CLEANUP_TIERS = new Set(["SPONSORED", "COMM_L1", "COMM_L2"]);
+const CLEANUP_SUBSCRIPTION_STATUSES = new Set(["active", "trial", "expired", "cancelled"]);
+const CLEANUP_BILLING_CYCLES = new Set(["monthly", "annual", "sponsored", "manual"]);
+const CLEANUP_MEMBER_STATUSES = new Set(["active", "inactive", "disabled"]);
+const CLEANUP_MEMBER_ROLES = new Set(["orgOwner", "orgAdmin", "contributor", "viewer", "assessor"]);
+
+function cleanupActivityRef() {
+  return db.collection("system").doc("cleanupActivity").collection("entries").doc();
+}
+
+function cleanupNote(value: unknown) {
+  return typeof value === "string" ? value.trim().slice(0, 500) : "";
+}
+
+function cleanupDate(value: unknown) {
+  if (value === undefined) return undefined;
+  if (value === null || value === "") return null;
+  if (typeof value !== "string") throw new Error("Invalid cleanup date");
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) throw new Error("Invalid cleanup date");
+  return admin.firestore.Timestamp.fromDate(parsed);
+}
+
+function pickCleanupFields(data: Record<string, any> | undefined, fields: string[]) {
+  return Object.fromEntries(fields.map((field) => [field, data?.[field] ?? null]));
+}
+
+function addCleanupActivity(
+  batch: admin.firestore.WriteBatch,
+  params: {
+    action: string;
+    targetType: "org" | "member" | "accessRequest" | "invitation";
+    targetId: string;
+    performedBy: string;
+    orgId?: string;
+    userId?: string;
+    before?: Record<string, any>;
+    after?: Record<string, any>;
+    note?: string;
+  }
+) {
+  const ref = cleanupActivityRef();
+  batch.set(ref, {
+    id: ref.id,
+    type: "cleanup_control_action",
+    ...params,
+    performedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+}
+
+function cleanupDoc(snapshot: admin.firestore.DocumentSnapshot) {
+  return {id: snapshot.id, ...snapshot.data()};
+}
+
+function cleanupDocs(snapshot: admin.firestore.QuerySnapshot) {
+  return snapshot.docs.map(cleanupDoc);
+}
+
+function cleanupOrgName(org: Record<string, any>) {
+  return String(org.orgName || org.companyProfile?.legalName || org.name || org.id || "Unnamed organization");
+}
+
+function cleanupNormalized(value: unknown) {
+  return String(value || "").trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+app.get("/api/admin/cleanup-controls", requireAuth, async (req: any, res) => {
+  try {
+    if (!(await isSuperAdminUser(req.user.uid))) {
+      res.status(403).json({success: false, errorMessage: "SuperAdmin access required"});
+      return;
+    }
+
+    const [orgsSnap, accessRequestsSnap] = await Promise.all([
+      db.collection("orgs").limit(250).get(),
+      db.collection("accessRequests").limit(1000).get(),
+    ]);
+
+    const orgs: any[] = await Promise.all(orgsSnap.docs.map(async (orgDoc) => {
+      const [membersSnap, legacyMembersSnap, invitationsSnap, assessmentsSnap, evidenceSnap] = await Promise.all([
+        orgDoc.ref.collection("members").limit(500).get(),
+        db.collection("orgMembers").doc(orgDoc.id).collection("members").limit(500).get(),
+        orgDoc.ref.collection("invitations").limit(500).get(),
+        orgDoc.ref.collection("assessments").limit(250).get(),
+        orgDoc.ref.collection("evidence").limit(1000).get(),
+      ]);
+      const data = orgDoc.data();
+      return {
+        id: orgDoc.id,
+        ...data,
+        name: cleanupOrgName({id: orgDoc.id, ...data}),
+        members: cleanupDocs(membersSnap),
+        legacyMembers: cleanupDocs(legacyMembersSnap),
+        invitations: cleanupDocs(invitationsSnap),
+        memberCount: membersSnap.size,
+        assessmentCount: assessmentsSnap.size,
+        evidenceCount: evidenceSnap.size,
+      };
+    }));
+
+    const duplicateBuckets = new Map<string, any[]>();
+    for (const org of orgs) {
+      const keys = [
+        ["name", cleanupNormalized(org.name)],
+        ["contact", cleanupNormalized(org.companyProfile?.contacts?.primary?.email || org.ownerEmail)],
+        ["cage", cleanupNormalized(org.companyProfile?.cageCode)],
+        ["uei", cleanupNormalized(org.companyProfile?.uei)],
+      ];
+      for (const [field, value] of keys) {
+        if (!value) continue;
+        const key = `${field}:${value}`;
+        duplicateBuckets.set(key, [...(duplicateBuckets.get(key) || []), org]);
+      }
+    }
+    const duplicateGroups = [...duplicateBuckets.entries()]
+      .filter(([, bucket]) => bucket.length > 1)
+      .map(([id, bucket]) => ({
+        id,
+        reason: `Matching normalized ${id.split(":")[0]}`,
+        orgs: bucket,
+      }));
+
+    res.json({
+      success: true,
+      inventory: {
+        generatedAt: new Date().toISOString(),
+        orgs,
+        accessRequests: cleanupDocs(accessRequestsSnap),
+        duplicateGroups,
+      },
+    });
+  } catch (error) {
+    console.error("Cleanup controls inventory failed", error);
+    res.status(500).json({success: false, errorMessage: "Unable to load cleanup controls"});
+  }
+});
+
+app.post("/api/admin/cleanup-control", requireAuth, async (req: any, res) => {
+  try {
+    const performedBy = req.user.uid;
+    if (!(await isSuperAdminUser(performedBy))) {
+      res.status(403).json({success: false, errorMessage: "SuperAdmin access required"});
+      return;
+    }
+
+    const {action, orgId, targetId, userId, updates = {}, note} = req.body || {};
+    const reviewedNote = cleanupNote(note);
+    const now = admin.firestore.FieldValue.serverTimestamp();
+
+    if (action === "update_org_status") {
+      if (!orgId || !CLEANUP_ORG_STATUSES.has(updates.status)) throw new Error("Invalid organization status update");
+      const ref = db.collection("orgs").doc(orgId);
+      const snapshot = await ref.get();
+      if (!snapshot.exists) throw new Error("Organization not found");
+      const after = {
+        status: updates.status,
+        cleanupNote: reviewedNote,
+        cleanupReviewedAt: now,
+        cleanupReviewedBy: performedBy,
+        updatedAt: now,
+      };
+      const batch = db.batch();
+      batch.set(ref, after, {merge: true});
+      addCleanupActivity(batch, {
+        action,
+        targetType: "org",
+        targetId: orgId,
+        orgId,
+        performedBy,
+        before: pickCleanupFields(snapshot.data(), ["status", "cleanupNote"]),
+        after,
+        note: reviewedNote,
+      });
+      await batch.commit();
+    } else if (action === "update_org_subscription") {
+      if (!orgId) throw new Error("Organization is required");
+      if (!CLEANUP_TIERS.has(updates.tier)) throw new Error("Invalid organization tier");
+      if (!CLEANUP_SUBSCRIPTION_STATUSES.has(updates.subscriptionStatus)) throw new Error("Invalid subscription status");
+      if (!CLEANUP_BILLING_CYCLES.has(updates.billingCycle)) throw new Error("Invalid billing cycle");
+      const ref = db.collection("orgs").doc(orgId);
+      const snapshot = await ref.get();
+      if (!snapshot.exists) throw new Error("Organization not found");
+      const after = {
+        tier: updates.tier,
+        subscriptionStatus: updates.subscriptionStatus,
+        subscriptionStart: cleanupDate(updates.subscriptionStart),
+        subscriptionEnd: cleanupDate(updates.subscriptionEnd),
+        billingCycle: updates.billingCycle,
+        cleanupReviewedAt: now,
+        cleanupReviewedBy: performedBy,
+        updatedAt: now,
+      };
+      const batch = db.batch();
+      batch.set(ref, after, {merge: true});
+      addCleanupActivity(batch, {
+        action,
+        targetType: "org",
+        targetId: orgId,
+        orgId,
+        performedBy,
+        before: pickCleanupFields(snapshot.data(), ["tier", "subscriptionStatus", "subscriptionStart", "subscriptionEnd", "billingCycle"]),
+        after,
+      });
+      await batch.commit();
+    } else if (action === "update_member") {
+      if (!orgId || !userId) throw new Error("Organization and member are required");
+      if (!CLEANUP_MEMBER_STATUSES.has(updates.status)) throw new Error("Invalid member status");
+      if (!CLEANUP_MEMBER_ROLES.has(updates.role)) throw new Error("Invalid member role");
+      if (typeof updates.active !== "boolean") throw new Error("Invalid active state");
+      const memberRef = db.collection("orgs").doc(orgId).collection("members").doc(userId);
+      const userRef = db.collection("users").doc(userId);
+      const [memberSnapshot, userSnapshot] = await Promise.all([memberRef.get(), userRef.get()]);
+      if (!memberSnapshot.exists) throw new Error("Member not found");
+      const after = {status: updates.status, active: updates.active, role: updates.role, updatedAt: now};
+      const batch = db.batch();
+      batch.set(memberRef, after, {merge: true});
+      const userData = userSnapshot.data();
+      if (userSnapshot.exists && (!userData?.orgId || userData.orgId === orgId)) {
+        batch.set(userRef, {
+          orgId,
+          status: updates.status,
+          roles: {...(userData?.roles || {}), orgRole: updates.role},
+          updatedAt: now,
+        }, {merge: true});
+      }
+      addCleanupActivity(batch, {
+        action,
+        targetType: "member",
+        targetId: userId,
+        orgId,
+        userId,
+        performedBy,
+        before: pickCleanupFields(memberSnapshot.data(), ["status", "active", "role"]),
+        after,
+      });
+      await batch.commit();
+    } else if (action === "archive_access_request") {
+      if (!targetId) throw new Error("Access request is required");
+      const ref = db.collection("accessRequests").doc(targetId);
+      const snapshot = await ref.get();
+      if (!snapshot.exists) throw new Error("Access request not found");
+      const after = {status: "archived", archivedAt: now, archivedBy: performedBy, cleanupReason: reviewedNote};
+      const batch = db.batch();
+      batch.set(ref, after, {merge: true});
+      addCleanupActivity(batch, {
+        action,
+        targetType: "accessRequest",
+        targetId,
+        orgId: snapshot.data()?.orgId,
+        userId: snapshot.data()?.uid,
+        performedBy,
+        before: pickCleanupFields(snapshot.data(), ["status"]),
+        after,
+        note: reviewedNote,
+      });
+      await batch.commit();
+    } else if (action === "cancel_invitation") {
+      if (!orgId || !targetId) throw new Error("Organization and invitation are required");
+      const ref = db.collection("orgs").doc(orgId).collection("invitations").doc(targetId);
+      const snapshot = await ref.get();
+      if (!snapshot.exists) throw new Error("Invitation not found");
+      if (snapshot.data()?.status !== "pending") throw new Error("Only pending invitations can be cancelled");
+      const after = {status: "cancelled", cancelledAt: now, cancelledBy: performedBy};
+      const batch = db.batch();
+      batch.set(ref, after, {merge: true});
+      addCleanupActivity(batch, {
+        action,
+        targetType: "invitation",
+        targetId,
+        orgId,
+        performedBy,
+        before: pickCleanupFields(snapshot.data(), ["status"]),
+        after,
+      });
+      await batch.commit();
+    } else {
+      throw new Error("Unsupported cleanup control action");
+    }
+
+    res.json({success: true});
+  } catch (error) {
+    console.error("Cleanup control action failed", error);
+    res.status(400).json({
+      success: false,
+      errorMessage: error instanceof Error ? error.message : "Unable to complete cleanup action",
+    });
+  }
+});
+
 app.get("/api/admin/export-assessment", requireAuth, async (req: any, res) => {
   const orgId = typeof req.query?.orgId === "string" ? req.query.orgId.trim() : "";
   const assessmentId = typeof req.query?.assessmentId === "string" ? req.query.assessmentId.trim() : "";

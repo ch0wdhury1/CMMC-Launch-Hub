@@ -7,6 +7,8 @@ import { L2DataMinerView } from './l2miner/L2DataMinerView';
 import { exportAssessmentBackup } from '../src/assessmentBackup';
 import { RestoreValidationResult, validateRestoreBackupJson } from '../src/restoreValidation';
 import { RestoreExecutionResult, restoreAssessmentBackup } from '../src/restoreEngine';
+import { DataCleanupAuditPanel } from './DataCleanupAuditPanel';
+import { CleanupControlsPanel } from './CleanupControlsPanel';
 
 interface DiagnosticsDrawerProps {
   isOpen: boolean;
@@ -589,7 +591,10 @@ export const DiagnosticsDrawer: React.FC<DiagnosticsDrawerProps> = ({
             </div>
           )}
 
-          <div className="space-y-3">
+      {isSuperAdmin && <DataCleanupAuditPanel />}
+      {isSuperAdmin && <CleanupControlsPanel />}
+
+      <div className="space-y-3">
             <h4 className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Scoped Domain Registry</h4>
             <div className="bg-black/30 rounded-lg border border-gray-800 overflow-hidden">
               <table className="w-full text-xs text-left">

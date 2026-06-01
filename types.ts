@@ -552,6 +552,40 @@ export interface PracticeCopilotResult {
   model?: string;
 }
 
+export interface CleanupAuditFinding {
+  id: string;
+  category:
+    | "duplicate_org"
+    | "missing_org_fields"
+    | "no_active_members"
+    | "orphaned_user"
+    | "orphaned_membership"
+    | "stale_request"
+    | "evidence_metadata_issue"
+    | "assessment_integrity_issue"
+    | "invitation_membership_issue";
+  severity: "high" | "medium" | "low";
+  recommendation: "safe_to_archive" | "needs_review" | "do_not_touch";
+  title: string;
+  description: string;
+  orgId?: string;
+  userId?: string;
+  relatedIds?: string[];
+  detectedAt: any;
+}
+
+export interface CleanupAuditResult {
+  generatedAt: any;
+  totalFindings: number;
+  highCount: number;
+  mediumCount: number;
+  lowCount: number;
+  safeToArchiveCount: number;
+  needsReviewCount: number;
+  doNotTouchCount: number;
+  findings: CleanupAuditFinding[];
+}
+
 export interface EvidenceReference {
   evidenceId: string;
   orgId: string;
