@@ -286,14 +286,26 @@ ${JSON.stringify(ctx, null, 2)}
     return `${Math.max(1, Math.round(bytes / 1024))} KB`;
   };
 
-  const downloadArtifact = (artifact: Artifact) => {
+  const downloadArtifact = async (artifact: Artifact) => {
     if (!artifact.downloadUrl) return;
-    const link = document.createElement("a");
-    link.href = artifact.downloadUrl;
-    link.target = "_blank";
-    link.rel = "noopener noreferrer";
-    link.download = artifact.fileName || artifact.name;
-    link.click();
+    const fileName = artifact.fileName || artifact.name || "evidence-file";
+
+    try {
+      const response = await fetch(artifact.downloadUrl);
+      if (!response.ok) throw new Error(`Download failed with status ${response.status}`);
+      const blobUrl = URL.createObjectURL(await response.blob());
+      const blobLink = document.createElement("a");
+      blobLink.href = blobUrl;
+      blobLink.download = fileName;
+      blobLink.rel = "noopener noreferrer";
+      document.body.appendChild(blobLink);
+      blobLink.click();
+      document.body.removeChild(blobLink);
+      URL.revokeObjectURL(blobUrl);
+    } catch (error) {
+      console.warn("Evidence blob download failed; opening file in a new tab.", error);
+      window.open(artifact.downloadUrl, "_blank", "noopener,noreferrer");
+    }
   };
 
   const viewArtifact = (artifact: Artifact) => {
