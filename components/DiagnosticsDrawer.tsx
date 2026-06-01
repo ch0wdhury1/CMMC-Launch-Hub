@@ -1,9 +1,10 @@
 
-import React, { useMemo } from 'react';
-import { X, AlertTriangle, CheckCircle, Database, List, Hash, AlertCircle, Info, Zap, ShieldCheck, ArrowRight, Lock, Search, Cpu, Bot } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { X, AlertTriangle, CheckCircle, Database, List, Hash, AlertCircle, Info, Zap, ShieldCheck, ArrowRight, Lock, Search, Cpu, Bot, Download, Loader2 } from 'lucide-react';
 import { Domain, Practice, SubscriptionLevel, L2ExtractionResult, EvidenceSummary, RecoveryDiagnostics } from '../types';
 import { L1_PRACTICE_COUNT, L2_PRACTICE_COUNT } from '../constants';
 import { L2DataMinerView } from './l2miner/L2DataMinerView';
+import { exportAssessmentBackup } from '../src/assessmentBackup';
 
 interface DiagnosticsDrawerProps {
   isOpen: boolean;
@@ -42,6 +43,8 @@ export const DiagnosticsDrawer: React.FC<DiagnosticsDrawerProps> = ({
   onUpgrade,
   onCommitMinedRequirement,
 }) => {
+  const [isExportingBackup, setIsExportingBackup] = useState(false);
+  const [backupExportError, setBackupExportError] = useState("");
   const diagnostics = useMemo(() => {
     const domainIdsLoaded = domains.map(d => {
       const match = d.name.match(/\(([A-Z]+)\)/);
@@ -142,6 +145,35 @@ export const DiagnosticsDrawer: React.FC<DiagnosticsDrawerProps> = ({
       ],
     },
   ];
+  const handleExportAssessmentBackup = async () => {
+    if (!currentOrgId) {
+      setBackupExportError("Current organization is unavailable.");
+      return;
+    }
+
+    setIsExportingBackup(true);
+    setBackupExportError("");
+    try {
+      const assessmentId = subscriptionLevel === "L2" ? "default_l2" : "default_l1";
+      const backup = await exportAssessmentBackup(currentOrgId, assessmentId);
+      const isoTimestamp = new Date().toISOString();
+      const timestamp = `${isoTimestamp.slice(0, 10).replace(/-/g, "")}-${isoTimestamp.slice(11, 16).replace(":", "")}`;
+      const blobUrl = URL.createObjectURL(new Blob([JSON.stringify(backup, null, 2)], {type: "application/json"}));
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = `cmmc-launch-hub-backup-${currentOrgId}-${assessmentId}-${timestamp}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(blobUrl);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Assessment export failed";
+      setBackupExportError(message);
+      console.warn("[admin-export] assessment backup download failed", error);
+    } finally {
+      setIsExportingBackup(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-[100] flex justify-end">
@@ -331,6 +363,18 @@ export const DiagnosticsDrawer: React.FC<DiagnosticsDrawerProps> = ({
               <div className="p-4 bg-blue-900/30 border border-blue-500/50 rounded-lg">
                 <p className="text-[9px] font-black uppercase tracking-wider text-blue-300">Production Readiness Score</p>
                 <p className="text-3xl font-bold text-white">{productionReadinessScore}/100</p>
+              </div>
+              <div className="p-3 bg-gray-800 rounded-lg border border-gray-700 space-y-2">
+                <button
+                  type="button"
+                  onClick={handleExportAssessmentBackup}
+                  disabled={isExportingBackup || !currentOrgId}
+                  className="flex items-center px-3 py-2 bg-blue-600 text-white text-xs font-semibold rounded-md hover:bg-blue-500 disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {isExportingBackup ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
+                  {isExportingBackup ? "Exporting..." : "Export Assessment Backup"}
+                </button>
+                {backupExportError && <p className="text-xs text-red-400">{backupExportError}</p>}
               </div>
               {productionChecks.map(section => (
                 <div key={section.group} className="p-3 bg-gray-800 rounded-lg border border-gray-700">

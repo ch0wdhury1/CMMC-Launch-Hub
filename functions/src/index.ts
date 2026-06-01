@@ -58,6 +58,11 @@ async function canAccessOrg(uid: string, orgId: string) {
   return isSuperAdmin || isActiveMember;
 }
 
+async function isSuperAdminUser(uid: string) {
+  const userSnap = await db.doc(`users/${uid}`).get();
+  return userSnap.exists && userSnap.data()?.roles?.superAdmin === true;
+}
+
 async function updateEvidenceOcrFailure(
   orgId: string,
   evidenceId: string,
@@ -221,6 +226,74 @@ app.post("/api/evidence/ocr", requireAuth, async (req: any, res) => {
       error: processingError,
       processingStatus: "ocr_failed",
     });
+  }
+});
+
+app.get("/api/admin/export-assessment", requireAuth, async (req: any, res) => {
+  const orgId = typeof req.query?.orgId === "string" ? req.query.orgId.trim() : "";
+  const assessmentId = typeof req.query?.assessmentId === "string" ? req.query.assessmentId.trim() : "";
+
+  if (!isSafePathSegment(orgId) || !isSafePathSegment(assessmentId)) {
+    return res.status(400).json({error: "Valid orgId and assessmentId are required"});
+  }
+
+  try {
+    if (!(await isSuperAdminUser(req.user.uid))) {
+      return res.status(403).json({error: "Super admin access required"});
+    }
+
+    const orgRef = db.doc(`orgs/${orgId}`);
+    const assessmentRef = orgRef.collection("assessments").doc(assessmentId);
+    const [
+      orgSnap,
+      assessmentSnap,
+      practiceRecordsSnap,
+      objectiveRecordsSnap,
+      evidenceSnap,
+      notesSnap,
+      poamItemsSnap,
+      scoreSnapshotsSnap,
+      activityLogSnap,
+    ] = await Promise.all([
+      orgRef.get(),
+      assessmentRef.get(),
+      assessmentRef.collection("practiceRecords").get(),
+      assessmentRef.collection("objectiveRecords").get(),
+      orgRef.collection("evidence").where("assessmentId", "==", assessmentId).get(),
+      orgRef.collection("notes").where("assessmentId", "==", assessmentId).get(),
+      assessmentRef.collection("poamItems").get(),
+      assessmentRef.collection("scoreSnapshots").orderBy("createdAt", "desc").limit(25).get(),
+      assessmentRef.collection("activityLog").orderBy("createdAt", "desc").limit(100).get(),
+    ]);
+
+    const docs = (snap: admin.firestore.QuerySnapshot) =>
+      snap.docs.map(docSnap => ({id: docSnap.id, ...docSnap.data()}));
+
+    return res.json({
+      metadata: {
+        exportedAt: new Date().toISOString(),
+        exportedByUid: req.user.uid,
+        orgId,
+        assessmentId,
+        exportVersion: "backup_v1",
+      },
+      org: orgSnap.exists ? {id: orgSnap.id, ...orgSnap.data()} : null,
+      assessment: assessmentSnap.exists ? {id: assessmentSnap.id, ...assessmentSnap.data()} : null,
+      practiceRecords: docs(practiceRecordsSnap),
+      objectiveRecords: docs(objectiveRecordsSnap),
+      evidence: docs(evidenceSnap),
+      notes: docs(notesSnap),
+      poamItems: docs(poamItemsSnap),
+      scoreSnapshots: docs(scoreSnapshotsSnap),
+      activityLog: docs(activityLogSnap),
+    });
+  } catch (error) {
+    console.error("[admin-export] assessment export failed", {
+      orgId,
+      assessmentId,
+      error: safeErrorMessage(error, "Assessment export failed"),
+    });
+    return res.status(500).json({error: "Assessment export failed"});
   }
 });
 
