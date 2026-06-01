@@ -4,7 +4,7 @@ import { onAuthStateChanged } from "firebase/auth";
 import { auth, db } from "./firebase";
 
 export type OrgMember = {
-  role?: "admin" | "member";
+  role?: "orgOwner" | "orgAdmin" | "assessor" | "contributor" | "viewer" | "orgUser" | "admin" | "member";
   superAdmin?: boolean;
   createdAt?: any;
 };

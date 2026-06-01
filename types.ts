@@ -158,6 +158,51 @@ export interface CompanyProfile {
   secondaryContactPhone?: string;
 }
 
+export interface OrgCompanyProfile {
+  legalName: string;
+  dbaName?: string;
+  website?: string;
+  industry?: string;
+  naics?: string;
+  cageCode?: string;
+  uei?: string;
+  duns?: string;
+  contacts: {
+    primary: {
+      name?: string;
+      title?: string;
+      email?: string;
+      phone?: string;
+    };
+    secondary: {
+      name?: string;
+      title?: string;
+      email?: string;
+      phone?: string;
+    };
+  };
+  address: {
+    street?: string;
+    city?: string;
+    state?: string;
+    zip?: string;
+    country?: string;
+  };
+  cmmc: {
+    assessmentLevel?: "L1" | "L2";
+    handlesFCI?: "yes" | "no" | "unknown";
+    handlesCUI?: "yes" | "no" | "unknown";
+    contractingAgency?: string;
+    systemName?: string;
+    systemDescription?: string;
+    systemOwner?: string;
+    systemBoundarySummary?: string;
+    externalServiceProviders?: string;
+    cloudProviders?: string;
+    itProvider?: string;
+  };
+}
+
 export type PoamStatus = "open" | "in_progress" | "completed" | "deferred";
 export type PoamPriority = "high" | "medium" | "low";
 

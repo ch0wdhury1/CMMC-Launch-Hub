@@ -135,7 +135,10 @@ match /orgs/{orgId} {
       "secondaryContactName",
       "secondaryContactEmail",
       "secondaryContactPhone",
-      "logoUrl"
+      "logoUrl",
+      "companyProfile",
+      "companyProfileUpdatedAt",
+      "companyProfileUpdatedBy"
     ]);
 
 
