@@ -363,6 +363,7 @@ const getDomainDisplayLabel = (domainKey: string) => {
     savedReports,
     scores,
     evidenceSummary,
+    recoveryDiagnostics,
     poamItems,
     upgradeSubscription,
     updatePoamItem,
@@ -1072,6 +1073,8 @@ onDiagnosticsClick={isSuperAdmin ? () => setIsDiagnosticsOpen(true) : undefined}
         allPractices={rawPractices}
         dataSourceInfo={dataSourceInfo}
         evidenceSummary={evidenceSummary}
+        recoveryDiagnostics={recoveryDiagnostics}
+        isSuperAdmin={isSuperAdmin}
         subscriptionLevel={effectiveSubscriptionLevel}
         onUpgrade={() => setIsUpgradeModalOpen(true)}
         onCommitMinedRequirement={commitMinedRequirement}

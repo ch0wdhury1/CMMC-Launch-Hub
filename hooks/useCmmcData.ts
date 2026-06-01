@@ -28,6 +28,7 @@ import {
   EvidenceRecord,
   EvidenceFileUpload,
   EvidenceSummary,
+  RecoveryDiagnostics,
   NoteRecord,
   FirestorePoamItem,
   Artifact,
@@ -35,6 +36,7 @@ import {
 } from "../types";
 import {
   getOrCreateDefaultAssessment,
+  buildRecoverySummary,
   getDefaultAssessmentId,
   getObjectiveNoteId,
   getObjectiveRecordStorageKey,
@@ -364,6 +366,17 @@ export const useCmmcData = (options: UseCmmcDataOptions = {}) => {
   const [error, setError] = useState<string | null>(null);
   const [dataSourceInfo, setDataSourceInfo] = useState<string>("Initializing...");
   const [firestoreLoadKey, setFirestoreLoadKey] = useState<string | null>(null);
+  const [recoveryDiagnostics, setRecoveryDiagnostics] = useState<RecoveryDiagnostics>({
+    assessmentShellLoaded: false,
+    practicesLoaded: 0,
+    objectivesLoaded: 0,
+    evidenceLoaded: 0,
+    notesLoaded: 0,
+    poamLoaded: 0,
+    snapshotsLoaded: 0,
+    activityEntriesLoaded: 0,
+    sourceOfTruthMode: firestoreEnabled ? "Firestore" : "localStorage",
+  });
 
   useEffect(() => {
     practiceRecordsRef.current = practiceRecords;
@@ -517,6 +530,7 @@ export const useCmmcData = (options: UseCmmcDataOptions = {}) => {
           level: requestedAssessmentLevel,
         });
         const firestoreState = await loadAssessmentState(orgId, assessment.assessmentId);
+        const recoverySummary = buildRecoverySummary(firestoreState);
 
         if (cancelled) return;
 
@@ -543,13 +557,23 @@ export const useCmmcData = (options: UseCmmcDataOptions = {}) => {
         // Loaded for future audit timeline, assessor history, collaboration feed,
         // and report support. There is intentionally no visible UI in this phase.
         setActivityLogEntries(firestoreState.activityLogEntries);
+        setRecoveryDiagnostics({
+          assessmentShellLoaded: firestoreState.assessment !== null,
+          ...recoverySummary,
+          activityEntriesLoaded: firestoreState.activityLogEntries.length,
+          sourceOfTruthMode: "Firestore",
+          lastSavedAt: firestoreState.assessment?.lastSavedAt,
+        });
 
         setDataSourceInfo(prev => `${prev} | Firestore assessment: ${assessment.assessmentId}`);
         setFirestoreLoadKey(key);
         console.info("[SourceOfTruth] Firestore assessment state applied");
       } catch (firestoreErr) {
         console.warn("Firestore assessment load skipped; using local state.", firestoreErr);
-        if (!cancelled) setFirestoreLoadKey(key);
+        if (!cancelled) {
+          setRecoveryDiagnostics(prev => ({ ...prev, sourceOfTruthMode: "localStorage" }));
+          setFirestoreLoadKey(key);
+        }
       }
     };
 
@@ -1375,6 +1399,7 @@ export const useCmmcData = (options: UseCmmcDataOptions = {}) => {
     savedReports, 
     scores, 
     evidenceSummary,
+    recoveryDiagnostics,
     poamItems, 
     activityLogEntries,
     responsibilityMatrix,

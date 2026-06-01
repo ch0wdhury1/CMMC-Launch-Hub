@@ -1,7 +1,7 @@
 
 import React, { useMemo } from 'react';
 import { X, AlertTriangle, CheckCircle, Database, List, Hash, AlertCircle, Info, Zap, ShieldCheck, ArrowRight, Lock, Search, Cpu, Bot } from 'lucide-react';
-import { Domain, Practice, SubscriptionLevel, L2ExtractionResult, EvidenceSummary } from '../types';
+import { Domain, Practice, SubscriptionLevel, L2ExtractionResult, EvidenceSummary, RecoveryDiagnostics } from '../types';
 import { L1_PRACTICE_COUNT, L2_PRACTICE_COUNT } from '../constants';
 import { L2DataMinerView } from './l2miner/L2DataMinerView';
 
@@ -12,6 +12,8 @@ interface DiagnosticsDrawerProps {
   allPractices: Practice[];
   dataSourceInfo: string;
   evidenceSummary: EvidenceSummary;
+  recoveryDiagnostics: RecoveryDiagnostics;
+  isSuperAdmin: boolean;
   subscriptionLevel: SubscriptionLevel;
   onUpgrade: () => void;
   onCommitMinedRequirement: (mined: L2ExtractionResult) => void;
@@ -26,6 +28,8 @@ export const DiagnosticsDrawer: React.FC<DiagnosticsDrawerProps> = ({
   allPractices,
   dataSourceInfo,
   evidenceSummary,
+  recoveryDiagnostics,
+  isSuperAdmin,
   subscriptionLevel,
   onUpgrade,
   onCommitMinedRequirement,
@@ -75,6 +79,12 @@ export const DiagnosticsDrawer: React.FC<DiagnosticsDrawerProps> = ({
   if (!isOpen) return null;
 
   const activePracticeTarget = subscriptionLevel === "L1" ? L1_PRACTICE_COUNT : L2_PRACTICE_COUNT;
+  const formatTimestamp = (value: any) => {
+    if (!value) return "Not available";
+    if (typeof value === "string") return new Date(value).toLocaleString();
+    if (value?.toDate) return value.toDate().toLocaleString();
+    return "Not available";
+  };
 
   return (
     <div className="fixed inset-0 z-[100] flex justify-end">
@@ -217,6 +227,46 @@ export const DiagnosticsDrawer: React.FC<DiagnosticsDrawerProps> = ({
               </div>
             )}
           </div>
+
+          {isSuperAdmin && (
+            <div className="space-y-3">
+              <h4 className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Recovery Validation</h4>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  ["Assessment Shell Loaded", recoveryDiagnostics.assessmentShellLoaded ? "Yes" : "No"],
+                  ["Practice Records Loaded", recoveryDiagnostics.practicesLoaded],
+                  ["Objective Records Loaded", recoveryDiagnostics.objectivesLoaded],
+                  ["Evidence Records Loaded", recoveryDiagnostics.evidenceLoaded],
+                  ["Notes Loaded", recoveryDiagnostics.notesLoaded],
+                  ["POA&M Loaded", recoveryDiagnostics.poamLoaded],
+                  ["Score Snapshots Loaded", recoveryDiagnostics.snapshotsLoaded],
+                  ["Activity Entries Loaded", recoveryDiagnostics.activityEntriesLoaded],
+                  ["Source of Truth Mode", recoveryDiagnostics.sourceOfTruthMode],
+                  ["Last Saved", formatTimestamp(recoveryDiagnostics.lastSavedAt)],
+                ].map(([label, value]) => (
+                  <div key={label} className="p-3 bg-gray-800 rounded-lg border border-gray-700">
+                    <p className="text-[9px] font-black uppercase tracking-wider text-gray-400">{label}</p>
+                    <p className="text-sm font-bold text-white break-words">{value}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="p-3 bg-black/30 rounded-lg border border-gray-800">
+                <p className="text-[9px] font-black uppercase tracking-wider text-gray-500 mb-2">Recovery Test</p>
+                <ol className="space-y-1 text-xs text-gray-300 list-decimal pl-4">
+                  <li>Save assessment</li>
+                  <li>Logout</li>
+                  <li>Clear localStorage</li>
+                  <li>Refresh</li>
+                  <li>Login again</li>
+                  <li>Confirm objective status restored</li>
+                  <li>Confirm notes restored</li>
+                  <li>Confirm evidence restored</li>
+                  <li>Confirm POA&M restored</li>
+                  <li>Confirm activity history restored</li>
+                </ol>
+              </div>
+            </div>
+          )}
 
           <div className="space-y-3">
             <h4 className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Scoped Domain Registry</h4>

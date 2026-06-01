@@ -118,6 +118,19 @@ export interface EvidenceSummary {
   objectivesWithoutEvidence: string[];
 }
 
+export interface RecoveryDiagnostics {
+  assessmentShellLoaded: boolean;
+  practicesLoaded: number;
+  objectivesLoaded: number;
+  evidenceLoaded: number;
+  notesLoaded: number;
+  poamLoaded: number;
+  snapshotsLoaded: number;
+  activityEntriesLoaded: number;
+  sourceOfTruthMode: "Firestore" | "localStorage";
+  lastSavedAt?: any;
+}
+
 export interface UserProfile {
   id: string;
   fullName: string;
