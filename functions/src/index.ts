@@ -4,6 +4,7 @@ import express from "express";
 import cors from "cors";
 import { onRequest } from "firebase-functions/v2/https";
 import admin from "firebase-admin";
+import { randomUUID } from "node:crypto";
 
 
 import { defineSecret } from "firebase-functions/params";
@@ -13,9 +14,11 @@ admin.initializeApp();
 const db = admin.firestore();
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(express.json({limit: "15mb"}));
 
 const EVIDENCE_OCR_MODEL = "gemini-2.5-flash";
+const MAX_EVIDENCE_UPLOAD_BYTES = 10 * 1024 * 1024;
+const EVIDENCE_UPLOAD_ROLES = new Set(["orgOwner", "orgAdmin", "assessor", "contributor"]);
 const SUPPORTED_EVIDENCE_TYPES = new Set([
   "image/png",
   "image/jpeg",
@@ -67,6 +70,38 @@ async function canAccessOrg(uid: string, orgId: string) {
     && membership?.active === true
     && typeof membership?.role === "string";
   return isSuperAdmin || isActiveMember;
+}
+
+async function getEvidenceUploadAuthorization(uid: string, orgId: string) {
+  const [userSnap, orgSnap, membershipSnap] = await Promise.all([
+    db.doc(`users/${uid}`).get(),
+    db.doc(`orgs/${orgId}`).get(),
+    db.doc(`orgs/${orgId}/members/${uid}`).get(),
+  ]);
+  const user = userSnap.data();
+  const org = orgSnap.data();
+  const membership = membershipSnap.data();
+  const superAdmin = userSnap.exists && user?.status === "active" && user?.roles?.superAdmin === true;
+  if (superAdmin) return {allowed: true, role: "superAdmin", user, org, membership};
+  if (!userSnap.exists || user?.status !== "active") {
+    return {allowed: false, errorCode: "NOT_AUTHORIZED", errorMessage: "Active user access is required.", user, org, membership};
+  }
+  if (user?.orgId !== orgId) {
+    return {allowed: false, errorCode: "NOT_AUTHORIZED", errorMessage: "User organization does not match upload organization.", user, org, membership};
+  }
+  if (!orgSnap.exists || org?.status !== "active") {
+    return {allowed: false, errorCode: "ORG_NOT_ACTIVE", errorMessage: "Organization is not active.", user, org, membership};
+  }
+  if (!membershipSnap.exists || membership?.status !== "active" || membership?.active !== true) {
+    return {allowed: false, errorCode: "NOT_AUTHORIZED", errorMessage: "Active organization membership is required.", user, org, membership};
+  }
+  if (membership?.role === "viewer") {
+    return {allowed: false, errorCode: "VIEWER_UPLOAD_DENIED", errorMessage: "Viewer role cannot upload evidence.", user, org, membership};
+  }
+  if (!EVIDENCE_UPLOAD_ROLES.has(membership?.role)) {
+    return {allowed: false, errorCode: "NOT_AUTHORIZED", errorMessage: "Organization role cannot upload evidence.", user, org, membership};
+  }
+  return {allowed: true, role: membership.role, user, org, membership};
 }
 
 async function canValidateEvidence(uid: string, orgId: string) {
@@ -212,6 +247,7 @@ async function updateEvidenceOcrFailure(
 ) {
   const processedAt = admin.firestore.FieldValue.serverTimestamp();
   await evidenceDoc(orgId, evidenceId).set({
+    ocrStatus: "failed",
     processingStatus: "ocr_failed",
     processingError: safeErrorMessage(error),
     processedAt,
@@ -219,6 +255,146 @@ async function updateEvidenceOcrFailure(
     updatedAt: processedAt,
   }, {merge: true});
 }
+
+app.post("/api/evidence/upload", requireEvidenceUploadAuth, async (req: any, res) => {
+  const {
+    orgId,
+    assessmentId,
+    practiceId,
+    objectiveId,
+    evidenceId: requestedEvidenceId,
+    fileName,
+    fileType,
+    fileSize,
+    fileBase64,
+  } = req.body || {};
+  const uploadLog = {
+    uid: req.user.uid,
+    orgId,
+    assessmentId,
+    practiceId,
+    objectiveId,
+    fileName,
+    fileSize,
+  };
+
+  if (
+    typeof orgId !== "string"
+    || typeof assessmentId !== "string"
+    || typeof practiceId !== "string"
+    || typeof fileName !== "string"
+    || typeof fileType !== "string"
+    || typeof fileSize !== "number"
+    || !Number.isFinite(fileSize)
+    || fileSize < 0
+    || typeof fileBase64 !== "string"
+    || !isSafePathSegment(orgId)
+    || !isSafePathSegment(assessmentId)
+    || practiceId.trim().length === 0
+    || fileName.trim().length === 0
+    || (objectiveId !== undefined && typeof objectiveId !== "string")
+    || (requestedEvidenceId !== undefined && (typeof requestedEvidenceId !== "string" || !isSafePathSegment(requestedEvidenceId)))
+  ) {
+    console.warn("[evidence-upload] invalid request", uploadLog);
+    return res.status(400).json({success: false, errorCode: "INVALID_REQUEST", errorMessage: "Invalid evidence upload request."});
+  }
+  if (fileSize > MAX_EVIDENCE_UPLOAD_BYTES) {
+    return res.status(413).json({success: false, errorCode: "FILE_TOO_LARGE", errorMessage: "Evidence file exceeds the 10 MB upload limit."});
+  }
+
+  const authorization = await getEvidenceUploadAuthorization(req.user.uid, orgId).catch((error) => {
+    console.error("[evidence-upload] authorization lookup failed", {...uploadLog, error: safeErrorMessage(error, "Authorization lookup failed")});
+    return null;
+  });
+  if (!authorization) {
+    return res.status(500).json({success: false, errorCode: "AUTHORIZATION_CHECK_FAILED", errorMessage: "Could not verify upload access."});
+  }
+  if (!authorization.allowed) {
+    console.warn("[evidence-upload] denied", {...uploadLog, role: authorization.membership?.role, errorCode: authorization.errorCode});
+    return res.status(403).json({success: false, errorCode: authorization.errorCode, errorMessage: authorization.errorMessage});
+  }
+
+  let fileBytes: Buffer;
+  try {
+    fileBytes = Buffer.from(fileBase64, "base64");
+  } catch (error) {
+    return res.status(400).json({success: false, errorCode: "INVALID_FILE_CONTENT", errorMessage: "Evidence file content could not be read."});
+  }
+  if (fileBytes.length !== fileSize || fileBytes.length > MAX_EVIDENCE_UPLOAD_BYTES) {
+    return res.status(400).json({success: false, errorCode: "INVALID_FILE_SIZE", errorMessage: "Evidence file size did not match the uploaded content."});
+  }
+
+  const evidenceId = requestedEvidenceId || randomUUID();
+  const safeFileName = cleanStorageSegment(fileName);
+  const storagePath = buildEvidenceStoragePath(orgId, evidenceId, safeFileName);
+  const uploadedAt = admin.firestore.FieldValue.serverTimestamp();
+  const downloadToken = randomUUID();
+  const bucket = admin.storage().bucket();
+
+  console.info("[evidence-upload] starting", {...uploadLog, evidenceId, storagePath, role: authorization.role});
+  try {
+    await bucket.file(storagePath).save(fileBytes, {
+      resumable: false,
+      metadata: {
+        contentType: fileType || "application/octet-stream",
+        metadata: {firebaseStorageDownloadTokens: downloadToken},
+      },
+    });
+  } catch (error) {
+    console.error("[evidence-upload] Storage write failed", {...uploadLog, evidenceId, storagePath, role: authorization.role, error: safeErrorMessage(error, "Storage upload failed")});
+    return res.status(500).json({success: false, errorCode: "STORAGE_UPLOAD_FAILED", errorMessage: "Evidence file could not be uploaded."});
+  }
+
+  const downloadUrl = `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(bucket.name)}/o/${encodeURIComponent(storagePath)}?alt=media&token=${encodeURIComponent(downloadToken)}`;
+  try {
+    await evidenceDoc(orgId, evidenceId).set({
+      id: evidenceId,
+      evidenceId,
+      orgId,
+      assessmentId,
+      practiceId,
+      objectiveId: objectiveId || null,
+      practiceIds: [practiceId],
+      objectiveIds: objectiveId ? [objectiveId] : [],
+      fileName,
+      fileType,
+      fileSize,
+      storagePath,
+      downloadUrl,
+      storageStatus: "uploaded",
+      status: "active",
+      active: true,
+      uploadedByUid: req.user.uid,
+      uploadedByEmail: req.user.email || authorization.user?.email || "",
+      uploadedAt,
+      updatedAt: uploadedAt,
+      source: "backend_upload",
+      ocrStatus: "pending",
+      processingStatus: "ocr_pending",
+    }, {merge: true});
+  } catch (error) {
+    console.error("[evidence-upload] metadata write failed", {...uploadLog, evidenceId, storagePath, role: authorization.role, error: safeErrorMessage(error, "Metadata write failed")});
+    return res.status(500).json({success: false, errorCode: "METADATA_WRITE_FAILED", errorMessage: "Evidence file uploaded, but metadata could not be saved."});
+  }
+
+  console.info("[evidence-upload] complete", {...uploadLog, evidenceId, storagePath, role: authorization.role});
+  return res.json({
+    success: true,
+    evidenceId,
+    storagePath,
+    downloadUrl,
+    fileName,
+    fileType,
+    fileSize,
+    storageStatus: "uploaded",
+    status: "active",
+    active: true,
+    source: "backend_upload",
+    ocrStatus: "pending",
+    processingStatus: "ocr_pending",
+    uploadedAt: new Date().toISOString(),
+  });
+});
 
 app.post("/api/evidence/ocr", requireAuth, async (req: any, res) => {
   const {
@@ -338,6 +514,7 @@ app.post("/api/evidence/ocr", requireAuth, async (req: any, res) => {
     const processedAt = admin.firestore.FieldValue.serverTimestamp();
     await evidenceDoc(orgId, evidenceId).set({
       ocrSummary,
+      ocrStatus: "completed",
       processingStatus: "ocr_completed",
       processedAt,
       processedBy: "function:evidence-ocr",
@@ -1704,6 +1881,150 @@ app.get("/api/org/users", requireAuth, async (req: any, res) => {
   }
 });
 
+app.get("/api/org/active-members", requireAuth, async (req: any, res) => {
+  const orgId = typeof req.query?.orgId === "string" ? req.query.orgId.trim() : "";
+  if (!isSafePathSegment(orgId)) return res.status(400).json({success: false, errorMessage: "Valid orgId is required"});
+  try {
+    if (!(await canAccessOrg(req.user.uid, orgId))) {
+      return res.status(403).json({success: false, errorMessage: "Organization access required"});
+    }
+    const memberSnap = await db.collection("orgs").doc(orgId).collection("members").limit(500).get();
+    const members = (await Promise.all(memberSnap.docs.map(async memberDoc => {
+      const member = memberDoc.data();
+      if (member.status !== "active" || member.active !== true) return null;
+      const userSnap = await db.doc(`users/${memberDoc.id}`).get();
+      const user = userSnap.data() || {};
+      return {
+        uid: memberDoc.id,
+        displayName: member.displayName || member.name || member.fullName || user.displayName || user.fullName || "",
+        email: member.email || user.email || "",
+        role: member.role || "",
+        status: member.status,
+        active: member.active,
+      };
+    }))).filter(Boolean);
+    return res.json({success: true, members});
+  } catch (error) {
+    console.error("Active organization members load failed", error);
+    return res.status(500).json({success: false, errorMessage: "Unable to load active organization members"});
+  }
+});
+
+app.post("/api/org/repair-member-identities", requireAuth, async (req: any, res) => {
+  const orgId = typeof req.body?.orgId === "string" ? req.body.orgId.trim() : "";
+  if (!isSafePathSegment(orgId)) return res.status(400).json({success: false, errorMessage: "Valid orgId is required"});
+  try {
+    if (!(await isSuperAdminUser(req.user.uid))) {
+      return res.status(403).json({success: false, errorMessage: "SuperAdmin access required"});
+    }
+    const orgRef = db.doc(`orgs/${orgId}`);
+    const [orgSnap, memberSnap] = await Promise.all([
+      orgRef.get(),
+      orgRef.collection("members").limit(500).get(),
+    ]);
+    if (!orgSnap.exists) return res.status(404).json({success: false, errorMessage: "Organization not found"});
+    const org = orgSnap.data() || {};
+    const repairs: Array<{ref: admin.firestore.DocumentReference; update: Record<string, any>}> = [];
+    for (const memberDoc of memberSnap.docs) {
+      const member = memberDoc.data();
+      const userSnap = await db.doc(`users/${memberDoc.id}`).get();
+      const user = userSnap.data() || {};
+      const role = member.role || user.roles?.orgRole || "viewer";
+      const status = member.status || "active";
+      const update = {
+        uid: member.uid || memberDoc.id,
+        displayName: member.displayName || member.name || member.fullName || user.displayName || user.fullName || org.primaryContactName || member.email || user.email || org.primaryContactEmail || memberDoc.id,
+        email: member.email || user.email || org.primaryContactEmail || "",
+        joinedAt: member.joinedAt || member.createdAt || admin.firestore.FieldValue.serverTimestamp(),
+        role,
+        status,
+        active: typeof member.active === "boolean" ? member.active : status === "active",
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      };
+      const needsRepair = !member.uid || !member.displayName || !member.email || !member.joinedAt || !member.role || !member.status || typeof member.active !== "boolean";
+      if (needsRepair) repairs.push({ref: memberDoc.ref, update});
+    }
+    for (let index = 0; index < repairs.length; index += 400) {
+      const batch = db.batch();
+      repairs.slice(index, index + 400).forEach(repair => batch.set(repair.ref, repair.update, {merge: true}));
+      await batch.commit();
+    }
+    const activityBatch = db.batch();
+    addCleanupActivity(activityBatch, {
+      action: "repair_member_identity_fields",
+      targetType: "org",
+      targetId: orgId,
+      orgId,
+      performedBy: req.user.uid,
+      before: {memberCount: memberSnap.size},
+      after: {repairedCount: repairs.length},
+      cleanupPhase: "24C",
+    });
+    await activityBatch.commit();
+    return res.json({success: true, repairedCount: repairs.length});
+  } catch (error) {
+    console.error("Organization member identity repair failed", error);
+    return res.status(500).json({success: false, errorMessage: "Unable to repair organization member identity fields"});
+  }
+});
+
+app.post("/api/org/repair-user-access-record", requireAuth, async (req: any, res) => {
+  const orgId = typeof req.body?.orgId === "string" ? req.body.orgId.trim() : "";
+  const userId = typeof req.body?.userId === "string" ? req.body.userId.trim() : "";
+  if (!isSafePathSegment(orgId) || !isSafePathSegment(userId)) {
+    return res.status(400).json({success: false, errorMessage: "Valid orgId and userId are required"});
+  }
+  try {
+    if (!(await isSuperAdminUser(req.user.uid))) {
+      return res.status(403).json({success: false, errorMessage: "SuperAdmin access required"});
+    }
+    const orgRef = db.doc(`orgs/${orgId}`);
+    const memberRef = orgRef.collection("members").doc(userId);
+    const userRef = db.doc(`users/${userId}`);
+    const [orgSnap, memberSnap, userSnap] = await Promise.all([
+      orgRef.get(),
+      memberRef.get(),
+      userRef.get(),
+    ]);
+    if (!orgSnap.exists) return res.status(404).json({success: false, errorMessage: "Organization not found"});
+    if (!memberSnap.exists) return res.status(404).json({success: false, errorMessage: "Organization member not found"});
+    const org = orgSnap.data() || {};
+    const member = memberSnap.data() || {};
+    const user = userSnap.data() || {};
+    if (member.status !== "active" || member.active !== true || typeof member.role !== "string" || !member.role) {
+      return res.status(400).json({success: false, errorMessage: "Member must be active and have a role before repairing the user access record"});
+    }
+    const now = admin.firestore.FieldValue.serverTimestamp();
+    const after = {
+      uid: userId,
+      email: member.email || user.email || org.primaryContactEmail || "",
+      displayName: member.displayName || member.name || member.fullName || user.displayName || user.fullName || member.email || user.email || userId,
+      orgId,
+      status: "active",
+      roles: {...(user.roles || {}), orgRole: member.role},
+      updatedAt: now,
+    };
+    const batch = db.batch();
+    batch.set(userRef, after, {merge: true});
+    addCleanupActivity(batch, {
+      action: "repair_user_access_record",
+      targetType: "user",
+      targetId: userId,
+      orgId,
+      userId,
+      performedBy: req.user.uid,
+      before: pickCleanupFields(user, ["uid", "email", "displayName", "orgId", "status", "roles"]),
+      after,
+      cleanupPhase: "24D",
+    });
+    await batch.commit();
+    return res.json({success: true});
+  } catch (error) {
+    console.error("User access record repair failed", error);
+    return res.status(500).json({success: false, errorMessage: "Unable to repair user access record"});
+  }
+});
+
 app.post("/api/org/member-control", requireAuth, async (req: any, res) => {
   try {
     const performedBy = req.user.uid;
@@ -1908,6 +2229,20 @@ const GEMINI_API_KEY = defineSecret("GEMINI_API_KEY");
 
 
 // --- Auth middleware: requires Bearer token ---
+async function requireEvidenceUploadAuth(req: any, res: any, next: any) {
+  try {
+    const authHeader = req.headers.authorization || "";
+    if (!authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({success: false, errorCode: "NOT_AUTHENTICATED", errorMessage: "Authentication is required to upload evidence."});
+    }
+    const token = authHeader.substring("Bearer ".length);
+    req.user = await admin.auth().verifyIdToken(token);
+    return next();
+  } catch (error) {
+    return res.status(401).json({success: false, errorCode: "NOT_AUTHENTICATED", errorMessage: "Authentication is required to upload evidence."});
+  }
+}
+
 async function requireAuth(req: any, res: any, next: any) {
   try {
     const authHeader = req.headers.authorization || "";

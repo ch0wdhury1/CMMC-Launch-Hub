@@ -277,7 +277,7 @@ ${JSON.stringify(ctx, null, 2)}
     setIsUploading(true);
     try {
       const newArtifact: Artifact = {
-        id: `${Date.now()}-${file.name}`, 
+        id: crypto.randomUUID(),
         name: file.name, 
         fileName: file.name,
         fileType: file.type,
@@ -344,8 +344,8 @@ ${JSON.stringify(ctx, null, 2)}
     window.open(downloadUrl, "_blank", "noopener,noreferrer");
   };
 
-  const archivedArtifactCount = objective.artifacts.filter(artifact => artifact.archived).length;
-  const visibleArtifacts = objective.artifacts.filter(artifact => showArchivedEvidence || !artifact.archived);
+  const archivedArtifactCount = objective.artifacts.filter(artifact => artifact.archived || artifact.status === "archived").length;
+  const visibleArtifacts = objective.artifacts.filter(artifact => showArchivedEvidence || (!artifact.archived && artifact.status !== "archived"));
 
   useEffect(() => {
     if (!libraryEvidenceContext) {
@@ -719,18 +719,21 @@ Respond in a helpful, practical way:
                         </button>
                       )}
                     </div>
-                    <div className="space-y-2 max-h-40 overflow-y-auto p-2 bg-gray-100 rounded-md">
+                    <div className="space-y-2 p-2 bg-gray-100 rounded-md">
                         {visibleArtifacts.map((artifact) => (
-                        <div key={artifact.id} className={`flex items-start p-2 border border-gray-200 rounded-md ${artifact.archived ? "bg-gray-50 opacity-70" : "bg-white"}`}>
+                        <div key={artifact.id} className={`flex items-start p-2 border border-gray-200 rounded-md ${artifact.archived || artifact.status === "archived" ? "bg-gray-50 opacity-70" : "bg-white"}`}>
                             <FileText className="h-8 w-8 text-gray-400 flex-shrink-0 mr-3" />
                             <div className="flex-1 min-w-0">
                                 <p className="text-sm font-medium text-gray-800 break-all">
                                   {artifact.name}
-                                  {artifact.archived && <span className="ml-2 text-xs font-semibold text-gray-500">Archived</span>}
+                                  {(artifact.archived || artifact.status === "archived") && <span className="ml-2 text-xs font-semibold text-gray-500">Archived</span>}
+                                  {artifact.status === "upload_failed" && <span className="ml-2 text-xs font-semibold text-red-700">Upload Failed</span>}
                                 </p>
                                 <p className="text-xs text-gray-500 mt-1">
                                   {[formatFileSize(artifact.fileSize), `OCR: ${artifact.processingStatus?.replace("ocr_", "") || "pending"}`, `Storage: ${artifact.storageStatus === "upload_failed" ? "failed" : artifact.storageStatus || "unavailable"}`].filter(Boolean).join(" | ")}
                                 </p>
+                                {artifact.storageStatus === "upload_failed" && artifact.storageError && <p className="mt-1 text-xs text-red-700">{artifact.storageError}</p>}
+                                {artifact.storageStatus === "uploaded" && artifact.processingStatus === "ocr_failed" && <p className="mt-1 text-xs text-amber-700">{artifact.processingError || "File uploaded, but OCR processing failed."}</p>}
                                 <p className="text-xs text-gray-500 mt-1 italic">"{artifact.ocrSummary}"</p>
                                 {libraryEvidenceContext && (
                                   <EvidenceValidationPanel
@@ -774,8 +777,8 @@ Respond in a helpful, practical way:
                               <button
                                 type="button"
                                 onClick={() => archiveArtifact(artifact)}
-                                disabled={artifact.archived || archivingEvidenceId === artifact.id}
-                                title={artifact.archived ? "Evidence archived" : "Archive evidence"}
+                                disabled={artifact.archived || artifact.status === "archived" || archivingEvidenceId === artifact.id}
+                                title={artifact.archived || artifact.status === "archived" ? "Evidence archived" : "Archive evidence"}
                                 className="flex items-center text-xs px-2 py-1 text-gray-600 hover:bg-gray-100 rounded disabled:text-gray-400 disabled:hover:bg-transparent"
                               >
                                 {archivingEvidenceId === artifact.id

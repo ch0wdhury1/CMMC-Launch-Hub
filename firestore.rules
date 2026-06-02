@@ -103,6 +103,8 @@ function validAcceptedInvitationMembership(orgId, invitationId, memberUid) {
     && request.auth.uid == memberUid
     && request.resource.data.invitationId is string
     && request.resource.data.status == "active"
+    && request.resource.data.active == true
+    && request.resource.data.superAdmin == false
     && request.resource.data.role in ["orgAdmin", "contributor", "viewer", "assessor"]
     && acceptedInvitationAfterWrite(orgId, invitationId, memberUid);
 }
@@ -110,14 +112,14 @@ function validAcceptedInvitationMembership(orgId, invitationId, memberUid) {
 function validPendingRegistrationUser(uid) {
   return request.auth.uid == uid
     && request.resource.data.keys().hasOnly([
-      "uid", "email", "fullName", "phone", "orgId", "status", "roles", "createdAt", "updatedAt"
+      "uid", "email", "displayName", "status", "requestedLevel", "registrationSource", "createdAt"
     ])
     && request.resource.data.uid == uid
     && request.resource.data.status == "pending"
-    && request.resource.data.orgId is string
     && request.resource.data.email is string
-    && request.resource.data.roles.orgRole == "orgAdmin"
-    && request.resource.data.roles.keys().hasOnly(["orgRole"]);
+    && request.resource.data.displayName is string
+    && request.resource.data.requestedLevel in ["SPONSORED", "COMM_L1", "COMM_L2"]
+    && request.resource.data.registrationSource == "self_registration";
 }
 
 function validAcceptedInvitationUser(uid) {
@@ -126,7 +128,7 @@ function validAcceptedInvitationUser(uid) {
   let invitation = getAfter(/databases/$(database)/documents/orgs/$(orgId)/invitations/$(member.invitationId)).data;
   return request.auth.uid == uid
     && request.resource.data.diff(resource.data).changedKeys().hasOnly([
-      "uid", "email", "orgId", "status", "roles", "updatedAt"
+      "uid", "displayName", "email", "orgId", "status", "roles", "updatedAt"
     ])
     && request.resource.data.status == "active"
     && request.resource.data.roles.superAdmin != true
@@ -144,7 +146,7 @@ function validAcceptedInvitationUserCreate(uid) {
   let invitation = getAfter(/databases/$(database)/documents/orgs/$(orgId)/invitations/$(member.invitationId)).data;
   return request.auth.uid == uid
     && request.resource.data.keys().hasOnly([
-      "uid", "email", "orgId", "status", "roles", "updatedAt"
+      "uid", "displayName", "email", "orgId", "status", "roles", "updatedAt"
     ])
     && request.resource.data.uid == uid
     && request.resource.data.status == "active"
@@ -262,14 +264,14 @@ match /orgs/{orgId} {
       || (
         validAcceptedInvitationMembership(orgId, request.resource.data.invitationId, memberUid)
         && request.resource.data.keys().hasOnly([
-          "role", "status", "active", "email", "invitationId", "createdAt", "updatedAt"
+          "uid", "displayName", "role", "status", "active", "superAdmin", "email", "invitationId", "joinedAt", "createdAt", "updatedAt"
         ])
       );
     allow update: if isSuperAdmin()
       || (
         validAcceptedInvitationMembership(orgId, request.resource.data.invitationId, memberUid)
         && request.resource.data.diff(resource.data).changedKeys().hasOnly([
-          "role", "status", "active", "email", "invitationId", "createdAt", "updatedAt"
+          "uid", "displayName", "role", "status", "active", "superAdmin", "email", "invitationId", "joinedAt", "createdAt", "updatedAt"
         ])
       );
     allow delete: if isSuperAdmin();

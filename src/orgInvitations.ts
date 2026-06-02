@@ -108,22 +108,26 @@ export async function acceptOrgInvitation(invitation: OrgInvitation, uid: string
   const existingMembership = membership.exists() ? membership.data() : null;
   const alreadyMember = existingMembership?.status === "active";
   const role = alreadyMember ? existingMembership?.role : invitation.role;
+  const displayName = user.data()?.displayName || user.data()?.fullName || invitation.email;
   const batch = writeBatch(db);
 
-  if (!alreadyMember) {
-    batch.set(memberRef, {
-      role,
-      status: "active",
-      active: true,
-      email: invitation.email,
-      invitationId: invitation.id,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    }, { merge: true });
-  }
+  batch.set(memberRef, {
+    uid,
+    displayName,
+    role,
+    status: "active",
+    active: true,
+    superAdmin: false,
+    email: invitation.email,
+    invitationId: invitation.id,
+    joinedAt: existingMembership?.joinedAt || serverTimestamp(),
+    createdAt: existingMembership?.createdAt || serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  }, { merge: true });
 
   batch.set(userRef, {
     uid,
+    displayName,
     email: invitation.email,
     orgId: invitation.orgId,
     status: "active",

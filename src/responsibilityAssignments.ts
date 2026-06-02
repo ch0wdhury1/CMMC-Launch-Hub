@@ -1,11 +1,31 @@
 import { collection, onSnapshot, type Unsubscribe } from "firebase/firestore";
-import { db } from "./firebase";
+import { auth, db } from "./firebase";
 
 export interface ActiveOrgMember {
   uid: string;
   name: string;
   email?: string;
   role?: string;
+}
+
+function getApiBaseUrl() {
+  return String(import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
+}
+
+async function loadHydratedActiveOrgMembers(orgId: string): Promise<ActiveOrgMember[]> {
+  const token = await auth.currentUser?.getIdToken();
+  if (!token) return [];
+  const response = await fetch(`${getApiBaseUrl()}/api/org/active-members?orgId=${encodeURIComponent(orgId)}`, {
+    headers: {Authorization: `Bearer ${token}`},
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload.success === false) throw new Error(payload.errorMessage || "Unable to load active organization members");
+  return (payload.members || []).map((member: any) => ({
+    uid: member.uid,
+    name: member.displayName || member.name || member.fullName || member.email || member.uid,
+    email: member.email || undefined,
+    role: member.role || undefined,
+  }));
 }
 
 export interface ResponsibilityAssignmentUpdate {
@@ -48,13 +68,18 @@ export const subscribeActiveOrgMembers = (
   onSnapshot(
     collection(db, "orgs", orgId, "members"),
     (snapshot) => {
-      const members = snapshot.docs
+      const localMembers = snapshot.docs
         .map((document) =>
           toActiveOrgMember(document.id, document.data() as Record<string, unknown>),
         )
         .filter((member): member is ActiveOrgMember => Boolean(member))
         .sort((left, right) => left.name.localeCompare(right.name));
-      onMembers(members);
+      onMembers(localMembers);
+      void loadHydratedActiveOrgMembers(orgId)
+        .then(members => onMembers(members.sort((left, right) => left.name.localeCompare(right.name))))
+        .catch(error => {
+          console.warn("[responsibility-assignments] member profile hydration failed; member records retained", error);
+        });
     },
     (error) => onError?.(error),
   );

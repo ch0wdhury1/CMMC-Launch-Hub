@@ -45,3 +45,12 @@ export async function updateOrgMember(orgId: string, userId: string, role: strin
 export async function removeUserFromOrg(orgId: string, userId: string, allowLastOwnerRemoval: boolean): Promise<void> {
   await request("/api/org/member-control", {method: "POST", body: JSON.stringify({action: "remove_user_from_org", orgId, userId, allowLastOwnerRemoval})});
 }
+
+export async function repairOrgMemberIdentities(orgId: string): Promise<number> {
+  const payload = await request("/api/org/repair-member-identities", {method: "POST", body: JSON.stringify({orgId})});
+  return Number(payload.repairedCount || 0);
+}
+
+export async function repairUserAccessRecord(orgId: string, userId: string): Promise<void> {
+  await request("/api/org/repair-user-access-record", {method: "POST", body: JSON.stringify({orgId, userId})});
+}

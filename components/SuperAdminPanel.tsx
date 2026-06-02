@@ -249,6 +249,7 @@ const getOrgDefaultsForTier = (tier: string) => {
           orgRef,
           stripUndefined({
             name: orgName,
+            status: "active",
             address: safeStr((reqData as any).address).trim(),
             website: safeStr((reqData as any).website).trim(),
             tier: requestedTier,
@@ -278,6 +279,7 @@ const getOrgDefaultsForTier = (tier: string) => {
           stripUndefined({
             updatedAt: serverTimestamp(),
             name: orgSnap.data()?.name || orgName,
+            status: orgSnap.data()?.status || "active",
             ownerUid: orgSnap.data()?.ownerUid || ownerUid,
             primaryContactEmail: orgSnap.data()?.primaryContactEmail || primaryEmail,
             primaryContactName: orgSnap.data()?.primaryContactName || primaryName,
@@ -287,13 +289,8 @@ const getOrgDefaultsForTier = (tier: string) => {
         );
       }
 
-      if (!memberSnap.exists()) {
-        tx.set(memberRef, { createdAt: serverTimestamp(), role: "orgAdmin", superAdmin: false }, { merge: true });
-      }
-
-      if (!legacyMemberSnap.exists()) {
-        tx.set(legacyMemberRef, { createdAt: serverTimestamp(), role: "orgAdmin", superAdmin: false }, { merge: true });
-      }
+      tx.set(memberRef, { uid: ownerUid, displayName: primaryName, email: primaryEmail, active: true, status: "active", joinedAt: memberSnap.data()?.joinedAt || serverTimestamp(), createdAt: memberSnap.data()?.createdAt || serverTimestamp(), updatedAt: serverTimestamp(), role: "orgAdmin", superAdmin: false }, { merge: true });
+      tx.set(legacyMemberRef, { uid: ownerUid, displayName: primaryName, email: primaryEmail, active: true, status: "active", joinedAt: legacyMemberSnap.data()?.joinedAt || serverTimestamp(), createdAt: legacyMemberSnap.data()?.createdAt || serverTimestamp(), updatedAt: serverTimestamp(), role: "orgAdmin", superAdmin: false }, { merge: true });
 
       tx.set(
         userRef,
@@ -301,12 +298,13 @@ const getOrgDefaultsForTier = (tier: string) => {
           uid: ownerUid,
           orgId,
           email: primaryEmail,
+          displayName: primaryName,
           fullName: primaryName,
           phone: primaryPhone,
           status: "active",
           track: safeStr((reqData as any).track || "TRACK_1"),
           singleUserOnly: !!isSponsored,
-          roles: { orgRole: "orgAdmin", superAdmin: false },
+          roles: { ...(userSnap.data()?.roles || {}), orgRole: "orgAdmin" },
           createdAt: userSnap.exists() ? userSnap.data()?.createdAt || serverTimestamp() : serverTimestamp(),
           updatedAt: serverTimestamp(),
         }),

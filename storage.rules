@@ -3,74 +3,96 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
 
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
-    function userDoc() {
-      return firestore.get(
-        /databases/(default)/documents/users/$(request.auth.uid)
-      ).data;
-    }
-
-    function hasUserDoc() {
-      return isSignedIn()
-        && firestore.exists(
-          /databases/(default)/documents/users/$(request.auth.uid)
-        );
-    }
-
-    function isSuperAdmin() {
-      return hasUserDoc()
-        && userDoc().status == "active"
-        && userDoc().roles.superAdmin == true;
-    }
-
-    function orgMemberDoc(orgId) {
-      return firestore.get(
-        /databases/(default)/documents/orgs/$(orgId)/members/$(request.auth.uid)
-      ).data;
-    }
-
-    function isActiveOrgMember(orgId) {
-      return hasUserDoc()
-        && userDoc().status == "active"
-        && userDoc().orgId == orgId
-        && firestore.exists(
-          /databases/(default)/documents/orgs/$(orgId)
+    function canReadOrgStorage(orgId) {
+      return (
+          request.auth != null
+          && firestore.exists(
+            /databases/(default)/documents/users/$(request.auth.uid)
+          )
+          && firestore.get(
+            /databases/(default)/documents/users/$(request.auth.uid)
+          ).data.status == "active"
+          && firestore.get(
+            /databases/(default)/documents/users/$(request.auth.uid)
+          ).data.roles.superAdmin == true
         )
-        && firestore.get(
-          /databases/(default)/documents/orgs/$(orgId)
-        ).data.status == "active"
-        && firestore.exists(
-          /databases/(default)/documents/orgs/$(orgId)/members/$(request.auth.uid)
-        )
-        && orgMemberDoc(orgId).status == "active"
-        && orgMemberDoc(orgId).active == true
-        && orgMemberDoc(orgId).role is string;
-    }
-
-    function canReadEvidence(orgId) {
-      return isSuperAdmin() || isActiveOrgMember(orgId);
-    }
-
-    function canWriteEvidence(orgId) {
-      return isSuperAdmin()
         || (
-          isActiveOrgMember(orgId)
-          && orgMemberDoc(orgId).role in ["orgOwner", "orgAdmin", "assessor", "contributor"]
+          request.auth != null
+          && firestore.exists(
+            /databases/(default)/documents/users/$(request.auth.uid)
+          )
+          && firestore.get(
+            /databases/(default)/documents/users/$(request.auth.uid)
+          ).data.status == "active"
+          && firestore.get(
+            /databases/(default)/documents/users/$(request.auth.uid)
+          ).data.orgId == orgId
+          && firestore.exists(
+            /databases/(default)/documents/orgs/$(orgId)
+          )
+          && firestore.get(
+            /databases/(default)/documents/orgs/$(orgId)
+          ).data.status == "active"
+          && firestore.exists(
+            /databases/(default)/documents/orgs/$(orgId)/members/$(request.auth.uid)
+          )
+          && firestore.get(
+            /databases/(default)/documents/orgs/$(orgId)/members/$(request.auth.uid)
+          ).data.status == "active"
+          && firestore.get(
+            /databases/(default)/documents/orgs/$(orgId)/members/$(request.auth.uid)
+          ).data.active == true
         );
     }
 
-    match /orgs/{orgId}/evidence/{evidenceId}/{fileName} {
-      allow read: if canReadEvidence(orgId);
-      allow create, update: if canWriteEvidence(orgId);
-      allow delete: if false;
+    function canWriteOrgStorage(orgId) {
+      return (
+          request.auth != null
+          && firestore.exists(
+            /databases/(default)/documents/users/$(request.auth.uid)
+          )
+          && firestore.get(
+            /databases/(default)/documents/users/$(request.auth.uid)
+          ).data.status == "active"
+          && firestore.get(
+            /databases/(default)/documents/users/$(request.auth.uid)
+          ).data.roles.superAdmin == true
+        )
+        || (
+          request.auth != null
+          && firestore.exists(
+            /databases/(default)/documents/users/$(request.auth.uid)
+          )
+          && firestore.get(
+            /databases/(default)/documents/users/$(request.auth.uid)
+          ).data.status == "active"
+          && firestore.get(
+            /databases/(default)/documents/users/$(request.auth.uid)
+          ).data.orgId == orgId
+          && firestore.exists(
+            /databases/(default)/documents/orgs/$(orgId)
+          )
+          && firestore.get(
+            /databases/(default)/documents/orgs/$(orgId)
+          ).data.status == "active"
+          && firestore.exists(
+            /databases/(default)/documents/orgs/$(orgId)/members/$(request.auth.uid)
+          )
+          && firestore.get(
+            /databases/(default)/documents/orgs/$(orgId)/members/$(request.auth.uid)
+          ).data.status == "active"
+          && firestore.get(
+            /databases/(default)/documents/orgs/$(orgId)/members/$(request.auth.uid)
+          ).data.active == true
+          && firestore.get(
+            /databases/(default)/documents/orgs/$(orgId)/members/$(request.auth.uid)
+          ).data.role in ["orgOwner", "orgAdmin", "assessor", "contributor"]
+        );
     }
 
-    match /orgs/{orgId}/evidenceLibrary/{evidenceId}/{fileName} {
-      allow read: if canReadEvidence(orgId);
-      allow create, update: if canWriteEvidence(orgId);
+    match /orgs/{orgId}/{allOrgFiles=**} {
+      allow read: if canReadOrgStorage(orgId);
+      allow create, update: if canWriteOrgStorage(orgId);
       allow delete: if false;
     }
 

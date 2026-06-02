@@ -334,11 +334,14 @@ export async function saveEvidenceRecord(
   const evidenceId = record.evidenceId;
   const ref = doc(db, "orgs", orgId, "evidence", cleanDocId(evidenceId));
   const payload = stripUndefined({
+    id: evidenceId,
     evidenceId,
     orgId,
     assessmentId: record.assessmentId,
     practiceIds: record.practiceIds,
     objectiveIds: record.objectiveIds,
+    practiceId: record.practiceId,
+    objectiveId: record.objectiveId,
     title: record.title || record.name || record.fileName,
     name: record.name,
     description: record.description,
@@ -350,6 +353,7 @@ export async function saveEvidenceRecord(
     storageStatus: record.storageStatus,
     storageError: record.storageError,
     ocrSummary: record.ocrSummary,
+    ocrStatus: record.ocrStatus,
     processingStatus: record.processingStatus,
     processingError: record.processingError,
     archived: record.archived,
@@ -357,10 +361,12 @@ export async function saveEvidenceRecord(
     archivedAt: record.archivedAt,
     archivedByUid: record.archivedByUid,
     archiveReason: record.archiveReason,
+    status: record.status,
     uploadedByUid: record.uploadedByUid,
+    uploadedByEmail: record.uploadedByEmail,
     uploadedAt: record.uploadedAt,
     reviewStatus: "uploaded",
-    source: "local_upload_metadata",
+    source: record.source || "local_upload_metadata",
     createdAt: record.createdAt || serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
@@ -385,6 +391,7 @@ export async function archiveEvidenceRecord(
   await setDoc(ref, stripUndefined({
     archived: true,
     active: false,
+    status: "archived",
     archivedAt: serverTimestamp(),
     archivedByUid,
     archiveReason,

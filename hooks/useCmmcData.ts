@@ -281,8 +281,8 @@ const mergeFirestorePracticeRecords = (
   ]));
   const evidenceByObjective = new Map<string, EvidenceRecord[]>();
   evidenceRecords.forEach(e => {
-    (e.practiceIds || []).forEach(practiceId => {
-      (e.objectiveIds || []).forEach(objectiveId => {
+    (e.practiceIds?.length ? e.practiceIds : e.practiceId ? [e.practiceId] : []).forEach(practiceId => {
+      (e.objectiveIds?.length ? e.objectiveIds : e.objectiveId ? [e.objectiveId] : []).forEach(objectiveId => {
         const storageKey = getObjectiveRecordStorageKey(practiceId, objectiveId);
         const current = evidenceByObjective.get(storageKey) || [];
         evidenceByObjective.set(storageKey, [...current, e]);
@@ -321,6 +321,7 @@ const mergeFirestorePracticeRecords = (
           archivedAt: e.archivedAt,
           archivedByUid: e.archivedByUid,
           archiveReason: e.archiveReason,
+          status: e.status,
           uploadedAt: toEvidenceUploadedAt(e),
           isFinalForm: e.isFinalForm ?? true,
         }));
@@ -833,6 +834,8 @@ export const useCmmcData = (options: UseCmmcDataOptions = {}) => {
         assessmentId,
         practiceIds: [practiceId],
         objectiveIds: [objectiveId],
+        practiceId,
+        objectiveId,
         title: artifact.name,
         name: artifact.name,
         description: artifact.description,
@@ -853,30 +856,49 @@ export const useCmmcData = (options: UseCmmcDataOptions = {}) => {
         }
 
         let recordToSave: EvidenceRecord;
+        let metadataSavedByGateway = false;
         try {
           const uploaded = await uploadEvidenceFile({
             orgId,
             evidenceId: artifact.id,
             file: evidenceFile,
+            assessmentId,
+            practiceId,
+            objectiveId,
           });
           recordToSave = {
             ...baseRecord,
             ...uploaded,
+            active: true,
+            status: "active",
             storageStatus: "uploaded",
           };
+          metadataSavedByGateway = true;
         } catch (storageError) {
-          const rawMessage = storageError instanceof Error ? storageError.message : "";
+          const storageCode = typeof (storageError as any)?.code === "string" ? (storageError as any).code : "unknown";
+          const rawStorageError = storageError instanceof Error ? storageError.message.trim().replace(/\s+/g, " ").slice(0, 180) : "";
+          const storageErrorMessage = rawStorageError || `Storage upload failed: ${storageCode}`;
+          console.warn("[evidence-storage] upload failed", {
+            orgId,
+            assessmentId,
+            evidenceId: artifact.id,
+            error: storageError,
+          });
           recordToSave = {
             ...baseRecord,
             uploadedAt: artifact.uploadedAt,
+            active: false,
+            status: "upload_failed",
             storageStatus: "upload_failed",
-            storageError: rawMessage.trim().replace(/\s+/g, " ").slice(0, 160) || "Storage upload failed",
+            storageError: storageErrorMessage,
             processingStatus: "ocr_failed",
             processingError: "OCR skipped because Storage upload failed",
           };
         }
 
-        await saveEvidenceRecord(orgId, recordToSave);
+        if (!metadataSavedByGateway) {
+          await saveEvidenceRecord(orgId, recordToSave);
+        }
         return recordToSave;
       };
 
@@ -890,6 +912,9 @@ export const useCmmcData = (options: UseCmmcDataOptions = {}) => {
           downloadUrl: savedRecord.downloadUrl,
           storageStatus: savedRecord.storageStatus,
           storageError: savedRecord.storageError,
+          active: savedRecord.active,
+          status: savedRecord.status,
+          processingStatus: savedRecord.processingStatus,
         });
         logActivity({
           action: "evidence.uploaded",
@@ -940,7 +965,7 @@ export const useCmmcData = (options: UseCmmcDataOptions = {}) => {
           });
           updateCachedArtifact(practiceId, objectiveId, artifact.id, {
             processingStatus: "ocr_failed",
-            processingError,
+            processingError: "File uploaded, but OCR processing failed.",
           });
         });
       }).catch(error => {
@@ -970,6 +995,7 @@ export const useCmmcData = (options: UseCmmcDataOptions = {}) => {
     updateCachedArtifact(practiceId, objectiveId, artifact.id, {
       archived: true,
       active: false,
+      status: "archived",
       archivedAt: new Date().toISOString(),
       archivedByUid: uid,
       archiveReason,

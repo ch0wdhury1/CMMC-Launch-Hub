@@ -37,6 +37,7 @@ export interface Artifact {
   archivedAt?: any;
   archivedByUid?: string;
   archiveReason?: string;
+  status?: "active" | "archived" | "upload_failed";
 }
 
 export interface EvidenceFileUpload {
@@ -457,12 +458,15 @@ export interface FirestoreObjectiveRecord {
 }
 
 export interface EvidenceRecord {
+  id?: string;
   evidenceId: string;
   orgId: string;
   assessmentId: string;
   frameworkId?: string;
   practiceIds: string[];
   objectiveIds: string[];
+  practiceId?: string;
+  objectiveId?: string;
   title?: string;
   description?: string;
   name?: string;
@@ -475,6 +479,7 @@ export interface EvidenceRecord {
   storageError?: string;
   sha256?: string;
   ocrSummary?: string;
+  ocrStatus?: "pending" | "completed" | "failed";
   processingStatus?: "ocr_pending" | "ocr_completed" | "ocr_failed";
   processingError?: string;
   processedAt?: any;
@@ -484,6 +489,7 @@ export interface EvidenceRecord {
   isFinalForm?: boolean;
   reviewStatus?: EvidenceReviewStatus;
   uploadedByUid?: string;
+  uploadedByEmail?: string;
   uploadedAt?: any;
   reviewedByUid?: string;
   reviewedAt?: any;
@@ -493,6 +499,7 @@ export interface EvidenceRecord {
   archivedAt?: any;
   archivedByUid?: string;
   archiveReason?: string;
+  status?: "active" | "archived" | "upload_failed";
   source?: string;
   createdAt?: any;
   updatedAt?: any;

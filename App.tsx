@@ -200,7 +200,7 @@ export default function App() {
   }
 
   if (!authUser) {
-    return <Login />;
+    return <PublicAuthRouter />;
   }
 
   return <AuthorizedAppGate authUser={authUser} onLogout={handleLogout} />;
@@ -225,7 +225,7 @@ function AuthorizedAppGate({ authUser, onLogout }: { authUser: User; onLogout: (
           if (!cancelled) setAccess({
             status: user?.status === "pending" || !user ? "pending" : "disabled",
             message: user?.status === "pending" || !user
-              ? "Your registration is pending approval. You will receive access after your organization is approved."
+              ? "Your registration has been received and is awaiting approval. You will receive access after your organization has been approved."
               : "Your account is inactive or disabled. Contact your organization administrator.",
           });
           return;
@@ -271,7 +271,7 @@ function AuthorizedAppGate({ authUser, onLogout }: { authUser: User; onLogout: (
       <div className="flex min-h-screen items-center justify-center bg-gray-100 p-6">
         <div className="max-w-lg rounded-lg border border-gray-200 bg-white p-8 text-center shadow-sm">
           <ShieldAlert className="mx-auto mb-4 h-12 w-12 text-amber-500" />
-          <h1 className="text-xl font-bold text-gray-900">{access.status === "pending" ? "Access Pending" : "Access Disabled"}</h1>
+          <h1 className="text-xl font-bold text-gray-900">{access.status === "pending" ? "Account Pending Approval" : "Access Disabled"}</h1>
           <p className="mt-3 text-sm text-gray-600">{access.message}</p>
           <button type="button" onClick={onLogout} className="mt-6 rounded bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800">Logout</button>
         </div>
@@ -1228,10 +1228,190 @@ onDiagnosticsClick={isSuperAdmin ? () => setIsDiagnosticsOpen(true) : undefined}
   );
 }
 
-/* =========================================================
-   Minimal Login component (keeps your app from breaking)
-   ========================================================= */
-function Login() {
+type PublicRoute = "/login" | "/register" | "/registration-submitted";
+
+const publicNavigate = (path: PublicRoute) => {
+  window.history.pushState({}, "", path);
+  window.dispatchEvent(new PopStateEvent("popstate"));
+};
+
+const PublicShell: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <div className="flex min-h-screen flex-col bg-gray-50">
+    <AppHeader showAppActions={false} onSave={() => {}} onSavedTemplatesClick={() => {}} onProfileClick={() => {}} overallCompletion={0} sprsScore={-250} />
+    <main className="flex flex-1 items-center justify-center p-6">
+      <div className="w-full max-w-xl">{children}</div>
+    </main>
+    <AppFooter />
+  </div>
+);
+
+function PublicAuthRouter() {
+  const getRoute = (): PublicRoute => {
+    if (window.location.pathname === "/register") return "/register";
+    if (window.location.pathname === "/registration-submitted") return "/registration-submitted";
+    return "/login";
+  };
+  const [route, setRoute] = useState<PublicRoute>(getRoute);
+
+  useEffect(() => {
+    if (window.location.pathname === "/") window.history.replaceState({}, "", "/login");
+    const syncRoute = () => setRoute(getRoute());
+    window.addEventListener("popstate", syncRoute);
+    syncRoute();
+    return () => window.removeEventListener("popstate", syncRoute);
+  }, []);
+
+  if (route === "/register") return <RegistrationScreen />;
+  if (route === "/registration-submitted") return <RegistrationSubmittedScreen />;
+  return <LoginScreen />;
+}
+
+function LoginScreen() {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [msg, setMsg] = useState("");
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setMsg("");
+    try {
+      await signInWithEmailAndPassword(auth, email.trim().toLowerCase(), password);
+    } catch (error: any) {
+      setMsg(error?.message || "Unable to login.");
+    }
+  };
+
+  return (
+    <PublicShell>
+      <section className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+        <h1 className="text-2xl font-bold text-gray-900">Login</h1>
+        <form onSubmit={submit} className="mt-5 space-y-4">
+          <label className="block text-sm font-medium text-gray-700">Email<input required type="email" value={email} onChange={event => setEmail(event.target.value)} className="mt-1 w-full rounded border border-gray-300 px-3 py-2" /></label>
+          <label className="block text-sm font-medium text-gray-700">Password<input required type="password" value={password} onChange={event => setPassword(event.target.value)} className="mt-1 w-full rounded border border-gray-300 px-3 py-2" /></label>
+          <button type="submit" className="w-full rounded bg-blue-700 px-4 py-2 font-semibold text-white hover:bg-blue-800">Login</button>
+          {msg && <p className="text-sm text-red-700">{msg}</p>}
+        </form>
+        <button type="button" onClick={() => publicNavigate("/register")} className="mt-5 text-sm font-semibold text-blue-700 hover:underline">Register New Organization</button>
+      </section>
+    </PublicShell>
+  );
+}
+
+function RegistrationScreen() {
+  const [companyName, setCompanyName] = useState("");
+  const [requestedLevel, setRequestedLevel] = useState<"SPONSORED" | "COMM_L1" | "COMM_L2">("COMM_L1");
+  const [address, setAddress] = useState("");
+  const [phone, setPhone] = useState("");
+  const [website, setWebsite] = useState("");
+  const [userFullName, setUserFullName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [msg, setMsg] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setMsg("");
+    const cleanEmail = email.trim().toLowerCase();
+    const required = [companyName, address, phone, website, userFullName, cleanEmail, password];
+    if (required.some(value => !value.trim())) return setMsg("Please complete all required fields.");
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) return setMsg("Please enter a valid email address.");
+    if (password.length < 6) return setMsg("Password must be at least 6 characters.");
+    try {
+      const parsedWebsite = new URL(website.trim());
+      if (!["http:", "https:"].includes(parsedWebsite.protocol)) throw new Error();
+    } catch {
+      return setMsg("Please enter a valid website URL, including https://.");
+    }
+    setSubmitting(true);
+    try {
+      const credential = await createUserWithEmailAndPassword(auth, cleanEmail, password);
+      await setDoc(doc(db, "users", credential.user.uid), {
+        uid: credential.user.uid,
+        email: cleanEmail,
+        displayName: userFullName.trim(),
+        status: "pending",
+        requestedLevel,
+        registrationSource: "self_registration",
+        createdAt: serverTimestamp(),
+      });
+      await addDoc(collection(db, "accessRequests"), {
+        type: "orgRegistration",
+        uid: credential.user.uid,
+        companyName: companyName.trim(),
+        orgName: companyName.trim(),
+        requestedLevel,
+        requestedTier: requestedLevel,
+        address: address.trim(),
+        phone: phone.trim(),
+        website: website.trim(),
+        userFullName: userFullName.trim(),
+        primaryContactName: userFullName.trim(),
+        primaryContactPhone: phone.trim(),
+        primaryContactEmail: cleanEmail,
+        ownerEmail: cleanEmail,
+        fullName: userFullName.trim(),
+        email: cleanEmail,
+        requestedByUid: credential.user.uid,
+        status: "pending",
+        requestedAt: serverTimestamp(),
+        createdAt: serverTimestamp(),
+      });
+      await signOut(auth);
+      publicNavigate("/registration-submitted");
+    } catch (error: any) {
+      console.error("Registration failed", error);
+      setMsg(error?.message || "Unable to submit registration.");
+      if (auth.currentUser) await signOut(auth);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <PublicShell>
+      <section className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+        <h1 className="text-2xl font-bold text-gray-900">REGISTRATION FORM</h1>
+        <form onSubmit={submit} className="mt-5 space-y-5">
+          <div className="space-y-3">
+            <h2 className="border-b pb-2 text-sm font-bold uppercase text-gray-700">Company Information</h2>
+            <input required placeholder="Company Name" value={companyName} onChange={event => setCompanyName(event.target.value)} className="w-full rounded border border-gray-300 px-3 py-2" />
+            <select required value={requestedLevel} onChange={event => setRequestedLevel(event.target.value as typeof requestedLevel)} className="w-full rounded border border-gray-300 px-3 py-2"><option value="COMM_L1">CMMC Level 1</option><option value="COMM_L2">CMMC Level 2</option><option value="SPONSORED">SPONSORED</option></select>
+            <input required placeholder="Address" value={address} onChange={event => setAddress(event.target.value)} className="w-full rounded border border-gray-300 px-3 py-2" />
+            <input required placeholder="Phone" value={phone} onChange={event => setPhone(event.target.value)} className="w-full rounded border border-gray-300 px-3 py-2" />
+            <input required placeholder="Website (https://example.com)" value={website} onChange={event => setWebsite(event.target.value)} className="w-full rounded border border-gray-300 px-3 py-2" />
+          </div>
+          <div className="space-y-3">
+            <h2 className="border-b pb-2 text-sm font-bold uppercase text-gray-700">User Information</h2>
+            <input required placeholder="User Full Name" value={userFullName} onChange={event => setUserFullName(event.target.value)} className="w-full rounded border border-gray-300 px-3 py-2" />
+            <input required type="email" placeholder="Email" value={email} onChange={event => setEmail(event.target.value)} className="w-full rounded border border-gray-300 px-3 py-2" />
+            <input required type="password" placeholder="Password (6+ characters)" value={password} onChange={event => setPassword(event.target.value)} className="w-full rounded border border-gray-300 px-3 py-2" />
+          </div>
+          <button type="submit" disabled={submitting} className="w-full rounded bg-blue-700 px-4 py-2 font-semibold text-white hover:bg-blue-800 disabled:opacity-60">{submitting ? "REGISTERING..." : "REGISTER"}</button>
+          {msg && <p className="text-sm text-red-700">{msg}</p>}
+        </form>
+        <button type="button" onClick={() => publicNavigate("/login")} className="mt-5 text-sm font-semibold text-blue-700 hover:underline">Already have an account? Login</button>
+      </section>
+    </PublicShell>
+  );
+}
+
+function RegistrationSubmittedScreen() {
+  return (
+    <PublicShell>
+      <section className="rounded-lg border border-gray-200 bg-white p-8 text-center shadow-sm">
+        <h1 className="text-2xl font-bold text-gray-900">Registration Submitted</h1>
+        <p className="mt-5 text-gray-700">Thank you for registering.</p>
+        <p className="mt-3 text-sm text-gray-600">Your organization registration is currently pending approval.</p>
+        <p className="mt-2 text-sm text-gray-600">You will be able to access the platform after your organization has been reviewed and approved by an administrator.</p>
+        <button type="button" onClick={() => publicNavigate("/login")} className="mt-6 rounded bg-blue-700 px-4 py-2 font-semibold text-white hover:bg-blue-800">Back to Login</button>
+      </section>
+    </PublicShell>
+  );
+}
+
+/* Legacy combined public form retained temporarily for rollback reference. */
+function LegacyLogin() {
   const [mode, setMode] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
