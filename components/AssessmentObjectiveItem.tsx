@@ -151,6 +151,7 @@ export const AssessmentObjectiveItem: React.FC<AssessmentObjectiveItemProps> = (
   const [isSlideshowModalOpen, setIsSlideshowModalOpen] = useState(false);
   const [showArchivedEvidence, setShowArchivedEvidence] = useState(false);
   const [archivingEvidenceId, setArchivingEvidenceId] = useState<string | null>(null);
+  const [ocrDetailsArtifact, setOcrDetailsArtifact] = useState<Artifact | null>(null);
   const [isLibraryPickerOpen, setIsLibraryPickerOpen] = useState(false);
   const [attachedLibraryEvidence, setAttachedLibraryEvidence] = useState<AttachedLibraryEvidence[]>([]);
   const [detachingLibraryEvidenceId, setDetachingLibraryEvidenceId] = useState<string | null>(null);
@@ -346,6 +347,36 @@ ${JSON.stringify(ctx, null, 2)}
 
   const archivedArtifactCount = objective.artifacts.filter(artifact => artifact.archived || artifact.status === "archived").length;
   const visibleArtifacts = objective.artifacts.filter(artifact => showArchivedEvidence || (!artifact.archived && artifact.status !== "archived"));
+  const getOcrStatusLabel = (artifact: Artifact) => {
+    if (artifact.processingStatus === "ocr_completed") return "completed";
+    if (artifact.processingStatus === "ocr_failed") return "failed";
+    if (artifact.processingStatus === "ocr_pending") return "processing";
+    return "not available";
+  };
+  const getStorageStatusLabel = (artifact: Artifact) => {
+    if (artifact.storageStatus === "uploaded") return "uploaded";
+    if (artifact.storageStatus === "upload_failed" || artifact.status === "upload_failed") return "failed";
+    return "pending";
+  };
+  const getOcrPreview = (artifact: Artifact) => {
+    const summary = artifact.ocrSummary?.trim() || "";
+    return summary.length > 320 ? `${summary.slice(0, 320)}...` : summary;
+  };
+  const isUploadFailed = (artifact: Artifact) =>
+    artifact.storageStatus === "upload_failed" || artifact.status === "upload_failed";
+  const hasUsableFile = (artifact: Artifact) =>
+    !isUploadFailed(artifact) && Boolean(artifact.storagePath?.trim() && artifact.downloadUrl?.trim());
+  const hasUsableMetadata = (artifact: Artifact) =>
+    !isUploadFailed(artifact) && Boolean(artifact.storagePath?.trim() || artifact.downloadUrl?.trim());
+
+  const copyOcrDetails = async () => {
+    if (!ocrDetailsArtifact?.ocrSummary) return;
+    try {
+      await navigator.clipboard.writeText(ocrDetailsArtifact.ocrSummary);
+    } catch (error) {
+      console.warn("Could not copy OCR details.", error);
+    }
+  };
 
   useEffect(() => {
     if (!libraryEvidenceContext) {
@@ -730,12 +761,18 @@ Respond in a helpful, practical way:
                                   {artifact.status === "upload_failed" && <span className="ml-2 text-xs font-semibold text-red-700">Upload Failed</span>}
                                 </p>
                                 <p className="text-xs text-gray-500 mt-1">
-                                  {[formatFileSize(artifact.fileSize), `OCR: ${artifact.processingStatus?.replace("ocr_", "") || "pending"}`, `Storage: ${artifact.storageStatus === "upload_failed" ? "failed" : artifact.storageStatus || "unavailable"}`].filter(Boolean).join(" | ")}
+                                  {[formatFileSize(artifact.fileSize), `OCR: ${getOcrStatusLabel(artifact)}`, `Storage: ${getStorageStatusLabel(artifact)}`].filter(Boolean).join(" | ")}
                                 </p>
-                                {artifact.storageStatus === "upload_failed" && artifact.storageError && <p className="mt-1 text-xs text-red-700">{artifact.storageError}</p>}
-                                {artifact.storageStatus === "uploaded" && artifact.processingStatus === "ocr_failed" && <p className="mt-1 text-xs text-amber-700">{artifact.processingError || "File uploaded, but OCR processing failed."}</p>}
-                                <p className="text-xs text-gray-500 mt-1 italic">"{artifact.ocrSummary}"</p>
-                                {libraryEvidenceContext && (
+                                {isUploadFailed(artifact) && <p className="mt-1 text-xs text-red-700">Upload failed. {artifact.storageError || "The file could not be stored."}</p>}
+                                {!isUploadFailed(artifact) && artifact.processingStatus === "ocr_failed" && <p className="mt-1 text-xs text-amber-700">OCR failed. File may still be usable as evidence. {artifact.processingError?.slice(0, 160)}</p>}
+                                {artifact.ocrSummary?.trim() && (
+                                  <div className="mt-2 rounded border border-gray-100 bg-gray-50 p-2">
+                                    <p className="text-[10px] font-semibold uppercase text-gray-500">OCR Preview</p>
+                                    <p className="mt-1 text-xs text-gray-600">{getOcrPreview(artifact)}</p>
+                                    <button type="button" onClick={() => setOcrDetailsArtifact(artifact)} className="mt-1 text-xs font-semibold text-blue-700 hover:text-blue-900">View OCR Details</button>
+                                  </div>
+                                )}
+                                {libraryEvidenceContext && hasUsableMetadata(artifact) && (
                                   <EvidenceValidationPanel
                                     canValidate={libraryEvidenceContext.canManage}
                                     request={{
@@ -758,8 +795,8 @@ Respond in a helpful, practical way:
                               <button
                                 type="button"
                                 onClick={() => viewArtifact(artifact)}
-                                disabled={!artifact.downloadUrl}
-                                title={artifact.downloadUrl ? "View evidence" : "File unavailable"}
+                                disabled={!hasUsableFile(artifact)}
+                                title={hasUsableFile(artifact) ? "View evidence" : "File unavailable"}
                                 className="flex items-center text-xs px-2 py-1 text-blue-700 hover:bg-blue-50 rounded disabled:text-gray-400 disabled:hover:bg-transparent"
                               >
                                 <ExternalLink className="h-3 w-3 mr-1" /> View
@@ -767,13 +804,13 @@ Respond in a helpful, practical way:
                               <button
                                 type="button"
                                 onClick={() => downloadArtifact(artifact)}
-                                disabled={!artifact.downloadUrl}
-                                title={artifact.downloadUrl ? "Download evidence" : "File unavailable"}
+                                disabled={!hasUsableFile(artifact)}
+                                title={hasUsableFile(artifact) ? "Download evidence" : "File unavailable"}
                                 className="flex items-center text-xs px-2 py-1 text-blue-700 hover:bg-blue-50 rounded disabled:text-gray-400 disabled:hover:bg-transparent"
                               >
                                 <Download className="h-3 w-3 mr-1" /> Download
                               </button>
-                              {!artifact.downloadUrl && <span className="text-xs text-gray-400">File unavailable</span>}
+                              {!hasUsableFile(artifact) && <span className="text-xs text-gray-400">File unavailable</span>}
                               <button
                                 type="button"
                                 onClick={() => archiveArtifact(artifact)}
@@ -890,6 +927,27 @@ Respond in a helpful, practical way:
             onClose={() => setIsSlideshowModalOpen(false)}
             images={slideshow || []}
         />
+        {ocrDetailsArtifact && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4" onClick={() => setOcrDetailsArtifact(null)}>
+            <div className="flex max-h-[85vh] w-full max-w-3xl flex-col rounded-lg bg-white shadow-xl" onClick={event => event.stopPropagation()}>
+              <div className="flex items-start justify-between border-b p-4">
+                <div>
+                  <h3 className="text-base font-semibold text-gray-900">OCR Details</h3>
+                  <p className="mt-1 break-all text-xs text-gray-500">{ocrDetailsArtifact.fileName || ocrDetailsArtifact.name}</p>
+                  <p className="mt-1 text-xs text-gray-500">OCR: {getOcrStatusLabel(ocrDetailsArtifact)}</p>
+                </div>
+                <button type="button" onClick={() => setOcrDetailsArtifact(null)} title="Close OCR details" className="p-1 text-gray-500 hover:text-gray-900"><X className="h-5 w-5" /></button>
+              </div>
+              <div className="overflow-y-auto p-4">
+                <p className="whitespace-pre-wrap text-sm text-gray-700">{ocrDetailsArtifact.ocrSummary}</p>
+                {ocrDetailsArtifact.processingError && <p className="mt-3 text-xs text-amber-700">{ocrDetailsArtifact.processingError}</p>}
+              </div>
+              <div className="flex justify-end border-t p-3">
+                <button type="button" onClick={copyOcrDetails} className="flex items-center rounded bg-gray-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-gray-800"><ClipboardCopy className="mr-1 h-3 w-3" /> Copy Text</button>
+              </div>
+            </div>
+          </div>
+        )}
         {libraryEvidenceContext && (
           <EvidenceLibraryPickerModal
             isOpen={isLibraryPickerOpen}
