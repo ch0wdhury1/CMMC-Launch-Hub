@@ -30,13 +30,14 @@ export const SuperAdminPendingRequests: React.FC<Props> = ({onCountsChange}) => 
   const [temporaryPassword, setTemporaryPassword] = useState("");
   const [confirmTemporaryPassword, setConfirmTemporaryPassword] = useState("");
   const [creatingLogin, setCreatingLogin] = useState(false);
+  const [invitationFilter, setInvitationFilter] = useState<"pending" | "activated" | "cancelled">("pending");
 
   const addUserRequests = useMemo(
     () => inventory.accessRequests.filter(request => request.type === "addUser"),
     [inventory.accessRequests]
   );
   const upgradeRequests = useMemo(
-    () => inventory.accessRequests.filter(request => request.type === "upgradeRequest"),
+    () => inventory.accessRequests.filter(request => request.type === "upgradeRequest" && request.status === "pending"),
     [inventory.accessRequests]
   );
 
@@ -46,7 +47,7 @@ export const SuperAdminPendingRequests: React.FC<Props> = ({onCountsChange}) => 
     try {
       const next = await loadPendingRequestInventory();
       setInventory(next);
-      onCountsChange?.({addUser: next.invitations.filter(invitation => invitation.status === "pending").length + next.accessRequests.filter(request => request.type === "addUser").length, upgrade: next.accessRequests.filter(request => request.type === "upgradeRequest").length});
+      onCountsChange?.({addUser: next.invitations.filter(invitation => invitation.status === "pending").length + next.accessRequests.filter(request => request.type === "addUser" && request.status === "pending").length, upgrade: next.accessRequests.filter(request => request.type === "upgradeRequest" && request.status === "pending").length});
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Unable to load pending requests.");
     } finally {
@@ -85,6 +86,11 @@ export const SuperAdminPendingRequests: React.FC<Props> = ({onCountsChange}) => 
   };
 
   const invitationRows: Array<PendingInvitationRequest | PendingAccessRequest> = [...inventory.invitations, ...addUserRequests];
+  const filteredInvitationRows = invitationRows.filter(request => invitationFilter === "pending"
+    ? request.status === "pending"
+    : invitationFilter === "activated"
+      ? request.status === "accepted" || request.status === "activated" || request.status === "approved"
+      : request.status === "cancelled" || request.status === "rejected");
   const closeLoginModal = () => {
     setLoginInvitation(null);
     setTemporaryPassword("");
@@ -116,11 +122,12 @@ export const SuperAdminPendingRequests: React.FC<Props> = ({onCountsChange}) => 
       <div className="border-b p-4">
         <h3 className="font-semibold text-gray-900">Pending Add-User / Invitations</h3>
         <p className="mt-1 text-xs text-gray-500">Approve existing accounts or keep approved invitations pending until the invited user signs in or registers.</p>
+        <div className="mt-3 flex gap-2">{(["pending", "activated", "cancelled"] as const).map(filter => <button type="button" key={filter} onClick={() => setInvitationFilter(filter)} className={`rounded border px-3 py-1 text-xs font-semibold capitalize ${invitationFilter === filter ? "border-blue-700 bg-blue-700 text-white" : "border-gray-200 bg-white text-gray-700"}`}>{filter}</button>)}</div>
       </div>
-      {loading ? <p className="p-4 text-sm text-gray-600">Loading pending invitations...</p> : invitationRows.length === 0 ? <p className="p-4 text-sm text-gray-600">No pending add-user or invitation requests.</p> :
+      {loading ? <p className="p-4 text-sm text-gray-600">Loading invitations...</p> : filteredInvitationRows.length === 0 ? <p className="p-4 text-sm text-gray-600">No {invitationFilter} add-user or invitation requests.</p> :
       <div className="overflow-auto"><table className="min-w-full text-sm">
         <thead className="bg-gray-50 text-gray-600"><tr><th className="p-3 text-left">Organization</th><th className="p-3 text-left">User</th><th className="p-3 text-left">Role</th><th className="p-3 text-left">Requested By</th><th className="p-3 text-left">Date</th><th className="p-3 text-left">Source</th><th className="p-3 text-left">Status</th><th className="p-3 text-left">Actions</th></tr></thead>
-        <tbody>{invitationRows.map(request => {
+        <tbody>{filteredInvitationRows.map(request => {
           const invitation = request.source === "invitation";
           const isPending = request.status === "pending";
           const approvedWaiting = invitation && isPending && request.superAdminApprovalStatus === "approved";

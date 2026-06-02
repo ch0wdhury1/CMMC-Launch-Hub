@@ -9,6 +9,7 @@ export interface ManagedOrgUser {
   email?: string;
   fullName?: string;
   displayName?: string;
+  phone?: string;
   status?: string;
   isSuperAdmin?: boolean;
   membership: {

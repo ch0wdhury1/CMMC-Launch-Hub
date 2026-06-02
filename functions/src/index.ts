@@ -1867,11 +1867,19 @@ app.get("/api/org/users", requireAuth, async (req: any, res) => {
     const memberSnap = await db.collection("orgs").doc(orgId).collection("members").limit(500).get();
     const users = await Promise.all(memberSnap.docs.map(async memberDoc => {
       const userSnap = await db.doc(`users/${memberDoc.id}`).get();
+      const user = userSnap.data() || {};
+      const member = memberDoc.data() || {};
+      const email = user.email || member.email || "";
+      const displayName = user.displayName || user.fullName || member.displayName || member.fullName || email || memberDoc.id;
       return {
         uid: memberDoc.id,
-        ...userSnap.data(),
-        membership: {id: memberDoc.id, ...memberDoc.data()},
-        isSuperAdmin: userSnap.data()?.roles?.superAdmin === true,
+        ...user,
+        email,
+        displayName,
+        fullName: user.fullName || member.fullName || displayName,
+        phone: user.phone || member.phone || "",
+        membership: {id: memberDoc.id, ...member},
+        isSuperAdmin: user.roles?.superAdmin === true,
       };
     }));
     return res.json({success: true, users, canManageOrgOwner: manager.superAdmin});
@@ -1955,7 +1963,9 @@ async function activatePendingMember(params: {
   batch.set(memberRef, {
     uid,
     displayName: displayName || email,
+    fullName: displayName || email,
     email,
+    phone: memberSnap.data()?.phone || userSnap.data()?.phone || "",
     role,
     status: "active",
     active: true,
@@ -1968,7 +1978,9 @@ async function activatePendingMember(params: {
   batch.set(userRef, {
     uid,
     displayName: userSnap.data()?.displayName || displayName || email,
+    fullName: userSnap.data()?.fullName || displayName || email,
     email,
+    phone: userSnap.data()?.phone || memberSnap.data()?.phone || "",
     orgId,
     status: "active",
     roles: {...(userSnap.data()?.roles || {}), orgRole: role},
@@ -1983,7 +1995,7 @@ app.get("/api/admin/pending-requests", requireAuth, async (req: any, res) => {
     }
     const [orgsSnap, accessRequestsSnap] = await Promise.all([
       db.collection("orgs").limit(250).get(),
-      db.collection("accessRequests").where("status", "==", "pending").limit(1000).get(),
+      db.collection("accessRequests").limit(1000).get(),
     ]);
     const orgs = new Map(orgsSnap.docs.map(org => [org.id, cleanupOrgName({id: org.id, ...org.data()})]));
     const invitations = (await Promise.all(orgsSnap.docs.map(async org => {

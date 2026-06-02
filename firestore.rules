@@ -129,7 +129,7 @@ function validAcceptedInvitationUser(uid) {
   let invitation = getAfter(/databases/$(database)/documents/orgs/$(orgId)/invitations/$(member.invitationId)).data;
   return request.auth.uid == uid
     && request.resource.data.diff(resource.data).changedKeys().hasOnly([
-      "uid", "displayName", "email", "orgId", "status", "roles", "updatedAt"
+      "uid", "displayName", "fullName", "email", "phone", "orgId", "status", "roles", "updatedAt"
     ])
     && request.resource.data.status == "active"
     && request.resource.data.roles.superAdmin != true
@@ -147,7 +147,7 @@ function validAcceptedInvitationUserCreate(uid) {
   let invitation = getAfter(/databases/$(database)/documents/orgs/$(orgId)/invitations/$(member.invitationId)).data;
   return request.auth.uid == uid
     && request.resource.data.keys().hasOnly([
-      "uid", "displayName", "email", "orgId", "status", "roles", "updatedAt"
+      "uid", "displayName", "fullName", "email", "phone", "orgId", "status", "roles", "updatedAt"
     ])
     && request.resource.data.uid == uid
     && request.resource.data.status == "active"
@@ -211,7 +211,15 @@ match /users/{uid} {
     ));
 
   allow update: if isSuperAdmin()
-    || (isSignedIn() && validAcceptedInvitationUser(uid));
+    || (isSignedIn() && validAcceptedInvitationUser(uid))
+    || (
+      isSignedIn()
+      && request.auth.uid == uid
+      && resource.data.status == "active"
+      && request.resource.data.diff(resource.data).changedKeys().hasOnly([
+        "displayName", "fullName", "phone", "title", "updatedAt"
+      ])
+    );
 
   allow delete: if false;
 }
@@ -266,14 +274,21 @@ match /orgs/{orgId} {
       || (
         validAcceptedInvitationMembership(orgId, request.resource.data.invitationId, memberUid)
         && request.resource.data.keys().hasOnly([
-          "uid", "displayName", "role", "status", "active", "superAdmin", "email", "invitationId", "joinedAt", "createdAt", "updatedAt"
+          "uid", "displayName", "fullName", "phone", "role", "status", "active", "superAdmin", "email", "invitationId", "joinedAt", "createdAt", "updatedAt"
         ])
       );
     allow update: if isSuperAdmin()
       || (
         validAcceptedInvitationMembership(orgId, request.resource.data.invitationId, memberUid)
         && request.resource.data.diff(resource.data).changedKeys().hasOnly([
-          "uid", "displayName", "role", "status", "active", "superAdmin", "email", "invitationId", "joinedAt", "createdAt", "updatedAt"
+          "uid", "displayName", "fullName", "phone", "role", "status", "active", "superAdmin", "email", "invitationId", "joinedAt", "createdAt", "updatedAt"
+        ])
+      ) || (
+        isSignedIn()
+        && request.auth.uid == memberUid
+        && isActiveOrgMember(orgId)
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly([
+          "displayName", "fullName", "phone", "title", "updatedAt"
         ])
       );
     allow delete: if isSuperAdmin();

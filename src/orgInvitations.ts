@@ -137,11 +137,14 @@ export async function acceptOrgInvitation(invitation: OrgInvitation, uid: string
   const alreadyMember = existingMembership?.status === "active";
   const role = alreadyMember ? existingMembership?.role : invitation.role;
   const displayName = user.data()?.displayName || user.data()?.fullName || invitation.fullName || invitation.email;
+  const phone = user.data()?.phone || "";
   const batch = writeBatch(db);
 
   batch.set(memberRef, {
     uid,
     displayName,
+    fullName: displayName,
+    phone,
     role,
     status: "active",
     active: true,
@@ -156,6 +159,8 @@ export async function acceptOrgInvitation(invitation: OrgInvitation, uid: string
   batch.set(userRef, {
     uid,
     displayName,
+    fullName: displayName,
+    phone,
     email: invitation.email,
     orgId: invitation.orgId,
     status: "active",

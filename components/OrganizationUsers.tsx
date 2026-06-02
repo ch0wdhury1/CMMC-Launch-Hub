@@ -121,12 +121,13 @@ export const OrganizationUsers: React.FC<Props> = ({orgId, orgName, isSuperAdmin
       {loading ? <div className="flex items-center p-4 text-sm text-gray-600"><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading organization users...</div> : (
         <div className="overflow-x-auto p-4">
           <table className="w-full text-left text-sm">
-            <thead className="border-b text-xs uppercase text-gray-500"><tr><th className="py-2 pr-3">User Name</th><th className="pr-3">User Email</th><th className="pr-3">Date Joined</th><th className="pr-3">Status</th><th className="pr-3">Role</th><th className="pr-3">Save</th><th className="pr-3">Repair Access</th><th>Remove from Org</th></tr></thead>
+            <thead className="border-b text-xs uppercase text-gray-500"><tr><th className="py-2 pr-3">User Name</th><th className="pr-3">User Email</th><th className="pr-3">Phone</th><th className="pr-3">Date Joined</th><th className="pr-3">Status</th><th className="pr-3">Role</th><th className="pr-3">Save</th><th className="pr-3">Repair Access</th><th>Remove from Org</th></tr></thead>
             <tbody>{users.map(user => {
               const protectedUser = user.isSuperAdmin || (!canManageOrgOwner && user.membership.role === "orgOwner");
               return <tr key={user.uid} className="border-b">
                 <td className="py-3 pr-3">{user.fullName || user.displayName || user.uid}</td>
                 <td className="pr-3">{user.email || "-"}</td>
+                <td className="pr-3">{user.phone || "-"}</td>
                 <td className="pr-3">{formatDate(user.membership.joinedAt || user.membership.createdAt)}</td>
                 <td className="pr-3"><select value={drafts[user.uid]?.status || "inactive"} onChange={event => setDrafts(current => ({...current, [user.uid]: {...current[user.uid], status: event.target.value}}))} disabled={protectedUser} className="rounded border px-2 py-1 text-xs"><option>active</option><option>inactive</option><option>disabled</option></select></td>
                 <td className="pr-3"><select value={drafts[user.uid]?.role || "viewer"} onChange={event => setDrafts(current => ({...current, [user.uid]: {...current[user.uid], role: event.target.value}}))} disabled={protectedUser} className="rounded border px-2 py-1 text-xs">{isSuperAdmin && <option>orgOwner</option>}<option>orgAdmin</option><option>contributor</option><option>viewer</option><option>assessor</option></select></td>
