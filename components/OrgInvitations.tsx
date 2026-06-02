@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Ban, Loader2, Send, UserPlus } from "lucide-react";
+import { Ban, Loader2, Send, UserPlus, X } from "lucide-react";
 import {
   cancelOrgInvitation,
   createOrgInvitation,
@@ -14,6 +14,7 @@ type Props = {
   uid: string | null;
   role?: string;
   isSuperAdmin: boolean;
+  embedded?: boolean;
 };
 
 const formatDate = (value: any) => {
@@ -22,14 +23,18 @@ const formatDate = (value: any) => {
   return Number.isNaN(date.getTime()) ? "Unavailable" : date.toLocaleString();
 };
 
-export const OrgInvitations: React.FC<Props> = ({ orgId, uid, role, isSuperAdmin }) => {
+export const OrgInvitations: React.FC<Props> = ({ orgId, uid, role, isSuperAdmin, embedded = false }) => {
   const [invitations, setInvitations] = useState<OrgInvitation[]>([]);
+  const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<OrgInvitationRole>("contributor");
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const [message, setMessage] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
-  const canManage = Boolean(uid && (isSuperAdmin || role === "orgAdmin"));
+  const canManage = Boolean(uid && (isSuperAdmin || role === "orgOwner" || role === "orgAdmin"));
+  const canInviteOrgAdmin = isSuperAdmin || role === "orgOwner";
+  const availableRoles = useMemo(() => ORG_INVITATION_ROLES.filter(option => option !== "orgAdmin" || canInviteOrgAdmin), [canInviteOrgAdmin]);
 
   useEffect(() => {
     if (!orgId) {
@@ -53,10 +58,12 @@ export const OrgInvitations: React.FC<Props> = ({ orgId, uid, role, isSuperAdmin
     setIsCreating(true);
     setMessage("");
     try {
-      await createOrgInvitation({ orgId, email, role: inviteRole, invitedBy: uid });
+      await createOrgInvitation({ orgId, email, role: inviteRole, invitedBy: uid, fullName });
+      setFullName("");
       setEmail("");
       setInviteRole("contributor");
-      setMessage("Invitation created. Ask the user to sign in with this email. The invitation will appear after login.");
+      setIsModalOpen(false);
+      setMessage("Invitation created. Ask the user to register or sign in with this email.");
     } catch (error) {
       console.error("[org-invitations] create failed", error);
       setMessage(error instanceof Error ? error.message : "Unable to create invitation.");
@@ -85,29 +92,15 @@ export const OrgInvitations: React.FC<Props> = ({ orgId, uid, role, isSuperAdmin
 
   return (
     <div className="space-y-5 animate-fadeIn">
-      <div className="bg-white border rounded-lg p-5 shadow-sm">
+      {!embedded && <div className="bg-white border rounded-lg p-5 shadow-sm">
         <h2 className="text-xl font-bold text-gray-900">Organization Invitations</h2>
         <p className="text-sm text-gray-600 mt-1">Invite users into the current organization using the established membership model.</p>
-      </div>
+      </div>}
 
       <div className="bg-white border rounded-lg p-5 shadow-sm">
-        <h3 className="font-bold text-gray-900 flex items-center gap-2"><UserPlus className="h-5 w-5 text-blue-600" /> Create Invitation</h3>
-        <div className="grid grid-cols-1 md:grid-cols-[1fr_220px_auto] gap-3 mt-4">
-          <input value={email} onChange={event => setEmail(event.target.value)} disabled={!canManage || isCreating} placeholder="user@example.com" className="border rounded-md px-3 py-2 text-sm" />
-          <select value={inviteRole} onChange={event => setInviteRole(event.target.value as OrgInvitationRole)} disabled={!canManage || isCreating} className="border rounded-md px-3 py-2 text-sm bg-white">
-            {ORG_INVITATION_ROLES.map(option => <option key={option} value={option}>{option}</option>)}
-          </select>
-          <button type="button" onClick={createInvitation} disabled={!canManage || isCreating} className="inline-flex items-center justify-center px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 disabled:opacity-50">
-            {isCreating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Send className="h-4 w-4 mr-2" />}
-            Create Invitation
-          </button>
-        </div>
-        {!canManage && <p className="text-xs text-gray-500 mt-3">Only Org Admin and SuperAdmin users can create or cancel invitations.</p>}
+        <div className="flex items-center justify-between gap-3"><h3 className="font-bold text-gray-900 flex items-center gap-2"><UserPlus className="h-5 w-5 text-blue-600" /> Pending Invitations</h3>{canManage && <button type="button" onClick={() => setIsModalOpen(true)} className="inline-flex items-center rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700"><UserPlus className="mr-1 h-4 w-4" /> Add User</button>}</div>
+        {!canManage && <p className="text-xs text-gray-500 mt-3">Only Org Owner, Org Admin, and SuperAdmin users can create or cancel invitations.</p>}
         {message && <p className="text-sm text-gray-700 mt-3">{message}</p>}
-      </div>
-
-      <div className="bg-white border rounded-lg p-5 shadow-sm">
-        <h3 className="font-bold text-gray-900">Pending Invitations</h3>
         <div className="overflow-x-auto mt-3">
           <table className="w-full text-sm text-left">
             <thead className="text-xs uppercase text-gray-500 border-b"><tr><th className="py-2 pr-3">Email</th><th className="pr-3">Role</th><th className="pr-3">Status</th><th className="pr-3">Invited</th><th className="pr-3">Invited By</th><th>Actions</th></tr></thead>
@@ -116,6 +109,19 @@ export const OrgInvitations: React.FC<Props> = ({ orgId, uid, role, isSuperAdmin
           {pendingInvitations.length === 0 && <p className="py-6 text-sm text-gray-500 text-center">No pending invitations.</p>}
         </div>
       </div>
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4" onClick={() => setIsModalOpen(false)}>
+          <div className="w-full max-w-lg rounded-lg bg-white p-5 shadow-xl" onClick={event => event.stopPropagation()}>
+            <div className="flex items-center justify-between"><h3 className="text-lg font-bold text-gray-900">Add User</h3><button type="button" onClick={() => setIsModalOpen(false)} title="Close add user" className="p-1 text-gray-500 hover:text-gray-900"><X className="h-5 w-5" /></button></div>
+            <div className="mt-4 space-y-3">
+              <input value={fullName} onChange={event => setFullName(event.target.value)} disabled={isCreating} placeholder="Full Name (optional)" className="w-full rounded-md border px-3 py-2 text-sm" />
+              <input value={email} onChange={event => setEmail(event.target.value)} disabled={isCreating} placeholder="Email *" className="w-full rounded-md border px-3 py-2 text-sm" />
+              <select value={inviteRole} onChange={event => setInviteRole(event.target.value as OrgInvitationRole)} disabled={isCreating} className="w-full rounded-md border bg-white px-3 py-2 text-sm">{availableRoles.map(option => <option key={option} value={option}>{option}</option>)}</select>
+              <button type="button" onClick={createInvitation} disabled={isCreating} className="inline-flex w-full items-center justify-center rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">{isCreating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />} Create Invitation</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

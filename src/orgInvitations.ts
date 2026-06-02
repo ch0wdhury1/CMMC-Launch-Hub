@@ -49,7 +49,7 @@ export function subscribeMyPendingInvitations(
   return onSnapshot(invitationQuery, snapshot => {
     onInvitations(snapshot.docs
       .map(invitationFromSnapshot)
-      .filter(invitation => invitation.status === "pending"));
+      .filter(invitation => invitation.status === "pending" && invitation.superAdminApprovalStatus === "approved"));
   }, onError);
 }
 
@@ -58,6 +58,7 @@ export async function createOrgInvitation(params: {
   email: string;
   role: OrgInvitationRole;
   invitedBy: string;
+  fullName?: string;
 }): Promise<string> {
   const email = normalizeEmail(params.email);
   if (!isValidInvitationEmail(email)) throw new Error("Enter a valid email address.");
@@ -75,6 +76,7 @@ export async function createOrgInvitation(params: {
     orgId: params.orgId,
     orgName: orgSnapshot.data()?.companyProfile?.legalName || orgSnapshot.data()?.name || params.orgId,
     email,
+    fullName: params.fullName?.trim() || "",
     role: params.role,
     status: "pending",
     invitedBy: params.invitedBy,
@@ -104,11 +106,14 @@ export async function acceptOrgInvitation(invitation: OrgInvitation, uid: string
   if (!freshInvitation.exists() || freshInvitation.data()?.status !== "pending") {
     throw new Error("This invitation is no longer pending.");
   }
+  if (freshInvitation.data()?.superAdminApprovalStatus !== "approved") {
+    throw new Error("This invitation is awaiting administrator approval.");
+  }
 
   const existingMembership = membership.exists() ? membership.data() : null;
   const alreadyMember = existingMembership?.status === "active";
   const role = alreadyMember ? existingMembership?.role : invitation.role;
-  const displayName = user.data()?.displayName || user.data()?.fullName || invitation.email;
+  const displayName = user.data()?.displayName || user.data()?.fullName || invitation.fullName || invitation.email;
   const batch = writeBatch(db);
 
   batch.set(memberRef, {

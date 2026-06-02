@@ -1132,7 +1132,7 @@ case "domain": {
   return (
     <div className="flex flex-col h-screen bg-gray-50">
       <AppHeader
-        onAdminClick={isOrgAdmin || isSuperAdmin ? () => setView({ type: "admin" }) : undefined}
+        onAdminClick={orgRole === "orgOwner" || isOrgAdmin || isSuperAdmin ? () => setView({ type: "admin" }) : undefined}
         onSuperAdminClick={isSuperAdmin ? () => setView({ type: "superAdmin" }) : undefined}
 	onSave={handleSaveAssessment}
         saveStatus={assessmentSaveStatus}
@@ -1161,7 +1161,7 @@ onDiagnosticsClick={isSuperAdmin ? () => setIsDiagnosticsOpen(true) : undefined}
           onSolutionsClick={() => setView({ type: "solutions" })}
           onEvidenceLibraryClick={() => setView({ type: "evidenceLibrary" })}
           onOrgInvitationsClick={() => setView({ type: "orgInvitations" })}
-          canManageInvitations={isSuperAdmin || isOrgAdmin}
+          canManageInvitations={isSuperAdmin || orgRole === "orgOwner" || isOrgAdmin}
           onSecurityAnalyzerClick={() => setView({ type: "readinessAnalyzer" })}
           onReadinessReportsClick={() => setView({ type: "readinessReports" })}
           onSystemSecurityPlanClick={() => setView({ type: "systemSecurityPlan" })}

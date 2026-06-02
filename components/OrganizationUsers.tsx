@@ -7,6 +7,7 @@ type Props = {
   orgName: string;
   isSuperAdmin: boolean;
   onClose?: () => void;
+  showTechnicalNotice?: boolean;
 };
 
 const formatDate = (value: any) => {
@@ -15,7 +16,7 @@ const formatDate = (value: any) => {
   return Number.isNaN(date.getTime()) ? "-" : date.toLocaleDateString();
 };
 
-export const OrganizationUsers: React.FC<Props> = ({orgId, orgName, isSuperAdmin, onClose}) => {
+export const OrganizationUsers: React.FC<Props> = ({orgId, orgName, isSuperAdmin, onClose, showTechnicalNotice = true}) => {
   const [users, setUsers] = useState<ManagedOrgUser[]>([]);
   const [drafts, setDrafts] = useState<Record<string, {role: string; status: string}>>({});
   const [loading, setLoading] = useState(true);
@@ -110,7 +111,7 @@ export const OrganizationUsers: React.FC<Props> = ({orgId, orgName, isSuperAdmin
   return (
     <section className="rounded-lg border bg-white shadow-sm">
       <div className="flex items-center justify-between border-b p-4">
-        <div><h3 className="font-bold text-gray-900">Users for {orgName}</h3><p className="text-xs text-gray-500">Membership changes do not delete Firebase Auth accounts.</p></div>
+        <div><h3 className="font-bold text-gray-900">Users for {orgName}</h3>{showTechnicalNotice && <p className="text-xs text-gray-500">Membership changes do not delete Firebase Auth accounts.</p>}</div>
         <div className="flex items-center gap-2">
           {isSuperAdmin && <button type="button" onClick={repairIdentities} disabled={busy === "repair-identities"} className="rounded border border-blue-200 px-2 py-1 text-xs font-semibold text-blue-700 disabled:opacity-40">Repair Member Identity Fields</button>}
           {onClose && <button type="button" onClick={onClose} title="Close users" className="p-1 text-gray-500 hover:text-gray-900"><X className="h-5 w-5" /></button>}
@@ -120,7 +121,7 @@ export const OrganizationUsers: React.FC<Props> = ({orgId, orgName, isSuperAdmin
       {loading ? <div className="flex items-center p-4 text-sm text-gray-600"><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading organization users...</div> : (
         <div className="overflow-x-auto p-4">
           <table className="w-full text-left text-sm">
-            <thead className="border-b text-xs uppercase text-gray-500"><tr><th className="py-2 pr-3">User Name</th><th className="pr-3">User Email</th><th className="pr-3">Date Joined</th><th className="pr-3">Status</th><th className="pr-3">Role</th><th className="pr-3">Save</th><th className="pr-3">Repair Access</th><th>Delete from Org</th></tr></thead>
+            <thead className="border-b text-xs uppercase text-gray-500"><tr><th className="py-2 pr-3">User Name</th><th className="pr-3">User Email</th><th className="pr-3">Date Joined</th><th className="pr-3">Status</th><th className="pr-3">Role</th><th className="pr-3">Save</th><th className="pr-3">Repair Access</th><th>Remove from Org</th></tr></thead>
             <tbody>{users.map(user => {
               const protectedUser = user.isSuperAdmin || (!canManageOrgOwner && user.membership.role === "orgOwner");
               return <tr key={user.uid} className="border-b">

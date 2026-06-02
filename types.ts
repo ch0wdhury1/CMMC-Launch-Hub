@@ -618,6 +618,7 @@ export interface OrgInvitation {
   orgId: string;
   orgName?: string;
   email: string;
+  fullName?: string;
   role: OrgInvitationRole;
   status: "pending" | "accepted" | "cancelled";
   invitedBy: string;
@@ -626,6 +627,9 @@ export interface OrgInvitation {
   acceptedAt?: any;
   cancelledBy?: string;
   cancelledAt?: any;
+  superAdminApprovalStatus?: "approved";
+  superAdminApprovedBy?: string;
+  superAdminApprovedAt?: any;
 }
 
 export interface NoteRecord {

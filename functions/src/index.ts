@@ -1297,7 +1297,7 @@ function addCleanupActivity(
   batch: admin.firestore.WriteBatch,
   params: {
     action: string;
-    targetType: "org" | "member" | "user" | "accessRequest" | "invitation";
+    targetType: "org" | "member" | "user" | "accessRequest" | "invitation" | "addUserRequest" | "upgradeRequest";
     targetId: string;
     performedBy: string;
     orgId?: string;
@@ -1854,7 +1854,7 @@ async function getOrgUserManager(uid: string, orgId: string) {
     && memberSnap.exists
     && member?.status === "active"
     && member?.active === true
-    && member?.role === "orgAdmin";
+    && ["orgOwner", "orgAdmin"].includes(member?.role);
   return {allowed: superAdmin || orgAdmin, superAdmin, orgAdmin, org: orgSnap.data()};
 }
 
@@ -1878,6 +1878,242 @@ app.get("/api/org/users", requireAuth, async (req: any, res) => {
   } catch (error) {
     console.error("Organization users load failed", error);
     return res.status(500).json({success: false, errorMessage: "Unable to load organization users"});
+  }
+});
+
+const PENDING_REQUEST_MEMBER_ROLES = new Set(["orgAdmin", "contributor", "viewer", "assessor"]);
+
+async function findAuthUserByEmail(email: string) {
+  try {
+    return await admin.auth().getUserByEmail(email);
+  } catch (error: any) {
+    if (error?.code === "auth/user-not-found") return null;
+    throw error;
+  }
+}
+
+function normalizePendingEmail(value: unknown) {
+  return typeof value === "string" ? value.trim().toLowerCase() : "";
+}
+
+function validatePendingRole(value: unknown) {
+  if (typeof value !== "string" || !PENDING_REQUEST_MEMBER_ROLES.has(value)) {
+    throw new Error("Invalid requested role");
+  }
+  return value;
+}
+
+async function activatePendingMember(params: {
+  orgId: string;
+  uid: string;
+  email: string;
+  displayName: string;
+  role: string;
+  performedBy: string;
+  batch: admin.firestore.WriteBatch;
+  invitationId?: string;
+}) {
+  const {orgId, uid, email, displayName, role, batch, invitationId} = params;
+  const memberRef = db.doc(`orgs/${orgId}/members/${uid}`);
+  const userRef = db.doc(`users/${uid}`);
+  const [memberSnap, userSnap] = await Promise.all([memberRef.get(), userRef.get()]);
+  if (userSnap.data()?.roles?.superAdmin === true) throw new Error("SuperAdmin accounts cannot be activated through invitations");
+  if (userSnap.data()?.orgId && userSnap.data()?.orgId !== orgId) throw new Error("User already belongs to another organization");
+  const now = admin.firestore.FieldValue.serverTimestamp();
+  batch.set(memberRef, {
+    uid,
+    displayName: displayName || email,
+    email,
+    role,
+    status: "active",
+    active: true,
+    superAdmin: false,
+    ...(invitationId ? {invitationId} : {}),
+    joinedAt: memberSnap.data()?.joinedAt || now,
+    createdAt: memberSnap.data()?.createdAt || now,
+    updatedAt: now,
+  }, {merge: true});
+  batch.set(userRef, {
+    uid,
+    displayName: userSnap.data()?.displayName || displayName || email,
+    email,
+    orgId,
+    status: "active",
+    roles: {...(userSnap.data()?.roles || {}), orgRole: role},
+    updatedAt: now,
+  }, {merge: true});
+}
+
+app.get("/api/admin/pending-requests", requireAuth, async (req: any, res) => {
+  try {
+    if (!(await isSuperAdminUser(req.user.uid))) {
+      return res.status(403).json({success: false, errorMessage: "SuperAdmin access required"});
+    }
+    const [orgsSnap, accessRequestsSnap] = await Promise.all([
+      db.collection("orgs").limit(250).get(),
+      db.collection("accessRequests").where("status", "==", "pending").limit(1000).get(),
+    ]);
+    const orgs = new Map(orgsSnap.docs.map(org => [org.id, cleanupOrgName({id: org.id, ...org.data()})]));
+    const invitations = (await Promise.all(orgsSnap.docs.map(async org => {
+      const snap = await org.ref.collection("invitations").where("status", "==", "pending").limit(500).get();
+      return snap.docs.map(invitation => ({
+        id: invitation.id,
+        ...invitation.data(),
+        orgId: org.id,
+        organization: orgs.get(org.id) || org.id,
+        source: "invitation",
+      }));
+    }))).flat();
+    const accessRequests: any[] = accessRequestsSnap.docs
+      .map(request => ({
+        id: request.id,
+        organization: orgs.get(request.data().orgId) || request.data().orgId || "Unknown organization",
+        source: "accessRequest",
+        ...request.data(),
+      }))
+      .filter((request: any) => request.type === "addUser" || request.type === "upgradeRequest");
+    return res.json({success: true, invitations, accessRequests});
+  } catch (error) {
+    console.error("Pending request inventory failed", error);
+    return res.status(500).json({success: false, errorMessage: "Unable to load pending requests"});
+  }
+});
+
+app.post("/api/admin/pending-request-control", requireAuth, async (req: any, res) => {
+  try {
+    const performedBy = req.user.uid;
+    if (!(await isSuperAdminUser(performedBy))) {
+      return res.status(403).json({success: false, errorMessage: "SuperAdmin access required"});
+    }
+    const {action, orgId, targetId, rejectionReason} = req.body || {};
+    if (!isSafePathSegment(orgId || "") || !isSafePathSegment(targetId || "")) {
+      throw new Error("Organization and request are required");
+    }
+    const orgRef = db.doc(`orgs/${orgId}`);
+    const orgSnap = await orgRef.get();
+    if (!orgSnap.exists) throw new Error("Organization not found");
+    if (orgSnap.data()?.status !== "active") throw new Error("Organization must be active");
+    const now = admin.firestore.FieldValue.serverTimestamp();
+    const reason = cleanupNote(rejectionReason);
+
+    if (action === "approve_upgrade_request" || action === "reject_upgrade_request") {
+      const requestRef = db.doc(`accessRequests/${targetId}`);
+      const requestSnap = await requestRef.get();
+      const request = requestSnap.data();
+      if (!requestSnap.exists || request?.type !== "upgradeRequest" || request?.orgId !== orgId || request?.status !== "pending") {
+        throw new Error("Pending upgrade request not found");
+      }
+      const batch = db.batch();
+      const after = action === "approve_upgrade_request"
+        ? {status: "approved", approvedBy: performedBy, approvedAt: now, updatedAt: now}
+        : {status: "rejected", rejectedBy: performedBy, rejectedAt: now, rejectionReason: reason, updatedAt: now};
+      if (action === "approve_upgrade_request") {
+        if (!["COMM_L1", "COMM_L2", "SPONSORED"].includes(request.requestedTier)) throw new Error("Invalid requested tier");
+        batch.set(orgRef, {
+          tier: request.requestedTier,
+          subscriptionStatus: orgSnap.data()?.subscriptionStatus || "active",
+          updatedAt: now,
+          updatedBy: performedBy,
+        }, {merge: true});
+      }
+      batch.set(requestRef, after, {merge: true});
+      addCleanupActivity(batch, {
+        action,
+        targetType: "upgradeRequest",
+        targetId,
+        orgId,
+        performedBy,
+        before: request,
+        after,
+        cleanupPhase: "25B",
+      });
+      await batch.commit();
+      return res.json({success: true});
+    }
+
+    const invitationAction = action === "approve_invitation_request" || action === "cancel_invitation_request";
+    const addUserAction = action === "approve_add_user_request" || action === "reject_add_user_request";
+    if (!invitationAction && !addUserAction) throw new Error("Unsupported pending request action");
+    const requestRef = invitationAction
+      ? orgRef.collection("invitations").doc(targetId)
+      : db.doc(`accessRequests/${targetId}`);
+    const requestSnap = await requestRef.get();
+    const request = requestSnap.data();
+    if (!requestSnap.exists || request?.status !== "pending" || request?.orgId !== orgId) {
+      throw new Error("Pending request not found");
+    }
+    if (addUserAction && request?.type !== "addUser") throw new Error("Pending add-user request not found");
+
+    const batch = db.batch();
+    if (action === "cancel_invitation_request" || action === "reject_add_user_request") {
+      const after = action === "cancel_invitation_request"
+        ? {status: "cancelled", cancelledBy: performedBy, cancelledAt: now, cancellationReason: reason, updatedAt: now}
+        : {status: "rejected", rejectedBy: performedBy, rejectedAt: now, rejectionReason: reason, updatedAt: now};
+      batch.set(requestRef, after, {merge: true});
+      addCleanupActivity(batch, {
+        action,
+        targetType: invitationAction ? "invitation" : "addUserRequest",
+        targetId,
+        orgId,
+        performedBy,
+        before: request,
+        after,
+        cleanupPhase: "25B",
+      });
+      await batch.commit();
+      return res.json({success: true});
+    }
+
+    const email = normalizePendingEmail(request.email);
+    if (!email) throw new Error("Request email is required");
+    const role = validatePendingRole(request.role || request.requestedRole);
+    const authUser = await findAuthUserByEmail(email);
+    if (!authUser) {
+      const after = {superAdminApprovalStatus: "approved", superAdminApprovedBy: performedBy, superAdminApprovedAt: now, updatedAt: now};
+      batch.set(requestRef, after, {merge: true});
+      addCleanupActivity(batch, {
+        action,
+        targetType: invitationAction ? "invitation" : "addUserRequest",
+        targetId,
+        orgId,
+        performedBy,
+        before: request,
+        after,
+        cleanupPhase: "25B",
+      });
+      await batch.commit();
+      return res.json({success: true, awaitingUser: true, message: "User must sign in/register with this email to accept invitation."});
+    }
+    await activatePendingMember({
+      orgId,
+      uid: authUser.uid,
+      email,
+      displayName: request.fullName || authUser.displayName || email,
+      role,
+      performedBy,
+      batch,
+      invitationId: invitationAction ? targetId : undefined,
+    });
+    const after = invitationAction
+      ? {status: "accepted", acceptedBy: authUser.uid, acceptedAt: now, approvedBy: performedBy, approvedAt: now, updatedAt: now}
+      : {status: "approved", approvedBy: performedBy, approvedAt: now, approvedUserUid: authUser.uid, updatedAt: now};
+    batch.set(requestRef, after, {merge: true});
+    addCleanupActivity(batch, {
+      action,
+      targetType: invitationAction ? "invitation" : "addUserRequest",
+      targetId,
+      orgId,
+      userId: authUser.uid,
+      performedBy,
+      before: request,
+      after,
+      cleanupPhase: "25B",
+    });
+    await batch.commit();
+    return res.json({success: true, activatedUser: true});
+  } catch (error) {
+    console.error("Pending request control failed", error);
+    return res.status(400).json({success: false, errorMessage: error instanceof Error ? error.message : "Unable to update pending request"});
   }
 });
 

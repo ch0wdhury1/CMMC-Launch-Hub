@@ -88,6 +88,7 @@ function invitationDoc(orgId, invitationId) {
 function acceptedInvitationAfterWrite(orgId, invitationId, memberUid) {
   return exists(/databases/$(database)/documents/orgs/$(orgId)/invitations/$(invitationId))
     && invitationDoc(orgId, invitationId).status == "pending"
+    && invitationDoc(orgId, invitationId).superAdminApprovalStatus == "approved"
     && invitationDoc(orgId, invitationId).email == request.auth.token.email
     && invitationDoc(orgId, invitationId).role == request.resource.data.role
     && getAfter(
@@ -235,6 +236,7 @@ match /orgs/{orgId} {
     && request.resource.data.diff(resource.data).changedKeys().hasOnly([
       "name",
       "address",
+      "phone",
       "website",
       "primaryContactName",
       "primaryContactEmail",
@@ -287,7 +289,7 @@ match /orgs/{orgId} {
 
     allow create: if canManageOrgInvitations(orgId)
       && request.resource.data.keys().hasOnly([
-        "id", "orgId", "orgName", "email", "role", "status", "invitedBy", "invitedAt"
+        "id", "orgId", "orgName", "email", "fullName", "role", "status", "invitedBy", "invitedAt"
       ])
       && request.resource.data.id == invitationId
       && request.resource.data.orgId == orgId
@@ -309,6 +311,7 @@ match /orgs/{orgId} {
         && request.auth.token.email != null
         && resource.data.email == request.auth.token.email
         && resource.data.status == "pending"
+        && resource.data.superAdminApprovalStatus == "approved"
         && request.resource.data.diff(resource.data).changedKeys().hasOnly([
           "status", "acceptedBy", "acceptedAt"
         ])
@@ -433,8 +436,13 @@ match /orgMembers/{orgId}/members/{memberUid} {
 // - upgradeRequest: { type:"upgradeRequest", orgId, requestedTier, status:"pending", requestedByUid, createdAt }
 match /accessRequests/{reqId} {
 
-  // Only super admin can read/list all requests (Admin/SuperAdmin panel)
-  allow read: if isSuperAdmin();
+  // SuperAdmin reads the full inbox. Org owner/admin can read only their org requests.
+  allow read: if isSuperAdmin()
+    || (
+      hasUserDoc()
+      && resource.data.orgId == myOrgId()
+      && (isOrgOwner(myOrgId()) || isOrgAdmin(myOrgId()))
+    );
 
   // ✅ Allow first-time registrants (no userDoc/org yet) to create orgRegistration
   allow create: if isSignedIn()

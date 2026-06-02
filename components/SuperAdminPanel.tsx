@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   collection,
   doc,
@@ -18,6 +18,7 @@ import { db } from "../src/firebase";
 import { loadCleanupControlsInventory, runCleanupControlAction, type CleanupOrgSummary } from "../src/cleanupControls";
 import { useUserProfile } from "../src/useUserProfile";
 import { OrganizationUsers } from "./OrganizationUsers";
+import { SuperAdminPendingRequests } from "./SuperAdminPendingRequests";
 
 type ActivationDoc = {
   appEnabled?: boolean;
@@ -124,9 +125,12 @@ export const SuperAdminPanel: React.FC = () => {
   const [pendingRegsLoading, setPendingRegsLoading] = useState(false);
   const [pendingRegsError, setPendingRegsError] = useState<string | null>(null);
   const [pendingRegistrations, setPendingRegistrations] = useState<AccessRequestRow[]>([]);
+  const [pendingRequestCounts, setPendingRequestCounts] = useState({addUser: 0, upgrade: 0});
 
   // --- approve/deny state ---
   const [actionBusyId, setActionBusyId] = useState<string | null>(null);
+  const handlePendingRequestCounts = useCallback((counts: {addUser: number; upgrade: number}) => setPendingRequestCounts(counts), []);
+  const scrollToPendingRequests = (id: string) => document.getElementById(id)?.scrollIntoView({behavior: "smooth", block: "start"});
 
   // --- helpers ---
   const safeStr = (v: any) => (typeof v === "string" ? v : v == null ? "" : String(v));
@@ -619,8 +623,8 @@ useEffect(() => {
   // --- derived ---
   const totalOrgs = orgs.length;
   const totalPendingRegs = pendingRegistrations.length;
-  const totalPendingAddUser = orgs.reduce((sum, o) => sum + (o.pending?.addUser || 0), 0);
-  const totalPendingUpgrade = orgs.reduce((sum, o) => sum + (o.pending?.upgrade || 0), 0);
+  const totalPendingAddUser = pendingRequestCounts.addUser;
+  const totalPendingUpgrade = pendingRequestCounts.upgrade;
 
   const appEnabled = !!activation?.appEnabled;
   const allowSignup = activation?.allowSignup !== false;
@@ -758,14 +762,14 @@ useEffect(() => {
               <div className="text-xs text-gray-500">Pending Registrations</div>
               <div className="text-2xl font-bold text-gray-900">{totalPendingRegs}</div>
             </div>
-            <div className="bg-white rounded-lg shadow-sm border p-4">
+            <button type="button" onClick={() => scrollToPendingRequests("pending-add-user-requests")} className="bg-white rounded-lg shadow-sm border p-4 text-left hover:border-blue-300">
               <div className="text-xs text-gray-500">Pending Add-User</div>
               <div className="text-2xl font-bold text-gray-900">{totalPendingAddUser}</div>
-            </div>
-            <div className="bg-white rounded-lg shadow-sm border p-4">
+            </button>
+            <button type="button" onClick={() => scrollToPendingRequests("pending-upgrade-requests")} className="bg-white rounded-lg shadow-sm border p-4 text-left hover:border-blue-300">
               <div className="text-xs text-gray-500">Pending Upgrades</div>
               <div className="text-2xl font-bold text-gray-900">{totalPendingUpgrade}</div>
-            </div>
+            </button>
           </div>
 
           {/* Pending Registrations */}
@@ -831,6 +835,8 @@ useEffect(() => {
               </div>
             )}
           </div>
+
+          <SuperAdminPendingRequests onCountsChange={handlePendingRequestCounts} />
 
           {/* Active Orgs Table */}
           <div className="bg-white rounded-lg shadow-sm border">
