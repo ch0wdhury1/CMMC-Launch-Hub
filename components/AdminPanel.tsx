@@ -1,5 +1,6 @@
 import React from "react";
 import { useUserProfile } from "../src/useUserProfile";
+import { OrganizationUsers } from "./OrganizationUsers";
 
 /**
  * Org Admin Panel (MVP)
@@ -13,6 +14,7 @@ export const AdminPanel: React.FC = () => {
   const orgRole = (profile as any)?.roles?.orgRole;
   const isOrgAdmin = orgRole === "orgAdmin";
   const isSuperAdmin = !!(profile as any)?.roles?.superAdmin;
+  const manageableOrgId = (profile as any)?.orgId || (profile as any)?.company?.orgId || "";
   const orgId = (profile as any)?.orgId || (profile as any)?.company?.orgId || "—";
 
   if (profileLoading) {
@@ -57,6 +59,7 @@ export const AdminPanel: React.FC = () => {
           </ul>
         </div>
       </div>
+      {manageableOrgId && <OrganizationUsers orgId={String(manageableOrgId)} orgName="Your Organization" isSuperAdmin={isSuperAdmin} />}
     </div>
   );
 };

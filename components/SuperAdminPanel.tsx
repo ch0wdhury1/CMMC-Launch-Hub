@@ -15,7 +15,9 @@ import {
   Timestamp,
 } from "firebase/firestore";
 import { db } from "../src/firebase";
+import { loadCleanupControlsInventory, runCleanupControlAction, type CleanupOrgSummary } from "../src/cleanupControls";
 import { useUserProfile } from "../src/useUserProfile";
+import { OrganizationUsers } from "./OrganizationUsers";
 
 type ActivationDoc = {
   appEnabled?: boolean;
@@ -51,6 +53,14 @@ type OrgComputed = OrgRow & {
   pending: PendingCounts;
 };
 
+type OrgAdminDraft = {
+  status: string;
+  tier: string;
+  subscriptionStatus: string;
+  subscriptionStartDate: string;
+  subscriptionEndDate: string;
+};
+
 type AccessRequestRow = {
   id: string;
   type?: string;
@@ -77,6 +87,16 @@ function fmtDate(v: any): string {
   }
 }
 
+function dateInput(v: any): string {
+  try {
+    if (!v) return "";
+    const parsed = typeof v?.toDate === "function" ? v.toDate() : v?._seconds ? new Date(v._seconds * 1000) : new Date(v);
+    return Number.isNaN(parsed.getTime()) ? "" : parsed.toISOString().slice(0, 10);
+  } catch {
+    return "";
+  }
+}
+
 export const SuperAdminPanel: React.FC = () => {
   // --- auth/profile ---
   const { loading: profileLoading, profile } = useUserProfile();
@@ -84,7 +104,7 @@ export const SuperAdminPanel: React.FC = () => {
   const isSuperAdmin = rolesAny?.superAdmin === true;
 
   // --- tabs ---
-  const [tab, setTab] = useState<"orgs" | "system">("orgs");
+  const [tab, setTab] = useState<"orgs" | "inactiveOrgs" | "archivedOrgs" | "system">("orgs");
 
   // --- system/activation ---
   const [activationLoading, setActivationLoading] = useState(true);
@@ -97,6 +117,9 @@ export const SuperAdminPanel: React.FC = () => {
   const [orgsLoading, setOrgsLoading] = useState(false);
   const [orgsError, setOrgsError] = useState<string | null>(null);
   const [orgs, setOrgs] = useState<OrgComputed[]>([]);
+  const [orgAdminMetadata, setOrgAdminMetadata] = useState<Record<string, CleanupOrgSummary>>({});
+  const [orgAdminDrafts, setOrgAdminDrafts] = useState<Record<string, OrgAdminDraft>>({});
+  const [selectedUsersOrg, setSelectedUsersOrg] = useState<OrgComputed | null>(null);
 
   const [pendingRegsLoading, setPendingRegsLoading] = useState(false);
   const [pendingRegsError, setPendingRegsError] = useState<string | null>(null);
@@ -345,6 +368,79 @@ setSaveMsg(`✅ Denied: ${req.primaryContactEmail || req.email || req.id}`);
     }
   };
 
+  const refreshOrgAdminMetadata = async () => {
+    if (!isSuperAdmin) return;
+    try {
+      const inventory = await loadCleanupControlsInventory();
+      setOrgAdminMetadata(Object.fromEntries(inventory.orgs.map(org => [org.id, org])));
+    } catch (error) {
+      console.warn("org cleanup metadata load failed:", error);
+    }
+  };
+
+  const updateOrgDraft = (orgId: string, key: keyof OrgAdminDraft, value: string) => {
+    setOrgAdminDrafts(current => ({
+      ...current,
+      [orgId]: {...current[orgId], [key]: value},
+    }));
+  };
+
+  const saveOrgAdminFields = async (org: OrgComputed) => {
+    const draft = orgAdminDrafts[org.id];
+    if (!draft) return;
+    const originalStatus = safeStr((org as any).status || "active");
+    const confirmation = draft.status === "archived" && originalStatus !== "archived"
+      ? "Archive this organization? This will not delete data."
+      : originalStatus === "archived" && draft.status !== "archived"
+        ? "Reactivate this organization?"
+        : "Save these organization status and tier changes?";
+    if (!window.confirm(confirmation)) return;
+    setActionBusyId(`org-save:${org.id}`);
+    setSaveMsg("");
+    try {
+      await runCleanupControlAction({action: "update_org_admin_fields", orgId: org.id, cleanupPhase: "23C-UI", updates: draft});
+      setOrgs(current => current.map(item => item.id === org.id ? {...item, ...draft} : item));
+      await refreshOrgAdminMetadata();
+      setSaveMsg(`Saved organization: ${org.id}`);
+    } catch (error: any) {
+      setSaveMsg(`Save failed: ${error?.message || error}`);
+    } finally {
+      setActionBusyId(null);
+    }
+  };
+
+  const safeDeleteOrgFromTable = async (org: OrgComputed) => {
+    const metadata = orgAdminMetadata[org.id];
+    if (!metadata?.safeDeleteEligible) return;
+    const required = `DELETE ${org.id}`;
+    const confirmation = window.prompt(`Type ${required} to permanently delete only this empty organization document.`);
+    if (confirmation !== required) return;
+    setActionBusyId(`org-delete:${org.id}`);
+    setSaveMsg("");
+    try {
+      await runCleanupControlAction({action: "safe_delete_empty_org", orgId: org.id, cleanupPhase: "23C-UI", updates: {confirmation}});
+      setOrgs(current => current.filter(item => item.id !== org.id));
+      setOrgAdminMetadata(current => {
+        const next = {...current};
+        delete next[org.id];
+        return next;
+      });
+      setSaveMsg(`Deleted empty organization document: ${org.id}`);
+    } catch (error: any) {
+      setSaveMsg(`Delete failed: ${error?.message || error}`);
+      await refreshOrgAdminMetadata();
+    } finally {
+      setActionBusyId(null);
+    }
+  };
+
+  const deleteBlockerText = (orgId: string) => {
+    const metadata = orgAdminMetadata[orgId];
+    if (!metadata) return "Delete unavailable: safety check is loading. Archive instead.";
+    if (metadata.safeDeleteEligible) return "Delete empty organization document";
+    return `Delete unavailable: ${metadata.safeDeleteBlockers.join(", ")}. Archive instead.`;
+  };
+
   // --- Activation snapshot ---
   useEffect(() => {
     if (!isSuperAdmin) {
@@ -403,6 +499,10 @@ useEffect(() => {
   return () => unsub();
 }, [isSuperAdmin]);
 
+  useEffect(() => {
+    refreshOrgAdminMetadata();
+  }, [isSuperAdmin]);
+
   // --- Load orgs + per-org computed counts (members + pending request counts) ---
   useEffect(() => {
     if (!isSuperAdmin) return;
@@ -458,7 +558,16 @@ useEffect(() => {
         // sort by name
         computed.sort((a, b) => String(a?.name || a.id).localeCompare(String(b?.name || b.id)));
 
-        if (!cancelled) setOrgs(computed);
+        if (!cancelled) {
+          setOrgs(computed);
+          setOrgAdminDrafts(Object.fromEntries(computed.map(org => [org.id, {
+            status: safeStr((org as any).status || "active"),
+            tier: safeStr(org.tier || "COMM_L1"),
+            subscriptionStatus: safeStr(org.subscriptionStatus || "active"),
+            subscriptionStartDate: dateInput(org.subscriptionStartDate),
+            subscriptionEndDate: dateInput(org.subscriptionEndDate),
+          }])));
+        }
       } catch (e: any) {
         console.error("orgs load failed:", e);
         if (!cancelled) setOrgsError(e?.message || String(e));
@@ -520,6 +629,61 @@ useEffect(() => {
   const allowTrack1 = activation?.allowTrack1 !== false;
   const allowTrack2 = !!activation?.allowTrack2;
   const message = activation?.message || "";
+  const activeOrgs = orgs.filter(org => safeStr((org as any).status || "active") === "active");
+  const inactiveOrgs = orgs.filter(org => safeStr((org as any).status) === "inactive");
+  const archivedOrgs = orgs.filter(org => safeStr((org as any).status) === "archived");
+
+  const renderOrgTable = (rows: OrgComputed[], emptyMessage: string, showDelete = true) => rows.length === 0 ? (
+    <div className="p-4 text-sm text-gray-600">{emptyMessage}</div>
+  ) : (
+    <div className="overflow-auto">
+      <table className="min-w-full text-sm">
+        <thead className="bg-gray-50 text-gray-600">
+          <tr>
+            <th className="text-left p-3">Org Name</th>
+            <th className="text-left p-3">Status</th>
+            <th className="text-left p-3">Tier</th>
+            <th className="text-left p-3"># Users</th>
+            <th className="text-left p-3">Primary Contact</th>
+            <th className="text-left p-3">Start</th>
+            <th className="text-left p-3">End</th>
+            <th className="text-left p-3">Pending Add-User</th>
+            <th className="text-left p-3">Pending Upgrade</th>
+            <th className="text-left p-3">Save</th>
+            {showDelete && <th className="text-left p-3">Delete</th>}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((org) => (
+            <tr key={org.id} className="border-t">
+              <td className="p-3"><div className="font-medium text-gray-900">{org.name || org.id}</div></td>
+              <td className="p-3">
+                <select value={orgAdminDrafts[org.id]?.status || "active"} onChange={event => updateOrgDraft(org.id, "status", event.target.value)} className="border rounded px-2 py-1 text-xs" disabled={org.id === "cyber_blue_star"}>
+                  <option value="active">active</option><option value="inactive">inactive</option><option value="archived">archived</option>
+                </select>
+              </td>
+              <td className="p-3">
+                <select value={orgAdminDrafts[org.id]?.tier || "COMM_L1"} onChange={event => updateOrgDraft(org.id, "tier", event.target.value)} className="border rounded px-2 py-1 text-xs">
+                  <option value="SPONSORED">SPONSORED</option><option value="COMM_L1">COMM_L1</option><option value="COMM_L2">COMM_L2</option>
+                </select>
+              </td>
+              <td className="p-3"><button type="button" onClick={() => setSelectedUsersOrg(org)} className="font-medium text-blue-700 hover:underline">{org.memberCount}</button></td>
+              <td className="p-3"><div>{org.primaryContactName || "—"}</div><div className="text-xs text-gray-500">{org.primaryContactEmail || ""}</div></td>
+              <td className="p-3"><input type="date" value={orgAdminDrafts[org.id]?.subscriptionStartDate || ""} onChange={event => updateOrgDraft(org.id, "subscriptionStartDate", event.target.value)} className="border rounded px-2 py-1 text-xs" /></td>
+              <td className="p-3"><input type="date" value={orgAdminDrafts[org.id]?.subscriptionEndDate || ""} onChange={event => updateOrgDraft(org.id, "subscriptionEndDate", event.target.value)} className="border rounded px-2 py-1 text-xs" /></td>
+              <td className="p-3">{org.pending?.addUser ?? 0}</td>
+              <td className="p-3">{org.pending?.upgrade ?? 0}</td>
+              <td className="p-3"><button type="button" onClick={() => saveOrgAdminFields(org)} disabled={actionBusyId === `org-save:${org.id}`} className="px-2 py-1 rounded bg-blue-600 text-white text-xs hover:bg-blue-700 disabled:opacity-50">Save</button></td>
+              {showDelete && <td className="p-3">
+                <button type="button" onClick={() => safeDeleteOrgFromTable(org)} disabled={!orgAdminMetadata[org.id]?.safeDeleteEligible || actionBusyId === `org-delete:${org.id}`} title={deleteBlockerText(org.id)} className="px-2 py-1 rounded bg-rose-700 text-white text-xs hover:bg-rose-800 disabled:opacity-40">Delete</button>
+                {!orgAdminMetadata[org.id]?.safeDeleteEligible && <p className="mt-1 max-w-56 text-[10px] leading-tight text-gray-500">{deleteBlockerText(org.id)}</p>}
+              </td>}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
 
   return (
     <div className="space-y-4 animate-fadeIn">
@@ -543,7 +707,31 @@ useEffect(() => {
                 : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50")
             }
           >
-            Orgs
+            Active Orgs
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab("inactiveOrgs")}
+            className={
+              "px-3 py-1.5 rounded-md text-sm border " +
+              (tab === "inactiveOrgs"
+                ? "bg-blue-600 text-white border-blue-600"
+                : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50")
+            }
+          >
+            Inactive Orgs
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab("archivedOrgs")}
+            className={
+              "px-3 py-1.5 rounded-md text-sm border " +
+              (tab === "archivedOrgs"
+                ? "bg-blue-600 text-white border-blue-600"
+                : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50")
+            }
+          >
+            Archived Orgs
           </button>
           <button
             type="button"
@@ -646,11 +834,11 @@ useEffect(() => {
             )}
           </div>
 
-          {/* Orgs Table */}
+          {/* Active Orgs Table */}
           <div className="bg-white rounded-lg shadow-sm border">
             <div className="p-4 border-b">
-              <h3 className="font-semibold text-gray-900">Orgs</h3>
-              <p className="text-xs text-gray-500">From <code>orgs</code>. Counts computed live for MVP.</p>
+              <h3 className="font-semibold text-gray-900">Active Orgs</h3>
+              <p className="text-xs text-gray-500">Active and legacy organizations with no status. Inactive and archived organizations have separate views.</p>
             </div>
 
             {orgsLoading ? (
@@ -673,41 +861,71 @@ useEffect(() => {
                       <th className="text-left p-3">End</th>
                       <th className="text-left p-3">Pending Add-User</th>
                       <th className="text-left p-3">Pending Upgrade</th>
-                      <th className="text-left p-3">Org ID</th>
+                      <th className="text-left p-3">Save</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {orgs.map((o) => (
+                    {activeOrgs.map((o) => (
                       <tr key={o.id} className="border-t">
                         <td className="p-3">
                           <div className="font-medium text-gray-900">{o.name || o.id}</div>
-                          <div className="text-xs text-gray-500">
-                            owner: <span className="font-mono">{o.ownerUid || "—"}</span>
-                          </div>
                         </td>
-                        <td className="p-3">{o.subscriptionStatus || "—"}</td>
-                        <td className="p-3">{o.tier || "—"}</td>
                         <td className="p-3">
-                          <span className="font-medium">{o.memberCount}</span>
-                          {typeof o.activeMemberCount === "number" && (
-                            <span className="text-xs text-gray-500"> (cached: {o.activeMemberCount})</span>
-                          )}
+                          <select value={orgAdminDrafts[o.id]?.status || "active"} onChange={event => updateOrgDraft(o.id, "status", event.target.value)} className="border rounded px-2 py-1 text-xs" disabled={o.id === "cyber_blue_star"}>
+                            <option value="active">active</option><option value="inactive">inactive</option><option value="archived">archived</option>
+                          </select>
+                        </td>
+                        <td className="p-3">
+                          <select value={orgAdminDrafts[o.id]?.tier || "COMM_L1"} onChange={event => updateOrgDraft(o.id, "tier", event.target.value)} className="border rounded px-2 py-1 text-xs">
+                            <option value="SPONSORED">SPONSORED</option><option value="COMM_L1">COMM_L1</option><option value="COMM_L2">COMM_L2</option>
+                          </select>
+                        </td>
+                        <td className="p-3">
+                          <button type="button" onClick={() => setSelectedUsersOrg(o)} className="font-medium text-blue-700 hover:underline">{o.memberCount}</button>
                         </td>
                         <td className="p-3">
                           <div>{o.primaryContactName || "—"}</div>
                           <div className="text-xs text-gray-500">{o.primaryContactEmail || ""}</div>
                         </td>
-                        <td className="p-3">{fmtDate(o.subscriptionStartDate)}</td>
-                        <td className="p-3">{fmtDate(o.subscriptionEndDate)}</td>
+                        <td className="p-3"><input type="date" value={orgAdminDrafts[o.id]?.subscriptionStartDate || ""} onChange={event => updateOrgDraft(o.id, "subscriptionStartDate", event.target.value)} className="border rounded px-2 py-1 text-xs" /></td>
+                        <td className="p-3"><input type="date" value={orgAdminDrafts[o.id]?.subscriptionEndDate || ""} onChange={event => updateOrgDraft(o.id, "subscriptionEndDate", event.target.value)} className="border rounded px-2 py-1 text-xs" /></td>
                         <td className="p-3">{o.pending?.addUser ?? 0}</td>
                         <td className="p-3">{o.pending?.upgrade ?? 0}</td>
-                        <td className="p-3 font-mono text-xs text-gray-500">{o.id}</td>
+                        <td className="p-3"><button type="button" onClick={() => saveOrgAdminFields(o)} disabled={actionBusyId === `org-save:${o.id}`} className="px-2 py-1 rounded bg-blue-600 text-white text-xs hover:bg-blue-700 disabled:opacity-50">Save</button></td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {tab === "inactiveOrgs" && (
+        <div className="bg-white rounded-lg shadow-sm border">
+          <div className="p-4 border-b">
+            <h3 className="font-semibold text-gray-900">Inactive Orgs</h3>
+            <p className="text-xs text-gray-500">Inactive organizations remain available for review and can be reactivated by changing status and saving.</p>
+          </div>
+          {orgsLoading ? <div className="p-4 text-sm text-gray-600">Loading inactive orgs...</div> : orgsError ? <div className="p-4 text-sm text-red-600">Error: {orgsError}</div> : renderOrgTable(inactiveOrgs, "No inactive orgs found.", false)}
+        </div>
+      )}
+
+      {tab === "archivedOrgs" && (
+        <div className="bg-white rounded-lg shadow-sm border">
+          <div className="p-4 border-b">
+            <h3 className="font-semibold text-gray-900">Archived Orgs</h3>
+            <p className="text-xs text-gray-500">Archived organizations remain available for review and can be reactivated by changing status and saving.</p>
+          </div>
+          {orgsLoading ? <div className="p-4 text-sm text-gray-600">Loading archived orgsâ€¦</div> : orgsError ? <div className="p-4 text-sm text-red-600">Error: {orgsError}</div> : renderOrgTable(archivedOrgs, "No archived orgs found.")}
+        </div>
+      )}
+
+      {selectedUsersOrg && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="max-h-[85vh] w-full max-w-6xl overflow-y-auto">
+            <OrganizationUsers orgId={selectedUsersOrg.id} orgName={selectedUsersOrg.name || selectedUsersOrg.id} isSuperAdmin onClose={() => setSelectedUsersOrg(null)} />
           </div>
         </div>
       )}

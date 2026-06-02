@@ -9,6 +9,7 @@ import { RestoreValidationResult, validateRestoreBackupJson } from '../src/resto
 import { RestoreExecutionResult, restoreAssessmentBackup } from '../src/restoreEngine';
 import { DataCleanupAuditPanel } from './DataCleanupAuditPanel';
 import { CleanupControlsPanel } from './CleanupControlsPanel';
+import { ControlledCleanupExecutionPanel } from './ControlledCleanupExecutionPanel';
 
 interface DiagnosticsDrawerProps {
   isOpen: boolean;
@@ -593,6 +594,7 @@ export const DiagnosticsDrawer: React.FC<DiagnosticsDrawerProps> = ({
 
       {isSuperAdmin && <DataCleanupAuditPanel />}
       {isSuperAdmin && <CleanupControlsPanel />}
+      {isSuperAdmin && <ControlledCleanupExecutionPanel />}
 
       <div className="space-y-3">
             <h4 className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Scoped Domain Registry</h4>

@@ -10,6 +10,7 @@ interface AppHeaderProps {
   sprsScore: number;
   saveStatus?: "idle" | "saving" | "saved" | "error";
   saveMessage?: string;
+  showAppActions?: boolean;
 
   // optional handlers
   onLogout?: () => void;
@@ -26,6 +27,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   sprsScore,
   saveStatus = "idle",
   saveMessage,
+  showAppActions = true,
   onLogout,
   onAdminClick,
   onSuperAdminClick, // ✅ NEW
@@ -41,7 +43,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
       </div>
 
       {/* CENTER */}
-      <div className="flex flex-col items-center mx-auto text-center">
+      {showAppActions && <div className="flex flex-col items-center mx-auto text-center">
         <div className="w-64 bg-blue-900 rounded-full h-3 overflow-hidden mb-1">
           <div className="bg-green-400 h-3 transition-all" style={{ width: `${overallCompletion}%` }} />
         </div>
@@ -50,10 +52,10 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
           <span>|</span>
           <span>SPRS Score: {sprsScore}</span>
         </div>
-      </div>
+      </div>}
 
       {/* RIGHT */}
-      <div className="flex items-center space-x-2">
+      {showAppActions && <div className="flex items-center space-x-2">
         {/* ✅ Super Admin button */}
         {onSuperAdminClick && (
           <button           
@@ -139,7 +141,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
             Logout
           </button>
         )}
-      </div>
+      </div>}
     </header>
   );
 };

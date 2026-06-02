@@ -22,6 +22,7 @@ service firebase.storage {
 
     function isSuperAdmin() {
       return hasUserDoc()
+        && userDoc().status == "active"
         && userDoc().roles.superAdmin == true;
     }
 
@@ -32,11 +33,21 @@ service firebase.storage {
     }
 
     function isActiveOrgMember(orgId) {
-      return isSignedIn()
+      return hasUserDoc()
+        && userDoc().status == "active"
+        && userDoc().orgId == orgId
+        && firestore.exists(
+          /databases/(default)/documents/orgs/$(orgId)
+        )
+        && firestore.get(
+          /databases/(default)/documents/orgs/$(orgId)
+        ).data.status == "active"
         && firestore.exists(
           /databases/(default)/documents/orgs/$(orgId)/members/$(request.auth.uid)
         )
-        && orgMemberDoc(orgId).status == "active";
+        && orgMemberDoc(orgId).status == "active"
+        && orgMemberDoc(orgId).active == true
+        && orgMemberDoc(orgId).role is string;
     }
 
     function canReadEvidence(orgId) {

@@ -18,6 +18,7 @@ service cloud.firestore {
 
     function isSuperAdmin() {
       return hasUserDoc()
+        && userDoc().status == "active"
         && userDoc().roles.superAdmin == true;
     }
 
@@ -31,9 +32,8 @@ service cloud.firestore {
 
 
 function isOrgOwner(orgId) {
-  return request.auth != null
-    && exists(/databases/$(database)/documents/orgs/$(orgId))
-    && get(/databases/$(database)/documents/orgs/$(orgId)).data.ownerUid == request.auth.uid;
+  return isActiveOrgMember(orgId)
+    && orgMemberDoc(orgId).role == "orgOwner";
 }
 
 function isOrgMember(orgId) {
@@ -50,12 +50,19 @@ function orgMemberDoc(orgId) {
 }
 
 function isActiveOrgMember(orgId) {
-  return isOrgMember(orgId)
-    && orgMemberDoc(orgId).status == "active";
+  return hasUserDoc()
+    && userDoc().status == "active"
+    && myOrgId() == orgId
+    && exists(/databases/$(database)/documents/orgs/$(orgId))
+    && get(/databases/$(database)/documents/orgs/$(orgId)).data.status == "active"
+    && isOrgMember(orgId)
+    && orgMemberDoc(orgId).status == "active"
+    && orgMemberDoc(orgId).active == true
+    && orgMemberDoc(orgId).role is string;
 }
 
 function isOrgAdmin(orgId) {
-  return isOrgMember(orgId)
+  return isActiveOrgMember(orgId)
     && orgMemberDoc(orgId).role == "orgAdmin";
 }
 
@@ -98,6 +105,56 @@ function validAcceptedInvitationMembership(orgId, invitationId, memberUid) {
     && request.resource.data.status == "active"
     && request.resource.data.role in ["orgAdmin", "contributor", "viewer", "assessor"]
     && acceptedInvitationAfterWrite(orgId, invitationId, memberUid);
+}
+
+function validPendingRegistrationUser(uid) {
+  return request.auth.uid == uid
+    && request.resource.data.keys().hasOnly([
+      "uid", "email", "fullName", "phone", "orgId", "status", "roles", "createdAt", "updatedAt"
+    ])
+    && request.resource.data.uid == uid
+    && request.resource.data.status == "pending"
+    && request.resource.data.orgId is string
+    && request.resource.data.email is string
+    && request.resource.data.roles.orgRole == "orgAdmin"
+    && request.resource.data.roles.keys().hasOnly(["orgRole"]);
+}
+
+function validAcceptedInvitationUser(uid) {
+  let orgId = request.resource.data.orgId;
+  let member = getAfter(/databases/$(database)/documents/orgs/$(orgId)/members/$(uid)).data;
+  let invitation = getAfter(/databases/$(database)/documents/orgs/$(orgId)/invitations/$(member.invitationId)).data;
+  return request.auth.uid == uid
+    && request.resource.data.diff(resource.data).changedKeys().hasOnly([
+      "uid", "email", "orgId", "status", "roles", "updatedAt"
+    ])
+    && request.resource.data.status == "active"
+    && request.resource.data.roles.superAdmin != true
+    && member.status == "active"
+    && member.active == true
+    && member.role == request.resource.data.roles.orgRole
+    && invitation.status == "accepted"
+    && invitation.acceptedBy == uid
+    && invitation.email == request.auth.token.email;
+}
+
+function validAcceptedInvitationUserCreate(uid) {
+  let orgId = request.resource.data.orgId;
+  let member = getAfter(/databases/$(database)/documents/orgs/$(orgId)/members/$(uid)).data;
+  let invitation = getAfter(/databases/$(database)/documents/orgs/$(orgId)/invitations/$(member.invitationId)).data;
+  return request.auth.uid == uid
+    && request.resource.data.keys().hasOnly([
+      "uid", "email", "orgId", "status", "roles", "updatedAt"
+    ])
+    && request.resource.data.uid == uid
+    && request.resource.data.status == "active"
+    && request.resource.data.roles.superAdmin != true
+    && member.status == "active"
+    && member.active == true
+    && member.role == request.resource.data.roles.orgRole
+    && invitation.status == "accepted"
+    && invitation.acceptedBy == uid
+    && invitation.email == request.auth.token.email;
 }
 
 function canReadAssessmentData(orgId) {
@@ -144,9 +201,14 @@ match /users/{uid} {
   allow read: if request.auth != null
     && (request.auth.uid == uid || isSuperAdmin());
 
-  // Allow super admin to bootstrap/update users during approval
-  allow create, update: if request.auth != null
-    && (request.auth.uid == uid || isSuperAdmin());
+  allow create: if isSuperAdmin()
+    || (isSignedIn() && (
+      validPendingRegistrationUser(uid)
+      || validAcceptedInvitationUserCreate(uid)
+    ));
+
+  allow update: if isSuperAdmin()
+    || (isSignedIn() && validAcceptedInvitationUser(uid));
 
   allow delete: if false;
 }
@@ -159,7 +221,7 @@ match /orgs/{orgId} {
   // - super admin
   // - org owner (bootstrap safe)
   // - org member
-  allow read: if isSuperAdmin() || isOrgOwner(orgId) || isOrgMember(orgId);
+  allow read: if isSuperAdmin() || isActiveOrgMember(orgId);
 
   // WRITE org:
   // - super admin only (MVP rule)
@@ -193,7 +255,7 @@ match /orgs/{orgId} {
     // - super admin
     // - org owner
     // - org members
-    allow read: if isSuperAdmin() || isOrgOwner(orgId) || isOrgMember(orgId)
+    allow read: if isSuperAdmin() || isActiveOrgMember(orgId)
       || (isSignedIn() && request.auth.uid == memberUid);
 
     allow create: if isSuperAdmin()
@@ -340,7 +402,7 @@ match /orgs/{orgId} {
 
     // --- org members ---
 match /orgMembers/{orgId}/members/{memberUid} {
-  allow read: if isSuperAdmin() || isOrgMember(orgId);
+  allow read: if isSuperAdmin() || isActiveOrgMember(orgId);
 
   // ✅ SuperAdmin can create membership even when org is being created
   // in the same transaction (org doc may not "exist" during rules eval).
@@ -409,7 +471,7 @@ match /accessRequests/{reqId} {
     match /usageDaily/{docId} {
       // docId pattern: orgId_YYYYMMDD
       allow read: if isSuperAdmin()
-        || (hasUserDoc() && docId.startsWith(myOrgId() + "_"));
+        || (hasUserDoc() && userDoc().status == "active" && docId.startsWith(myOrgId() + "_"));
 
       // MVP: only super admin writes usage until gateway exists
       allow write: if isSuperAdmin();

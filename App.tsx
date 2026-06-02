@@ -26,7 +26,6 @@ import { AppFooter } from "./components/AppFooter";
 import { ProfilePage } from "./components/ProfilePage";
 import { SavedTemplates } from "./components/SavedTemplates";
 import { EvidenceLibrary } from "./components/EvidenceLibrary";
-import { InvitationAcceptancePanel } from "./components/InvitationAcceptancePanel";
 import { OrgInvitations } from "./components/OrgInvitations";
 import { TemplateAssist } from "./components/TemplateAssist";
 import { SprsScorecard } from "./components/SprsScorecard";
@@ -41,6 +40,7 @@ import { TrainingModule } from "./components/training/TrainingModule";
 import { NewsUpdates } from "./components/NewsUpdates";
 import { DiagnosticsDrawer } from "./components/DiagnosticsDrawer";
 import { UpgradeModal } from "./components/UpgradeModal";
+import { LOCAL_STORAGE_KEY, READINESS_ANALYZER_KEY, SAVED_REPORTS_KEY, SAVED_TEMPLATES_KEY, SSP_PROFILE_KEY } from "./constants";
 
 import { useUserProfile } from "./src/useUserProfile";
 import { useCmmcData } from "./hooks/useCmmcData";
@@ -185,30 +185,9 @@ export default function App() {
     return () => unsub();
   }, []);
 
-  // Auto-bootstrap after login
-  useEffect(() => {
-    const run = async () => {
-      try {
-        if (authUser && import.meta.env.VITE_USE_BOOTSTRAP === "true") {
-          await bootstrapUser();
-        }
-      } catch (e) {
-        console.error("bootstrap error:", e);
-      }
-    };
-    run();
-  }, [authUser]);
-
-  // TEMP: test system/activation read after login
-  useEffect(() => {
-    if (!authUser) return;
-    const t = setTimeout(() => {
-      testReadSystemActivation();
-    }, 800);
-    return () => clearTimeout(t);
-  }, [authUser]);
-
   const handleLogout = async () => {
+    [LOCAL_STORAGE_KEY, SAVED_TEMPLATES_KEY, READINESS_ANALYZER_KEY, SAVED_REPORTS_KEY, SSP_PROFILE_KEY]
+      .forEach(key => localStorage.removeItem(key));
     await signOut(auth);
   };
 
@@ -224,12 +203,82 @@ export default function App() {
     return <Login />;
   }
 
-  return (
-    <>
-      <InvitationAcceptancePanel uid={authUser.uid} email={authUser.email} />
-      <AuthedApp onLogout={handleLogout} />
-    </>
-  );
+  return <AuthorizedAppGate authUser={authUser} onLogout={handleLogout} />;
+}
+
+type AccessGateState =
+  | { status: "loading" }
+  | { status: "authorized" }
+  | { status: "pending"; message: string }
+  | { status: "disabled"; message: string };
+
+function AuthorizedAppGate({ authUser, onLogout }: { authUser: User; onLogout: () => void }) {
+  const [access, setAccess] = useState<AccessGateState>({ status: "loading" });
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const userSnap = await getDoc(doc(db, "users", authUser.uid));
+        const user = userSnap.exists() ? userSnap.data() as any : null;
+        if (!user || user.status !== "active") {
+          if (!cancelled) setAccess({
+            status: user?.status === "pending" || !user ? "pending" : "disabled",
+            message: user?.status === "pending" || !user
+              ? "Your registration is pending approval. You will receive access after your organization is approved."
+              : "Your account is inactive or disabled. Contact your organization administrator.",
+          });
+          return;
+        }
+        if (user.roles?.superAdmin === true) {
+          if (!cancelled) setAccess({ status: "authorized" });
+          return;
+        }
+        const orgId = typeof user.orgId === "string" ? user.orgId.trim() : "";
+        if (!orgId) {
+          if (!cancelled) setAccess({ status: "disabled", message: "Your account is inactive or disabled. Contact your organization administrator." });
+          return;
+        }
+        const [orgSnap, memberSnap] = await Promise.all([
+          getDoc(doc(db, "orgs", orgId)),
+          getDoc(doc(db, "orgs", orgId, "members", authUser.uid)),
+        ]);
+        const org = orgSnap.data() as any;
+        const member = memberSnap.data() as any;
+        const allowed = orgSnap.exists()
+          && org?.status === "active"
+          && memberSnap.exists()
+          && member?.status === "active"
+          && member?.active === true
+          && typeof member?.role === "string"
+          && member.role.length > 0;
+        if (!cancelled) setAccess(allowed
+          ? { status: "authorized" }
+          : { status: "disabled", message: "Your account is inactive or disabled. Contact your organization administrator." });
+      } catch (error) {
+        console.warn("[access-gate] access validation failed", error);
+        if (!cancelled) setAccess({ status: "disabled", message: "Unable to verify organization access. Contact your organization administrator." });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [authUser.uid]);
+
+  if (access.status === "loading") {
+    return <div className="flex items-center justify-center h-screen bg-gray-900 text-white font-bold">VERIFYING ACCESS...</div>;
+  }
+  if (access.status !== "authorized") {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gray-100 p-6">
+        <div className="max-w-lg rounded-lg border border-gray-200 bg-white p-8 text-center shadow-sm">
+          <ShieldAlert className="mx-auto mb-4 h-12 w-12 text-amber-500" />
+          <h1 className="text-xl font-bold text-gray-900">{access.status === "pending" ? "Access Pending" : "Access Disabled"}</h1>
+          <p className="mt-3 text-sm text-gray-600">{access.message}</p>
+          <button type="button" onClick={onLogout} className="mt-6 rounded bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800">Logout</button>
+        </div>
+      </div>
+    );
+  }
+  return <AuthedApp onLogout={onLogout} />;
 }
 
 /**

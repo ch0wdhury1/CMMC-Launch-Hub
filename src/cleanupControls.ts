@@ -47,17 +47,28 @@ export interface CleanupOrgSummary {
     contacts?: { primary?: { email?: string } };
   };
   memberCount: number;
+  activeMemberCount?: number;
   assessmentCount: number;
   evidenceCount: number;
+  evidenceLibraryCount: number;
+  pendingInvitationCount: number;
+  pendingAccessRequestCount: number;
+  pendingAddUserCount: number;
+  pendingUpgradeCount: number;
+  safeDeleteEligible: boolean;
+  safeDeleteBlockers: string[];
   members: CleanupMember[];
   legacyMembers: CleanupMember[];
   invitations: CleanupInvitation[];
+  evidenceIssues: Array<{ id: string; fileName?: string; issue: string }>;
+  assessmentWarnings: Array<{ id: string; issue: string }>;
 }
 
 export interface CleanupAccessRequest {
   id: string;
   orgId?: string;
   uid?: string;
+  requestedByUid?: string;
   email?: string;
   requestType?: string;
   status?: string;
@@ -70,11 +81,24 @@ export interface CleanupDuplicateGroup {
   orgs: CleanupOrgSummary[];
 }
 
+export interface CleanupOrphanUser {
+  id: string;
+  email?: string;
+  displayName?: string;
+  name?: string;
+  orgId?: string;
+  status?: string;
+  roles?: { superAdmin?: boolean; orgRole?: string };
+}
+
 export interface CleanupControlsInventory {
   generatedAt: string;
   orgs: CleanupOrgSummary[];
   accessRequests: CleanupAccessRequest[];
   duplicateGroups: CleanupDuplicateGroup[];
+  orphanUsers: CleanupOrphanUser[];
+  protectedOrgIds: string[];
+  phase23cDuplicateOrgIds: string[];
 }
 
 export interface CleanupControlAction {
@@ -83,12 +107,18 @@ export interface CleanupControlAction {
     | "update_org_subscription"
     | "update_member"
     | "archive_access_request"
-    | "cancel_invitation";
+    | "cancel_invitation"
+    | "disable_orphan_user"
+    | "repair_org_fields"
+    | "update_org_admin_fields"
+    | "archive_org_from_table"
+    | "safe_delete_empty_org";
   orgId?: string;
   targetId?: string;
   userId?: string;
   updates?: Record<string, unknown>;
   note?: string;
+  cleanupPhase?: "23C" | "23C-UI";
 }
 
 async function authenticatedRequest(path: string, init?: RequestInit) {
