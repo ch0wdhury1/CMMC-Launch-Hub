@@ -4,6 +4,7 @@ import {
   cancelOrgInvitation,
   createOrgInvitation,
   isValidInvitationEmail,
+  loadInvitationInviterDisplays,
   ORG_INVITATION_ROLES,
   subscribeOrgInvitations,
 } from "../src/orgInvitations";
@@ -41,7 +42,12 @@ export const OrgInvitations: React.FC<Props> = ({ orgId, uid, role, isSuperAdmin
       setInvitations([]);
       return;
     }
-    return subscribeOrgInvitations(orgId, setInvitations, error => {
+    return subscribeOrgInvitations(orgId, loadedInvitations => {
+      setInvitations(loadedInvitations);
+      void loadInvitationInviterDisplays(orgId).then(displays => {
+        setInvitations(current => current.map(invitation => ({...invitation, ...displays[invitation.id]})));
+      }).catch(error => console.warn("[org-invitations] inviter display hydration failed", error));
+    }, error => {
       console.error("[org-invitations] load failed", error);
       setMessage("Unable to load invitations.");
     });
@@ -104,7 +110,7 @@ export const OrgInvitations: React.FC<Props> = ({ orgId, uid, role, isSuperAdmin
         <div className="overflow-x-auto mt-3">
           <table className="w-full text-sm text-left">
             <thead className="text-xs uppercase text-gray-500 border-b"><tr><th className="py-2 pr-3">Email</th><th className="pr-3">Role</th><th className="pr-3">Status</th><th className="pr-3">Invited</th><th className="pr-3">Invited By</th><th>Actions</th></tr></thead>
-            <tbody>{pendingInvitations.map(invitation => <tr key={invitation.id} className="border-b"><td className="py-3 pr-3">{invitation.email}</td><td className="pr-3">{invitation.role}</td><td className="pr-3 capitalize">{invitation.status}</td><td className="pr-3">{formatDate(invitation.invitedAt)}</td><td className="pr-3 font-mono text-xs">{invitation.invitedBy}</td><td><button type="button" onClick={() => cancelInvitation(invitation)} disabled={!canManage || cancellingId === invitation.id} title="Cancel invitation" className="p-1 text-red-700 disabled:text-gray-300">{cancellingId === invitation.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Ban className="h-4 w-4" />}</button></td></tr>)}</tbody>
+            <tbody>{pendingInvitations.map(invitation => <tr key={invitation.id} className="border-b"><td className="py-3 pr-3">{invitation.email}</td><td className="pr-3">{invitation.role}</td><td className="pr-3 capitalize">{invitation.status}</td><td className="pr-3">{formatDate(invitation.invitedAt)}</td><td className="pr-3 text-xs">{invitation.invitedByDisplay || invitation.invitedByName || invitation.invitedByEmail || invitation.invitedBy}</td><td><button type="button" onClick={() => cancelInvitation(invitation)} disabled={!canManage || cancellingId === invitation.id} title="Cancel invitation" className="p-1 text-red-700 disabled:text-gray-300">{cancellingId === invitation.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Ban className="h-4 w-4" />}</button></td></tr>)}</tbody>
           </table>
           {pendingInvitations.length === 0 && <p className="py-6 text-sm text-gray-500 text-center">No pending invitations.</p>}
         </div>

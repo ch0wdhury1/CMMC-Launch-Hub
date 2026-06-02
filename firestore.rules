@@ -289,7 +289,7 @@ match /orgs/{orgId} {
 
     allow create: if canManageOrgInvitations(orgId)
       && request.resource.data.keys().hasOnly([
-        "id", "orgId", "orgName", "email", "fullName", "role", "status", "invitedBy", "invitedAt"
+        "id", "orgId", "orgName", "email", "fullName", "role", "status", "invitedBy", "invitedByUid", "invitedByName", "invitedByEmail", "invitedByDisplay", "invitedAt"
       ])
       && request.resource.data.id == invitationId
       && request.resource.data.orgId == orgId

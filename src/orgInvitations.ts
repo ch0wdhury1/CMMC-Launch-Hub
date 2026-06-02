@@ -13,12 +13,13 @@ import {
   writeBatch,
   type Unsubscribe,
 } from "firebase/firestore";
-import { db } from "./firebase";
+import { auth, db } from "./firebase";
 import type { OrgInvitation, OrgInvitationRole } from "../types";
 
 export const ORG_INVITATION_ROLES: OrgInvitationRole[] = ["orgAdmin", "contributor", "viewer", "assessor"];
 
 const normalizeEmail = (email: string) => email.trim().toLowerCase();
+const apiBase = () => String(import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
 
 export const isValidInvitationEmail = (email: string) =>
   /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizeEmail(email));
@@ -37,6 +38,22 @@ export function subscribeOrgInvitations(
   return onSnapshot(invitationQuery, snapshot => {
     onInvitations(snapshot.docs.map(invitationFromSnapshot));
   }, onError);
+}
+
+export async function loadInvitationInviterDisplays(orgId: string): Promise<Record<string, {
+  invitedByUid: string;
+  invitedByName: string;
+  invitedByEmail: string;
+  invitedByDisplay: string;
+}>> {
+  const user = auth.currentUser;
+  if (!user) throw new Error("Authentication required");
+  const response = await fetch(`${apiBase()}/api/org/invitation-inviters?orgId=${encodeURIComponent(orgId)}`, {
+    headers: {Authorization: `Bearer ${await user.getIdToken()}`},
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload.success === false) throw new Error(payload.errorMessage || "Unable to load inviter details");
+  return payload.displays || {};
 }
 
 export function subscribeMyPendingInvitations(
@@ -71,6 +88,8 @@ export async function createOrgInvitation(params: {
 
   const [orgSnapshot] = await Promise.all([getDoc(doc(db, "orgs", params.orgId))]);
   const invitationId = crypto.randomUUID();
+  const invitedByName = auth.currentUser?.displayName || "";
+  const invitedByEmail = auth.currentUser?.email || "";
   await setDoc(doc(db, "orgs", params.orgId, "invitations", invitationId), {
     id: invitationId,
     orgId: params.orgId,
@@ -80,6 +99,10 @@ export async function createOrgInvitation(params: {
     role: params.role,
     status: "pending",
     invitedBy: params.invitedBy,
+    invitedByUid: params.invitedBy,
+    invitedByName,
+    invitedByEmail,
+    invitedByDisplay: invitedByName || invitedByEmail || params.invitedBy,
     invitedAt: serverTimestamp(),
   });
   return invitationId;

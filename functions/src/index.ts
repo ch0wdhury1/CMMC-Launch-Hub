@@ -1892,6 +1892,20 @@ async function findAuthUserByEmail(email: string) {
   }
 }
 
+async function inviterDisplay(invitedBy: unknown) {
+  const uid = typeof invitedBy === "string" ? invitedBy : "";
+  if (!uid) return {invitedByUid: "", invitedByName: "", invitedByEmail: "", invitedByDisplay: "Not provided"};
+  const user = (await db.doc(`users/${uid}`).get()).data() || {};
+  const invitedByName = user.displayName || user.fullName || "";
+  const invitedByEmail = user.email || "";
+  return {
+    invitedByUid: uid,
+    invitedByName,
+    invitedByEmail,
+    invitedByDisplay: invitedByName || invitedByEmail || uid,
+  };
+}
+
 function normalizePendingEmail(value: unknown) {
   return typeof value === "string" ? value.trim().toLowerCase() : "";
 }
@@ -1902,6 +1916,24 @@ function validatePendingRole(value: unknown) {
   }
   return value;
 }
+
+app.get("/api/org/invitation-inviters", requireAuth, async (req: any, res) => {
+  try {
+    const orgId = typeof req.query?.orgId === "string" ? req.query.orgId.trim() : "";
+    if (!isSafePathSegment(orgId)) throw new Error("Organization is required");
+    const manager = await getOrgUserManager(req.user.uid, orgId);
+    if (!manager.allowed) return res.status(403).json({success: false, errorMessage: "Organization invitation access required"});
+    const invitations = await db.doc(`orgs/${orgId}`).collection("invitations").limit(500).get();
+    const displays = Object.fromEntries(await Promise.all(invitations.docs.map(async invitation => {
+      const display = await inviterDisplay(invitation.data().invitedBy);
+      return [invitation.id, display];
+    })));
+    return res.json({success: true, displays});
+  } catch (error) {
+    console.error("Invitation inviter display load failed", error);
+    return res.status(400).json({success: false, errorMessage: error instanceof Error ? error.message : "Unable to load invitation inviter details"});
+  }
+});
 
 async function activatePendingMember(params: {
   orgId: string;
@@ -1955,14 +1987,15 @@ app.get("/api/admin/pending-requests", requireAuth, async (req: any, res) => {
     ]);
     const orgs = new Map(orgsSnap.docs.map(org => [org.id, cleanupOrgName({id: org.id, ...org.data()})]));
     const invitations = (await Promise.all(orgsSnap.docs.map(async org => {
-      const snap = await org.ref.collection("invitations").where("status", "==", "pending").limit(500).get();
-      return snap.docs.map(invitation => ({
+      const snap = await org.ref.collection("invitations").limit(500).get();
+      return Promise.all(snap.docs.map(async invitation => ({
         id: invitation.id,
         ...invitation.data(),
+        ...await inviterDisplay(invitation.data().invitedBy),
         orgId: org.id,
         organization: orgs.get(org.id) || org.id,
         source: "invitation",
-      }));
+      })));
     }))).flat();
     const accessRequests: any[] = accessRequestsSnap.docs
       .map(request => ({
@@ -2114,6 +2147,85 @@ app.post("/api/admin/pending-request-control", requireAuth, async (req: any, res
   } catch (error) {
     console.error("Pending request control failed", error);
     return res.status(400).json({success: false, errorMessage: error instanceof Error ? error.message : "Unable to update pending request"});
+  }
+});
+
+app.post("/api/admin/create-invited-user-login", requireAuth, async (req: any, res) => {
+  try {
+    const performedBy = req.user.uid;
+    if (!(await isSuperAdminUser(performedBy))) {
+      return res.status(403).json({success: false, errorMessage: "SuperAdmin access required"});
+    }
+    const orgId = typeof req.body?.orgId === "string" ? req.body.orgId.trim() : "";
+    const invitationId = typeof req.body?.invitationId === "string" ? req.body.invitationId.trim() : "";
+    const temporaryPassword = typeof req.body?.temporaryPassword === "string" ? req.body.temporaryPassword : "";
+    if (!isSafePathSegment(orgId) || !isSafePathSegment(invitationId)) throw new Error("Organization and invitation are required");
+    if (temporaryPassword.length < 6) throw new Error("Temporary password must be at least 6 characters");
+
+    const orgRef = db.doc(`orgs/${orgId}`);
+    const invitationRef = orgRef.collection("invitations").doc(invitationId);
+    const [orgSnap, invitationSnap] = await Promise.all([orgRef.get(), invitationRef.get()]);
+    if (!orgSnap.exists || orgSnap.data()?.status !== "active") throw new Error("Organization must be active");
+    const invitation = invitationSnap.data();
+    if (!invitationSnap.exists || invitation?.orgId !== orgId) throw new Error("Invitation not found");
+    if (invitation?.status !== "pending" || invitation?.superAdminApprovalStatus !== "approved") {
+      throw new Error("Invitation must be approved and awaiting login");
+    }
+    const email = normalizePendingEmail(invitation.email);
+    if (!email) throw new Error("Invitation email is required");
+    const role = validatePendingRole(invitation.role);
+    let authUser = await findAuthUserByEmail(email);
+    const loginCreated = !authUser;
+    if (!authUser) {
+      authUser = await admin.auth().createUser({
+        email,
+        password: temporaryPassword,
+        displayName: invitation.fullName || undefined,
+      });
+    }
+
+    const batch = db.batch();
+    await activatePendingMember({
+      orgId,
+      uid: authUser.uid,
+      email,
+      displayName: invitation.fullName || authUser.displayName || email,
+      role,
+      performedBy,
+      batch,
+      invitationId,
+    });
+    const now = admin.firestore.FieldValue.serverTimestamp();
+    const after = {
+      status: "accepted",
+      acceptedBy: authUser.uid,
+      acceptedAt: now,
+      activatedBy: performedBy,
+      activatedAt: now,
+      updatedAt: now,
+    };
+    batch.set(invitationRef, after, {merge: true});
+    addCleanupActivity(batch, {
+      action: "create_invited_user_login",
+      targetType: "invitation",
+      targetId: invitationId,
+      orgId,
+      userId: authUser.uid,
+      performedBy,
+      before: invitation,
+      after,
+      cleanupPhase: "25C",
+    });
+    await batch.commit();
+    return res.json({
+      success: true,
+      email,
+      displayName: invitation.fullName || authUser.displayName || email,
+      message: loginCreated ? "Login created. Provide the temporary password to the user." : "User already has a login account.",
+    });
+  } catch (error) {
+    console.error("Invited user login creation failed", error);
+    return res.status(400).json({success: false, errorMessage: error instanceof Error ? error.message : "Unable to create invited user login"});
   }
 });
 

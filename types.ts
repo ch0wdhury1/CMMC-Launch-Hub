@@ -622,6 +622,10 @@ export interface OrgInvitation {
   role: OrgInvitationRole;
   status: "pending" | "accepted" | "cancelled";
   invitedBy: string;
+  invitedByUid?: string;
+  invitedByName?: string;
+  invitedByEmail?: string;
+  invitedByDisplay?: string;
   invitedAt: any;
   acceptedBy?: string;
   acceptedAt?: any;

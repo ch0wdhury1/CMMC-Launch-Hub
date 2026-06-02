@@ -10,6 +10,10 @@ export type PendingInvitationRequest = {
   role?: string;
   status?: string;
   invitedBy?: string;
+  invitedByUid?: string;
+  invitedByName?: string;
+  invitedByEmail?: string;
+  invitedByDisplay?: string;
   invitedAt?: unknown;
   superAdminApprovalStatus?: string;
 };
@@ -76,6 +80,17 @@ export async function runPendingRequestControl(params: {
   rejectionReason?: string;
 }): Promise<{awaitingUser?: boolean; activatedUser?: boolean; message?: string}> {
   return authenticatedRequest("/api/admin/pending-request-control", {
+    method: "POST",
+    body: JSON.stringify(params),
+  });
+}
+
+export async function createInvitedUserLogin(params: {
+  orgId: string;
+  invitationId: string;
+  temporaryPassword: string;
+}): Promise<{email: string; displayName: string; message: string}> {
+  return authenticatedRequest("/api/admin/create-invited-user-login", {
     method: "POST",
     body: JSON.stringify(params),
   });
