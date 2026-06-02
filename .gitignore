@@ -26,3 +26,9 @@ dist-ssr
 # Firebase local cache
 .firebase/
 
+# Playwright pilot QA
+.env.e2e
+playwright-report/
+test-results/
+tests/e2e/reports/
+
