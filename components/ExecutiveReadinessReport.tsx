@@ -6,6 +6,7 @@ import {
   buildExecutiveReadinessReport,
   type ExecutiveReadinessReportData,
 } from "../src/executiveReadinessReport";
+import { logActivityEvent } from "../src/activityLog";
 import type { Domain, EvidenceSummary, PoamItem, PracticeRecord } from "../types";
 
 type Props = {
@@ -126,7 +127,18 @@ export const ExecutiveReadinessReport: React.FC<Props> = props => {
     setIsGenerating(true);
     setError("");
     try {
-      setReport(await buildExecutiveReadinessReport(props));
+      const generated = await buildExecutiveReadinessReport(props);
+      setReport(generated);
+      void logActivityEvent({
+        orgId: props.orgId,
+        orgName: generated.organization.legalName,
+        action: "report.generated",
+        targetType: "report",
+        targetId: "executive-readiness",
+        targetLabel: "Executive Readiness Report",
+        summary: "Executive Readiness Report generated",
+        metadata: {assessmentId: props.assessmentId, assessmentLevel: props.assessmentLevel},
+      });
     } catch (reportError) {
       console.error("[executive-readiness-report] generation failed", reportError);
       setError("Unable to generate the executive readiness report.");

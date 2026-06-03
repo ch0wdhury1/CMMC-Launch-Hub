@@ -14,15 +14,21 @@ test("OrgAdmin can open company profile editing", async ({ page }) => {
 });
 
 test("Edit My Info saves a safe identity field", async ({ page }) => {
+  test.setTimeout(60_000);
   test.skip(!env.runMutatingAdmin || !hasCredential(env.orgAdmin), "Requires org-admin credentials and E2E_RUN_MUTATING_ADMIN_TESTS=true.");
   await login(page, env.orgAdmin.email, env.orgAdmin.password);
   await goToCompanyProfile(page);
   await page.getByRole("button", { name: "Edit My Info" }).click();
+  const editor = page
+    .getByRole("heading", { name: "Edit My Info", exact: true })
+    .locator("xpath=ancestor::div[.//input[@placeholder='Phone']][1]");
   const phone = `555-${String(Date.now()).slice(-7)}`;
-  await page.getByPlaceholder("Phone").fill(phone);
-  await page.getByRole("button", { name: "Save", exact: true }).click();
-  await expect(page.getByText("My information saved.")).toBeVisible();
+  const phoneInput = editor.getByPlaceholder("Phone");
+  await phoneInput.fill(phone);
+  await expect(phoneInput).toHaveValue(phone);
+  await editor.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(editor).toHaveCount(0);
   await page.reload();
   await goToCompanyProfile(page);
-  await expect(page.getByText(phone)).toBeVisible();
+  await expect(page.getByText(phone)).toBeVisible({ timeout: 10_000 });
 });

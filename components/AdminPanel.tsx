@@ -8,6 +8,7 @@ import { OrganizationUsers } from "./OrganizationUsers";
 import { OrgInvitations } from "./OrgInvitations";
 import { createTierUpgradeRequest, subscribeOrgUpgradeRequests } from "../src/orgUpgradeRequests";
 import { loadOrgUsers } from "../src/orgUsers";
+import { logActivityEvent } from "../src/activityLog";
 import type { OrgCompanyProfile } from "../types";
 
 const emptyCompanyProfile = (): OrgCompanyProfile => ({
@@ -120,6 +121,17 @@ export const AdminPanel: React.FC = () => {
         companyProfileUpdatedBy: uid,
       }, {merge: true});
       await loadOrg();
+      void logActivityEvent({
+        orgId,
+        orgName: name || legalName,
+        action: "profile.updated",
+        actorUid: uid,
+        targetType: "organization",
+        targetId: orgId,
+        targetLabel: name || legalName,
+        summary: "Company information updated",
+        metadata: {legalName, website},
+      });
       setEditing(false);
       setMessage("Company information saved.");
     } catch (error) {
@@ -133,7 +145,18 @@ export const AdminPanel: React.FC = () => {
     if (!window.confirm("Request upgrade from COMM_L1 to COMM_L2?")) return;
     setRequestingUpgrade(true); setMessage("");
     try {
-      await createTierUpgradeRequest({orgId, requestedByUid: uid, requestedByEmail: String((profile as any)?.email || auth.currentUser?.email || "")});
+      const requestId = await createTierUpgradeRequest({orgId, requestedByUid: uid, requestedByEmail: String((profile as any)?.email || auth.currentUser?.email || "")});
+      void logActivityEvent({
+        orgId,
+        orgName: org?.name || org?.companyProfile?.legalName || orgId,
+        action: "tier.requested",
+        actorUid: uid,
+        targetType: "accessRequest",
+        targetId: requestId,
+        targetLabel: "COMM_L2",
+        summary: "Tier upgrade requested from COMM_L1 to COMM_L2",
+        metadata: {currentTier: "COMM_L1", requestedTier: "COMM_L2"},
+      });
       setMessage("Upgrade request pending.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to request tier upgrade.");

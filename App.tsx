@@ -35,6 +35,7 @@ import { SavedReportsView } from "./components/readiness/SavedReportsView";
 import { SystemSecurityPlan } from "./components/SystemSecurityPlan";
 import { Poam } from "./components/Poam";
 import { PoamReport } from "./components/PoamReport";
+import { ActivityCenter } from "./components/ActivityCenter";
 import { ResponsibilityMatrixPage } from "./components/ResponsibilityMatrixPage";
 import { TrainingModule } from "./components/training/TrainingModule";
 import { NewsUpdates } from "./components/NewsUpdates";
@@ -49,6 +50,7 @@ import { useSspData } from "./hooks/useSspData";
 import { Practice } from "./types";
 import { SPRS_CONTROLS } from "./data/sprsControls";
 import { subscribeActiveOrgMembers, type ActiveOrgMember } from "./src/responsibilityAssignments";
+import { logActivityEvent } from "./src/activityLog";
 
 import { Home, ChevronRight, Key, ShieldAlert, Database, Loader2 } from "lucide-react";
 
@@ -139,6 +141,7 @@ type ViewState =
   | { type: "systemSecurityPlan" }
   | { type: "poam" }
   | { type: "poamReport" }
+  | { type: "activityCenter" }
   | { type: "responsibilityMatrix" }
   | { type: "training" }
   | { type: "newsUpdates" };
@@ -161,6 +164,7 @@ export type ActiveViewInfo =
   | { type: "systemSecurityPlan"; name: "systemSecurityPlan" }
   | { type: "poam"; name: "poam" }
   | { type: "poamReport"; name: "poamReport" }
+  | { type: "activityCenter"; name: "activityCenter" }
   | { type: "responsibilityMatrix"; name: "responsibilityMatrix" }
   | { type: "training"; name: "training" }
   | { type: "newsUpdates"; name: "newsUpdates" };
@@ -232,6 +236,17 @@ function AuthorizedAppGate({ authUser, onLogout }: { authUser: User; onLogout: (
         }
         if (user.roles?.superAdmin === true) {
           if (!cancelled) setAccess({ status: "authorized" });
+          void logActivityEvent({
+            orgId: typeof user.orgId === "string" && user.orgId.trim() ? user.orgId.trim() : "superadmin",
+            orgName: "SuperAdmin",
+            action: "login.succeeded",
+            actorUid: authUser.uid,
+            actorEmail: authUser.email || user.email || "",
+            actorName: user.displayName || user.fullName || authUser.displayName || "",
+            targetType: "auth",
+            targetId: authUser.uid,
+            summary: "SuperAdmin login succeeded",
+          });
           return;
         }
         const orgId = typeof user.orgId === "string" ? user.orgId.trim() : "";
@@ -252,6 +267,20 @@ function AuthorizedAppGate({ authUser, onLogout }: { authUser: User; onLogout: (
           && member?.active === true
           && typeof member?.role === "string"
           && member.role.length > 0;
+        if (allowed) {
+          void logActivityEvent({
+            orgId,
+            orgName: org?.companyProfile?.legalName || org?.name || orgId,
+            action: "login.succeeded",
+            actorUid: authUser.uid,
+            actorEmail: authUser.email || user.email || "",
+            actorName: user.displayName || user.fullName || member?.displayName || member?.fullName || authUser.displayName || "",
+            targetType: "auth",
+            targetId: authUser.uid,
+            summary: "Login succeeded",
+            metadata: { role: member.role },
+          });
+        }
         if (!cancelled) setAccess(allowed
           ? { status: "authorized" }
           : { status: "disabled", message: "Your account is inactive or disabled. Contact your organization administrator." });
@@ -292,18 +321,22 @@ function AuthedApp({ onLogout }: { onLogout: () => void }) {
   const [orgTier, setOrgTier] = useState<string | null>(null);
   const [orgStatus, setOrgStatus] = useState<string | null>(null);
   const [orgLoading, setOrgLoading] = useState(false);
+  const profileOrgId = String((profile as any)?.orgId || "");
+  const profileUserStatus = String((profile as any)?.status || "");
+  const profileRoles = (profile as any)?.roles || {};
+  const profileOrgRole = String(profileRoles?.orgRole || "");
+  const profileIsSuperAdmin = profileRoles?.superAdmin === true;
 
   useEffect(() => {
-    const orgId = (profile as any)?.orgId; // user doc has top-level orgId
+    const orgId = profileOrgId; // user doc has top-level orgId
 
     // IMPORTANT:
     // Pending/unapproved users may have an orgId but do NOT have permission to read /orgs/{orgId} yet.
     // Avoid noisy "Missing or insufficient permissions" errors by only loading org when user is active
     // and has an org role (or is super admin).
-    const userStatus = (profile as any)?.status; // "active" | "pending" | etc
-    const rolesAny: any = (profile as any)?.roles || {};
-    const isSA = rolesAny?.superAdmin === true;
-    const hasOrgRole = !!rolesAny?.orgRole;
+    const userStatus = profileUserStatus; // "active" | "pending" | etc
+    const isSA = profileIsSuperAdmin;
+    const hasOrgRole = !!profileOrgRole;
 
     if (!orgId || (!isSA && !hasOrgRole) || (userStatus && userStatus !== "active")) {
       setOrgTier(null);
@@ -342,7 +375,7 @@ function AuthedApp({ onLogout }: { onLogout: () => void }) {
     return () => {
       cancelled = true;
     };
-  }, [profile]);
+  }, [profileIsSuperAdmin, profileOrgId, profileOrgRole, profileUserStatus]);
 
   const ent = profile?.entitlements;
 
@@ -705,6 +738,7 @@ if (view.type === "domain") {
     if (view.type === "poam") return { type: "poam", name: "poam" };
     if (view.type === "poamReport") return { type: "poamReport", name: "poamReport" };
     if (view.type === "responsibilityMatrix") return { type: "responsibilityMatrix", name: "responsibilityMatrix" };
+    if (view.type === "activityCenter") return { type: "activityCenter", name: "activityCenter" };
     if (view.type === "training") return { type: "training", name: "training" };
     if (view.type === "newsUpdates") return { type: "newsUpdates", name: "newsUpdates" };
     return { type: "dashboard", name: "dashboard" };
@@ -754,6 +788,7 @@ if (view.type === "domain") {
     if (view.type === "poam") return "Remediation (POA&M)";
     if (view.type === "poamReport") return "POA&M Report";
     if (view.type === "responsibilityMatrix") return "Responsibility Matrix";
+    if (view.type === "activityCenter") return "Activity Center";
     if (view.type === "training") return "Training Modules";
     if (view.type === "newsUpdates") return "News Updates";
     return "CMMC Launch Hub";
@@ -810,7 +845,9 @@ if (view.type === "domain") {
           "readinessReports",
           "systemSecurityPlan",
           "poam",
+          "poamReport",
           "responsibilityMatrix",
+          "activityCenter",
           "training",
           "newsUpdates",
         ].includes(view.type) && (
@@ -1097,6 +1134,15 @@ case "domain": {
           />
         );
 
+      case "activityCenter":
+        return (
+          <ActivityCenter
+            orgId={currentOrgId}
+            isSuperAdmin={isSuperAdmin}
+            canView={isSuperAdmin || orgRole === "orgOwner" || isOrgAdmin}
+          />
+        );
+
       case "training":
         return <TrainingModule />;
 
@@ -1162,6 +1208,8 @@ onDiagnosticsClick={isSuperAdmin ? () => setIsDiagnosticsOpen(true) : undefined}
           onEvidenceLibraryClick={() => setView({ type: "evidenceLibrary" })}
           onOrgInvitationsClick={() => setView({ type: "orgInvitations" })}
           canManageInvitations={isSuperAdmin || orgRole === "orgOwner" || isOrgAdmin}
+          onActivityCenterClick={() => setView({ type: "activityCenter" })}
+          canViewActivityCenter={isSuperAdmin || orgRole === "orgOwner" || isOrgAdmin}
           onSecurityAnalyzerClick={() => setView({ type: "readinessAnalyzer" })}
           onReadinessReportsClick={() => setView({ type: "readinessReports" })}
           onSystemSecurityPlanClick={() => setView({ type: "systemSecurityPlan" })}

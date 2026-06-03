@@ -12,7 +12,7 @@ for (const [label, credential] of Object.entries({ contributor: env.contributor,
     await goToCompanyProfile(page);
     await expect(page.getByRole("button", { name: "Edit My Info" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Save Profile" })).toHaveCount(0);
-    await expect(page.getByText("Organization Users")).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: /^Users for / })).toHaveCount(0);
     await logout(page);
   });
 }
@@ -26,7 +26,29 @@ test("OrgAdmin sees app shell, Admin, and Profile", async ({ page }) => {
 });
 
 test("Inactive or disabled user is blocked", async ({ page }) => {
-  test.skip(!hasCredential(env.inactive), "Provide optional E2E_INACTIVE credentials.");
-  await login(page, env.inactive.email, env.inactive.password);
-  await expectBlockedOrPending(page);
+  test.skip(!env.runMutatingAdmin || !hasCredential(env.orgAdmin) || !hasCredential(env.viewer), "Requires OrgAdmin and viewer credentials plus E2E_RUN_MUTATING_ADMIN_TESTS=true.");
+
+  const setViewerStatus = async (status: "active" | "inactive") => {
+    const logoutButton = page.getByRole("button", { name: "Logout", exact: true });
+    if (await logoutButton.isVisible().catch(() => false)) {
+      await logout(page);
+    }
+    await login(page, env.orgAdmin.email, env.orgAdmin.password);
+    await goToCompanyProfile(page);
+    const row = page.getByRole("row", { name: new RegExp(env.viewer.email, "i") });
+    await row.locator("select").first().selectOption(status);
+    page.once("dialog", dialog => dialog.accept());
+    await row.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(page.getByText("Organization user updated.", { exact: true })).toBeVisible();
+    await logout(page);
+  };
+
+  await setViewerStatus("inactive");
+  try {
+    await login(page, env.viewer.email, env.viewer.password);
+    await expectBlockedOrPending(page);
+    await logout(page);
+  } finally {
+    await setViewerStatus("active");
+  }
 });

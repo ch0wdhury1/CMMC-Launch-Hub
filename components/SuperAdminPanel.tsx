@@ -17,6 +17,7 @@ import {
 import { db } from "../src/firebase";
 import { loadCleanupControlsInventory, runCleanupControlAction, type CleanupOrgSummary } from "../src/cleanupControls";
 import { useUserProfile } from "../src/useUserProfile";
+import { logActivityEvent } from "../src/activityLog";
 import { OrganizationUsers } from "./OrganizationUsers";
 import { SuperAdminPendingRequests } from "./SuperAdminPendingRequests";
 
@@ -200,6 +201,7 @@ const getOrgDefaultsForTier = (tier: string) => {
     // Deterministic orgId to ensure idempotency across retries
     const deterministicOrgId =
       safeStr((req as any).orgId).trim() || `org_${slugify(orgName) || "new"}_${req.id.slice(0, 6)}`;
+    let approvedOrgId = deterministicOrgId;
 
     const now = new Date();
     const start = Timestamp.fromDate(now);
@@ -229,6 +231,7 @@ const getOrgDefaultsForTier = (tier: string) => {
       if (reqData?.status !== "pending") throw new Error(`Request already ${String(reqData?.status || "processed")}`);
 
       const orgId = safeStr(reqData?.orgId).trim() || deterministicOrgId;
+      approvedOrgId = orgId;
 
       const orgRef = doc(db, "orgs", orgId);
       const userRef = doc(db, "users", ownerUid);
@@ -324,6 +327,19 @@ const getOrgDefaultsForTier = (tier: string) => {
       });
     });
 
+    void logActivityEvent({
+      orgId: approvedOrgId,
+      orgName,
+      action: "registration.approved",
+      actorUid: (profile as any)?.uid || "",
+      actorEmail: (profile as any)?.email || "",
+      targetType: "accessRequest",
+      targetId: req.id,
+      targetLabel: primaryEmail || orgName,
+      summary: `Registration approved for ${orgName}`,
+      metadata: {requestedTier, ownerUid, primaryEmail},
+    });
+
 
 
 
@@ -403,6 +419,20 @@ setSaveMsg(`✅ Denied: ${req.primaryContactEmail || req.email || req.id}`);
       await runCleanupControlAction({action: "update_org_admin_fields", orgId: org.id, cleanupPhase: "23C-UI", updates: draft});
       setOrgs(current => current.map(item => item.id === org.id ? {...item, ...draft} : item));
       await refreshOrgAdminMetadata();
+      if (draft.tier !== safeStr(org.tier)) {
+        void logActivityEvent({
+          orgId: org.id,
+          orgName: org.name || org.id,
+          action: "tier.approved",
+          actorUid: (profile as any)?.uid || "",
+          actorEmail: (profile as any)?.email || "",
+          targetType: "organization",
+          targetId: org.id,
+          targetLabel: org.name || org.id,
+          summary: `Organization tier updated to ${draft.tier}`,
+          metadata: {previousTier: org.tier || "", nextTier: draft.tier},
+        });
+      }
       setSaveMsg(`Saved organization: ${org.id}`);
     } catch (error: any) {
       setSaveMsg(`Save failed: ${error?.message || error}`);

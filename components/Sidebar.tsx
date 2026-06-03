@@ -41,6 +41,8 @@ type Props = {
   onEvidenceLibraryClick: () => void;
   onOrgInvitationsClick: () => void;
   canManageInvitations: boolean;
+  onActivityCenterClick: () => void;
+  canViewActivityCenter: boolean;
   onSecurityAnalyzerClick: () => void;
   onReadinessReportsClick: () => void;
   onSystemSecurityPlanClick: () => void;
@@ -103,6 +105,8 @@ export function Sidebar(props: Props) {
     onEvidenceLibraryClick,
     onOrgInvitationsClick,
     canManageInvitations,
+    onActivityCenterClick,
+    canViewActivityCenter,
     onSecurityAnalyzerClick,
     onReadinessReportsClick,
     onSystemSecurityPlanClick,
@@ -497,6 +501,15 @@ useEffect(() => {
                 onClick={onOrgInvitationsClick}
               >
                 <span className="ml-7">Organization Invitations</span>
+              </button>
+            )}
+
+            {canViewActivityCenter && (
+              <button
+                className={navClass(activeViewInfo?.type === "activityCenter")}
+                onClick={onActivityCenterClick}
+              >
+                <span className="ml-7">Activity Center</span>
               </button>
             )}
           </div>

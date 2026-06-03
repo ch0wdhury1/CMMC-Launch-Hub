@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Loader2, X } from "lucide-react";
 import { loadOrgUsers, removeUserFromOrg, repairOrgMemberIdentities, repairUserAccessRecord, updateOrgMember, type ManagedOrgUser } from "../src/orgUsers";
+import { logActivityEvent } from "../src/activityLog";
 
 type Props = {
   orgId: string;
@@ -51,6 +52,28 @@ export const OrganizationUsers: React.FC<Props> = ({orgId, orgName, isSuperAdmin
     setMessage("");
     try {
       await updateOrgMember(orgId, user.uid, draft.role, draft.status);
+      if (draft.status === "active" && user.membership.status !== "active") {
+        void logActivityEvent({
+          orgId,
+          orgName,
+          action: "user.activated",
+          targetType: "user",
+          targetId: user.uid,
+          targetLabel: user.email || user.fullName || user.displayName || user.uid,
+          summary: `User activated: ${user.email || user.uid}`,
+          metadata: {role: draft.role, previousStatus: user.membership.status || ""},
+        });
+      }
+      void logActivityEvent({
+        orgId,
+        orgName,
+        action: "user.updated",
+        targetType: "user",
+        targetId: user.uid,
+        targetLabel: user.email || user.fullName || user.displayName || user.uid,
+        summary: `Organization user updated: ${user.email || user.uid}`,
+        metadata: {role: draft.role, status: draft.status, previousRole: user.membership.role || "", previousStatus: user.membership.status || ""},
+      });
       await refresh();
       setMessage("Organization user updated.");
     } catch (error) {
@@ -69,6 +92,16 @@ export const OrganizationUsers: React.FC<Props> = ({orgId, orgName, isSuperAdmin
     setMessage("");
     try {
       await removeUserFromOrg(orgId, user.uid, allowLastOwnerRemoval);
+      void logActivityEvent({
+        orgId,
+        orgName,
+        action: "user.removed",
+        targetType: "user",
+        targetId: user.uid,
+        targetLabel: user.email || user.fullName || user.displayName || user.uid,
+        summary: `User removed from organization: ${user.email || user.uid}`,
+        metadata: {role: user.membership.role || "", status: user.membership.status || ""},
+      });
       await refresh();
       setMessage("User removed from organization. The login account was not deleted.");
     } catch (error) {

@@ -110,12 +110,23 @@ const buildRecommendations = (
   return recommendations;
 };
 
+const resolveOrganizationName = (orgData: any, orgId: string): string =>
+  String(
+    orgData?.companyProfile?.legalName
+    || orgData?.companyProfile?.companyName
+    || orgData?.legalName
+    || orgData?.name
+    || orgData?.displayName
+    || orgId
+  ).trim();
+
 async function loadSupplementaryReportData(
   orgId: string,
   assessmentId: string,
   domains: Domain[]
 ): Promise<{
   companyProfile?: OrgCompanyProfile;
+  orgName?: string;
   libraryCount: number;
   reusedEvidenceCount: number;
   archivedLibraryCount: number;
@@ -142,9 +153,11 @@ async function loadSupplementaryReportData(
     ...refCollections.map(refCollection => getDocs(refCollection)),
   ]);
 
+  const orgData = orgSnapshot.data();
   const libraryItems = librarySnapshot.docs.map(item => item.data() as { status?: string });
   return {
-    companyProfile: orgSnapshot.data()?.companyProfile as OrgCompanyProfile | undefined,
+    companyProfile: orgData?.companyProfile as OrgCompanyProfile | undefined,
+    orgName: resolveOrganizationName(orgData, orgId),
     libraryCount: libraryItems.length,
     archivedLibraryCount: libraryItems.filter(item => item.status === "archived").length,
     reusedEvidenceCount: evidenceRefSnapshots.reduce(
@@ -192,7 +205,7 @@ export async function buildExecutiveReadinessReport({
   return {
     generatedAt: new Date(),
     organization: {
-      legalName: supplementary.companyProfile?.legalName || "Organization name not provided",
+      legalName: supplementary.companyProfile?.legalName || supplementary.orgName || "Organization name not provided",
       cageCode: supplementary.companyProfile?.cageCode || "Not provided",
       uei: supplementary.companyProfile?.uei || "Not provided",
       assessmentLevel: supplementary.companyProfile?.cmmc?.assessmentLevel || assessmentLevel,

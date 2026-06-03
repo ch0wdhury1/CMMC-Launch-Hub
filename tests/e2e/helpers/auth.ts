@@ -13,7 +13,7 @@ export async function logout(page: Page) {
 }
 
 export async function expectBlockedOrPending(page: Page) {
-  await expect(page.getByText(/pending approval|inactive or disabled|access disabled/i)).toBeVisible();
+  await expect(page.getByRole("heading", { name: /pending approval|access disabled/i })).toBeVisible();
   await expect(page.getByRole("button", { name: "Logout", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Profile", exact: true })).toHaveCount(0);
 }

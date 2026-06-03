@@ -8,6 +8,7 @@ import {
   ORG_INVITATION_ROLES,
   subscribeOrgInvitations,
 } from "../src/orgInvitations";
+import { logActivityEvent } from "../src/activityLog";
 import type { OrgInvitation, OrgInvitationRole } from "../types";
 
 type Props = {
@@ -65,6 +66,15 @@ export const OrgInvitations: React.FC<Props> = ({ orgId, uid, role, isSuperAdmin
     setMessage("");
     try {
       await createOrgInvitation({ orgId, email, role: inviteRole, invitedBy: uid, fullName });
+      void logActivityEvent({
+        orgId,
+        action: "invitation.created",
+        actorUid: uid,
+        targetType: "invitation",
+        targetLabel: email,
+        summary: `Invitation created for ${email}`,
+        metadata: {role: inviteRole, fullName},
+      });
       setFullName("");
       setEmail("");
       setInviteRole("contributor");
@@ -85,6 +95,16 @@ export const OrgInvitations: React.FC<Props> = ({ orgId, uid, role, isSuperAdmin
     setMessage("");
     try {
       await cancelOrgInvitation(orgId, invitation.id, uid);
+      void logActivityEvent({
+        orgId,
+        action: "invitation.cancelled",
+        actorUid: uid,
+        targetType: "invitation",
+        targetId: invitation.id,
+        targetLabel: invitation.email,
+        summary: `Invitation cancelled for ${invitation.email}`,
+        metadata: {role: invitation.role},
+      });
       setMessage("Invitation cancelled.");
     } catch (error) {
       console.error("[org-invitations] cancellation failed", error);

@@ -54,6 +54,7 @@ import {
 } from "../src/assessmentFirestore";
 import { uploadEvidenceFile } from "../src/evidenceStorage";
 import { requestEvidenceOcr } from "../src/evidenceOcr";
+import { logActivityEvent } from "../src/activityLog";
 
 import { generateReadinessReport } from '../services/geminiService';
 import { READINESS_QUESTIONS } from '../data/readinessQuestions';
@@ -792,6 +793,17 @@ export const useCmmcData = (options: UseCmmcDataOptions = {}) => {
         action: entry.action,
         error,
       });
+    });
+    void logActivityEvent({
+      orgId,
+      action: entry.action,
+      actorUid: uid,
+      actorEmail,
+      targetType: entry.targetType,
+      targetId: entry.targetId,
+      targetLabel: entry.objectiveId || entry.practiceId || entry.targetId,
+      summary: entry.summary,
+      metadata: {assessmentId, practiceId: entry.practiceId || "", objectiveId: entry.objectiveId || "", ...entry.metadata},
     });
   }, [actorEmail, firestoreEnabled, orgId, requestedAssessmentLevel, uid]);
 

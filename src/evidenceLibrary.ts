@@ -10,6 +10,7 @@ import {
 } from "firebase/firestore";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { db, storage } from "./firebase";
+import { logActivityEvent } from "./activityLog";
 import type { EvidenceLibraryItem } from "../types";
 
 export const EVIDENCE_LIBRARY_CATEGORIES = [
@@ -70,6 +71,16 @@ export async function uploadEvidenceLibraryItem(params: {
     uploadedAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   }, { merge: true });
+  void logActivityEvent({
+    orgId: params.orgId,
+    action: "evidence.uploaded",
+    actorUid: params.uploadedBy,
+    targetType: "evidence",
+    targetId: params.evidenceId,
+    targetLabel: params.file.name,
+    summary: `Evidence uploaded: ${params.file.name}`,
+    metadata: {category: params.category, fileSize: params.file.size, source: "evidenceLibrary"},
+  });
 }
 
 export async function setEvidenceLibraryItemStatus(
@@ -84,4 +95,16 @@ export async function setEvidenceLibraryItemStatus(
     archivedBy: status === "archived" ? updatedBy : null,
     updatedAt: serverTimestamp(),
   }, { merge: true });
+  if (status === "archived") {
+    void logActivityEvent({
+      orgId,
+      action: "evidence.archived",
+      actorUid: updatedBy,
+      targetType: "evidence",
+      targetId: evidenceId,
+      targetLabel: evidenceId,
+      summary: `Evidence archived: ${evidenceId}`,
+      metadata: {source: "evidenceLibrary"},
+    });
+  }
 }

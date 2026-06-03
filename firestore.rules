@@ -172,6 +172,35 @@ function canWriteAssessmentShell(orgId) {
     );
 }
 
+function canReadActivityEvents(orgId) {
+  return isSuperAdmin()
+    || (
+      isActiveOrgMember(orgId)
+      && orgMemberDoc(orgId).role in ["orgOwner", "orgAdmin"]
+    );
+}
+
+function validActivityEventCreate() {
+  let orgId = request.resource.data.orgId;
+  return isSignedIn()
+    && request.resource.data.keys().hasOnly([
+      "orgId", "orgName", "action", "actorUid", "actorEmail", "actorName",
+      "targetType", "targetId", "targetLabel", "summary", "metadata", "createdAt"
+    ])
+    && request.resource.data.actorUid == request.auth.uid
+    && request.resource.data.action is string
+    && request.resource.data.summary is string
+    && request.resource.data.createdAt == request.time
+    && orgId is string
+    && (
+      isSuperAdmin()
+      || (
+        isActiveOrgMember(orgId)
+        && myOrgId() == orgId
+      )
+    );
+}
+
 
 
 
@@ -194,6 +223,12 @@ function canWriteAssessmentShell(orgId) {
     // Firestore document paths require the immutable cleanup entries subcollection.
     match /system/cleanupActivity/entries/{activityId} {
       allow read, create: if isSuperAdmin();
+      allow update, delete: if false;
+    }
+
+    match /activityEvents/{eventId} {
+      allow read: if canReadActivityEvents(resource.data.orgId);
+      allow create: if validActivityEventCreate();
       allow update, delete: if false;
     }
 

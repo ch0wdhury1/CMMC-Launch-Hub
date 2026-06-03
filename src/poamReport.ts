@@ -120,14 +120,26 @@ const buildRecommendations = (details: PoamReportItem[], now: Date): string[] =>
   return recommendations;
 };
 
+const resolveOrganizationName = (orgData: any, orgId: string): string =>
+  String(
+    orgData?.companyProfile?.legalName
+    || orgData?.companyProfile?.companyName
+    || orgData?.legalName
+    || orgData?.name
+    || orgData?.displayName
+    || orgId
+  ).trim();
+
 async function loadReportSourceData(orgId: string, assessmentId: string) {
   const orgRef = doc(db, "orgs", orgId);
   const [orgSnapshot, poamSnapshot] = await Promise.all([
     getDoc(orgRef),
     getDocs(collection(orgRef, "assessments", assessmentId, "poamItems")),
   ]);
+  const orgData = orgSnapshot.data();
   return {
-    companyProfile: orgSnapshot.data()?.companyProfile as OrgCompanyProfile | undefined,
+    companyProfile: orgData?.companyProfile as OrgCompanyProfile | undefined,
+    orgName: resolveOrganizationName(orgData, orgId),
     poamItems: poamSnapshot.docs.map(item => ({
       poamId: item.id,
       id: item.data()?.id || item.data()?.poamId || item.id,
@@ -143,11 +155,13 @@ export async function buildPoamReport({
   poamItems,
 }: BuildPoamReportParams): Promise<PoamReportData> {
   let companyProfile: OrgCompanyProfile | undefined;
+  let orgName: string | undefined;
   let firestoreItems: FirestorePoamItem[] = [];
   if (orgId) {
     try {
       const source = await loadReportSourceData(orgId, assessmentId);
       companyProfile = source.companyProfile;
+      orgName = source.orgName;
       firestoreItems = source.poamItems;
     } catch (error) {
       console.warn("[poam-report] Firestore enrichment unavailable; using loaded assessment state", error);
@@ -180,7 +194,7 @@ export async function buildPoamReport({
   return {
     generatedAt: now,
     organization: {
-      legalName: companyProfile?.legalName || "Organization name not provided",
+      legalName: companyProfile?.legalName || orgName || "Organization name not provided",
       cageCode: companyProfile?.cageCode || "Not provided",
       uei: companyProfile?.uei || "Not provided",
       assessmentLevel: companyProfile?.cmmc?.assessmentLevel || assessmentLevel,

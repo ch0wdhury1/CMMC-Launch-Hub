@@ -128,23 +128,26 @@ export const EvidenceLibrary: React.FC<EvidenceLibraryProps> = ({ orgId, uid, ro
         <p className="text-sm text-gray-500 mt-1">Organization-level reusable documentation repository.</p>
       </div>
 
-      <div className="bg-white border rounded-lg p-4 shadow-sm space-y-3">
-        <h3 className="font-semibold text-gray-800">Upload Evidence</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <input type="file" onChange={event => setFile(event.target.files?.[0] || null)} disabled={!canManage || isUploading} className="w-full border rounded p-2 text-sm" />
-          <select value={category} onChange={event => setCategory(event.target.value)} disabled={!canManage || isUploading} className="w-full border rounded p-2 text-sm bg-white">
-            {EVIDENCE_LIBRARY_CATEGORIES.map(option => <option key={option}>{option}</option>)}
-          </select>
-          <input value={description} onChange={event => setDescription(event.target.value)} disabled={!canManage || isUploading} placeholder="Description" className="w-full border rounded p-2 text-sm" />
-          <input value={tagsText} onChange={event => setTagsText(event.target.value)} disabled={!canManage || isUploading} placeholder="Tags, comma-separated" className="w-full border rounded p-2 text-sm" />
+      {canManage ? (
+        <div className="bg-white border rounded-lg p-4 shadow-sm space-y-3">
+          <h3 className="font-semibold text-gray-800">Upload Evidence</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <input type="file" onChange={event => setFile(event.target.files?.[0] || null)} disabled={isUploading} className="w-full border rounded p-2 text-sm" />
+            <select value={category} onChange={event => setCategory(event.target.value)} disabled={isUploading} className="w-full border rounded p-2 text-sm bg-white">
+              {EVIDENCE_LIBRARY_CATEGORIES.map(option => <option key={option}>{option}</option>)}
+            </select>
+            <input value={description} onChange={event => setDescription(event.target.value)} disabled={isUploading} placeholder="Description" className="w-full border rounded p-2 text-sm" />
+            <input value={tagsText} onChange={event => setTagsText(event.target.value)} disabled={isUploading} placeholder="Tags, comma-separated" className="w-full border rounded p-2 text-sm" />
+          </div>
+          <button type="button" onClick={handleUpload} disabled={!file || isUploading} className="flex items-center px-3 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50">
+            {isUploading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
+            {isUploading ? "Uploading..." : "Upload"}
+          </button>
+          {message && <p className="text-xs text-gray-600">{message}</p>}
         </div>
-        <button type="button" onClick={handleUpload} disabled={!canManage || !file || isUploading} className="flex items-center px-3 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50">
-          {isUploading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
-          {isUploading ? "Uploading..." : "Upload"}
-        </button>
-        {!canManage && <p className="text-xs text-gray-500">Your role has read-only access to the Evidence Library.</p>}
-        {message && <p className="text-xs text-gray-600">{message}</p>}
-      </div>
+      ) : (
+        <p className="text-xs text-gray-500">Your role has read-only access to the Evidence Library.</p>
+      )}
 
       <div className="bg-white border rounded-lg p-4 shadow-sm space-y-3">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -170,9 +173,11 @@ export const EvidenceLibrary: React.FC<EvidenceLibraryProps> = ({ orgId, uid, ro
                   <td><div className="flex items-center gap-1">
                     <button type="button" disabled={!item.downloadURL} onClick={() => item.downloadURL && window.open(item.downloadURL, "_blank", "noopener,noreferrer")} title="View file" className="p-1 text-blue-700 disabled:text-gray-300"><ExternalLink className="h-4 w-4" /></button>
                     <button type="button" disabled={!item.downloadURL} onClick={() => downloadItem(item)} title="Download file" className="p-1 text-blue-700 disabled:text-gray-300"><Download className="h-4 w-4" /></button>
-                    <button type="button" disabled={!canManage || pendingStatusId === item.id} onClick={() => handleStatusChange(item)} title={item.status === "archived" ? "Unarchive item" : "Archive item"} className="p-1 text-gray-600 disabled:text-gray-300">
-                      {pendingStatusId === item.id ? <Loader2 className="h-4 w-4 animate-spin" /> : item.status === "archived" ? <RotateCcw className="h-4 w-4" /> : <Archive className="h-4 w-4" />}
-                    </button>
+                    {canManage && (
+                      <button type="button" disabled={pendingStatusId === item.id} onClick={() => handleStatusChange(item)} title={item.status === "archived" ? "Unarchive item" : "Archive item"} className="p-1 text-gray-600 disabled:text-gray-300">
+                        {pendingStatusId === item.id ? <Loader2 className="h-4 w-4 animate-spin" /> : item.status === "archived" ? <RotateCcw className="h-4 w-4" /> : <Archive className="h-4 w-4" />}
+                      </button>
+                    )}
                   </div></td>
                 </tr>
               ))}

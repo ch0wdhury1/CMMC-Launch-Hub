@@ -8,6 +8,7 @@ import {
   type PendingRequestControlAction,
   type PendingRequestInventory,
 } from "../src/pendingRequestControls";
+import { logActivityEvent } from "../src/activityLog";
 import { Loader2, X } from "lucide-react";
 
 type Props = {
@@ -18,6 +19,15 @@ const formatDate = (value: any) => {
   if (!value) return "Not provided";
   const date = value?.toDate ? value.toDate() : value?._seconds ? new Date(value._seconds * 1000) : new Date(value);
   return Number.isNaN(date.getTime()) ? "Not provided" : date.toLocaleDateString();
+};
+
+const auditActionForPendingAction = (action: PendingRequestControlAction) => {
+  if (action === "approve_invitation_request") return "invitation.approved";
+  if (action === "cancel_invitation_request") return "invitation.cancelled";
+  if (action === "approve_add_user_request") return "user.activated";
+  if (action === "approve_upgrade_request") return "tier.approved";
+  if (action === "reject_upgrade_request") return "tier.rejected";
+  return "";
 };
 
 export const SuperAdminPendingRequests: React.FC<Props> = ({onCountsChange}) => {
@@ -63,6 +73,9 @@ export const SuperAdminPendingRequests: React.FC<Props> = ({onCountsChange}) => 
     action: PendingRequestControlAction;
     confirmation: string;
     promptForReason?: boolean;
+    targetLabel?: string;
+    organization?: string;
+    metadata?: Record<string, any>;
   }) => {
     if (!window.confirm(params.confirmation)) return;
     const rejectionReason = params.promptForReason ? window.prompt("Reason, optional") || "" : "";
@@ -76,6 +89,19 @@ export const SuperAdminPendingRequests: React.FC<Props> = ({onCountsChange}) => 
         targetId: params.id,
         rejectionReason,
       });
+      const auditAction = auditActionForPendingAction(params.action);
+      if (auditAction) {
+        void logActivityEvent({
+          orgId: params.orgId,
+          orgName: params.organization,
+          action: auditAction,
+          targetType: "pendingRequest",
+          targetId: params.id,
+          targetLabel: params.targetLabel,
+          summary: result.message || "Pending request updated.",
+          metadata: {pendingAction: params.action, rejectionReason, ...params.metadata},
+        });
+      }
       setMessage(result.message || "Pending request updated.");
       await refresh();
     } catch (actionError) {
@@ -106,6 +132,16 @@ export const SuperAdminPendingRequests: React.FC<Props> = ({onCountsChange}) => 
     setMessage("");
     try {
       const result = await createInvitedUserLogin({orgId: loginInvitation.orgId, invitationId: loginInvitation.id, temporaryPassword});
+      void logActivityEvent({
+        orgId: loginInvitation.orgId,
+        orgName: loginInvitation.organization,
+        action: "invitation.login_created",
+        targetType: "invitation",
+        targetId: loginInvitation.id,
+        targetLabel: loginInvitation.email || loginInvitation.fullName || loginInvitation.id,
+        summary: `Login created for invited user ${loginInvitation.email || loginInvitation.id}`,
+        metadata: {role: loginInvitation.role || ""},
+      });
       setMessage(result.message);
       closeLoginModal();
       await refresh();
@@ -141,9 +177,9 @@ export const SuperAdminPendingRequests: React.FC<Props> = ({onCountsChange}) => 
             <td className="p-3">{request.source}</td>
             <td className="p-3">{statusDisplay}</td>
             <td className="p-3"><div className="flex gap-2">
-              {isPending && <button type="button" disabled={busyId === request.id || approvedWaiting} onClick={() => perform({id: request.id, orgId: request.orgId, action: invitation ? "approve_invitation_request" : "approve_add_user_request", confirmation: "Approve this add-user request? Existing user access will be activated when safe."})} className="rounded bg-emerald-600 px-2 py-1 text-xs font-semibold text-white disabled:opacity-40">Approve</button>}
+              {isPending && <button type="button" disabled={busyId === request.id || approvedWaiting} onClick={() => perform({id: request.id, orgId: request.orgId, action: invitation ? "approve_invitation_request" : "approve_add_user_request", confirmation: "Approve this add-user request? Existing user access will be activated when safe.", targetLabel: request.email || request.fullName || request.id, organization: request.organization, metadata: {role: invitation ? request.role : request.requestedRole || ""}})} className="rounded bg-emerald-600 px-2 py-1 text-xs font-semibold text-white disabled:opacity-40">Approve</button>}
               {invitation && approvedWaiting && <button type="button" disabled={busyId === request.id} onClick={() => setLoginInvitation(request)} className="rounded bg-blue-700 px-2 py-1 text-xs font-semibold text-white disabled:opacity-40">Create Login</button>}
-              {isPending && <button type="button" disabled={busyId === request.id} onClick={() => perform({id: request.id, orgId: request.orgId, action: invitation ? "cancel_invitation_request" : "reject_add_user_request", confirmation: invitation ? "Cancel this invitation?" : "Reject this add-user request?", promptForReason: true})} className="rounded bg-rose-600 px-2 py-1 text-xs font-semibold text-white disabled:opacity-40">{invitation ? "Cancel" : "Reject"}</button>}
+              {isPending && <button type="button" disabled={busyId === request.id} onClick={() => perform({id: request.id, orgId: request.orgId, action: invitation ? "cancel_invitation_request" : "reject_add_user_request", confirmation: invitation ? "Cancel this invitation?" : "Reject this add-user request?", promptForReason: true, targetLabel: request.email || request.fullName || request.id, organization: request.organization, metadata: {role: invitation ? request.role : request.requestedRole || ""}})} className="rounded bg-rose-600 px-2 py-1 text-xs font-semibold text-white disabled:opacity-40">{invitation ? "Cancel" : "Reject"}</button>}
             </div></td>
           </tr>;
         })}</tbody>
@@ -156,7 +192,7 @@ export const SuperAdminPendingRequests: React.FC<Props> = ({onCountsChange}) => 
         <thead className="bg-gray-50 text-gray-600"><tr><th className="p-3 text-left">Organization</th><th className="p-3 text-left">Current Tier</th><th className="p-3 text-left">Requested Tier</th><th className="p-3 text-left">Requested By</th><th className="p-3 text-left">Date</th><th className="p-3 text-left">Status</th><th className="p-3 text-left">Actions</th></tr></thead>
         <tbody>{upgradeRequests.map(request => <tr key={request.id} className="border-t">
           <td className="p-3">{request.organization || request.orgId}</td><td className="p-3">{request.currentTier || "Not provided"}</td><td className="p-3">{request.requestedTier || "Not provided"}</td><td className="p-3">{request.requestedByEmail || request.requestedByUid || "Not provided"}</td><td className="p-3">{formatDate(request.createdAt)}</td><td className="p-3">{request.status || "pending"}</td>
-          <td className="p-3"><div className="flex gap-2"><button type="button" disabled={busyId === request.id} onClick={() => perform({id: request.id, orgId: request.orgId, action: "approve_upgrade_request", confirmation: `Approve upgrade from ${request.currentTier || "current tier"} to ${request.requestedTier || "requested tier"}?`})} className="rounded bg-emerald-600 px-2 py-1 text-xs font-semibold text-white disabled:opacity-40">Approve</button><button type="button" disabled={busyId === request.id} onClick={() => perform({id: request.id, orgId: request.orgId, action: "reject_upgrade_request", confirmation: "Reject this tier upgrade request?", promptForReason: true})} className="rounded bg-rose-600 px-2 py-1 text-xs font-semibold text-white disabled:opacity-40">Reject</button></div></td>
+          <td className="p-3"><div className="flex gap-2"><button type="button" disabled={busyId === request.id} onClick={() => perform({id: request.id, orgId: request.orgId, action: "approve_upgrade_request", confirmation: `Approve upgrade from ${request.currentTier || "current tier"} to ${request.requestedTier || "requested tier"}?`, targetLabel: request.organization || request.orgId, organization: request.organization, metadata: {currentTier: request.currentTier || "", requestedTier: request.requestedTier || ""}})} className="rounded bg-emerald-600 px-2 py-1 text-xs font-semibold text-white disabled:opacity-40">Approve</button><button type="button" disabled={busyId === request.id} onClick={() => perform({id: request.id, orgId: request.orgId, action: "reject_upgrade_request", confirmation: "Reject this tier upgrade request?", promptForReason: true, targetLabel: request.organization || request.orgId, organization: request.organization, metadata: {currentTier: request.currentTier || "", requestedTier: request.requestedTier || ""}})} className="rounded bg-rose-600 px-2 py-1 text-xs font-semibold text-white disabled:opacity-40">Reject</button></div></td>
         </tr>)}</tbody>
       </table></div>}
     </section>

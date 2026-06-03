@@ -11,13 +11,13 @@ test.beforeEach(async ({ page }) => {
 });
 
 test("SuperAdmin login and pending registrations load", async ({ page }) => {
-  await expect(page.getByText("Pending Registrations")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Pending Registrations", exact: true })).toBeVisible();
 });
 
 test("Active, inactive, and archived org tabs load", async ({ page }) => {
-  await expect(page.getByRole("button", { name: "Active Orgs" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Inactive Orgs" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Archived Orgs" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Active Orgs", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Inactive Orgs", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Archived Orgs", exact: true })).toBeVisible();
 });
 
 test("Approve a QA registration", async () => {

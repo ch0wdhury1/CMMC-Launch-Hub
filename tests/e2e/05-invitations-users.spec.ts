@@ -8,7 +8,7 @@ test("OrgAdmin invitation area loads", async ({ page }) => {
   test.skip(!hasCredential(env.orgAdmin), "Provide E2E_ORGADMIN credentials.");
   await login(page, env.orgAdmin.email, env.orgAdmin.password);
   await goToAdmin(page);
-  await expect(page.getByText("Pending Invitations")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Pending Invitations", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Add User" })).toBeVisible();
 });
 

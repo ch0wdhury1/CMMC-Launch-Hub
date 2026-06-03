@@ -273,6 +273,10 @@ ${JSON.stringify(ctx, null, 2)}
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!libraryEvidenceContext?.canManage) {
+      e.target.value = "";
+      return;
+    }
     const file = e.target.files?.[0];
     if (!file) return;
     setIsUploading(true);
@@ -297,6 +301,7 @@ ${JSON.stringify(ctx, null, 2)}
   };
 
   const archiveArtifact = async (artifact: Artifact) => {
+    if (!libraryEvidenceContext?.canManage) return;
     if (artifact.archived) return;
     if (!window.confirm("Archive this evidence? It will be hidden from the active evidence list but not deleted.")) return;
     const archiveReason = window.prompt("Reason for archive")?.trim() || "";
@@ -657,11 +662,13 @@ Respond in a helpful, practical way:
                         {isSummaryAudioLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Volume2 className="h-4 w-4" />}
                     </button>
                     <SlideshowButton />
-                    <label className="flex items-center cursor-pointer text-xs px-3 py-1 bg-white text-blue-700 font-medium rounded hover:bg-gray-100">
-                        <Paperclip className="h-4 w-4 mr-1" />
-                        {isUploading ? "..." : "Attach"}
-                        <input type="file" className="hidden" onChange={handleFileUpload} disabled={isUploading} />
-                    </label>
+                    {libraryEvidenceContext?.canManage && (
+                      <label className="flex items-center cursor-pointer text-xs px-3 py-1 bg-white text-blue-700 font-medium rounded hover:bg-gray-100">
+                          <Paperclip className="h-4 w-4 mr-1" />
+                          {isUploading ? "..." : "Attach"}
+                          <input type="file" className="hidden" onChange={handleFileUpload} disabled={isUploading} />
+                      </label>
+                    )}
                 </div>
             </div>
 
@@ -811,18 +818,20 @@ Respond in a helpful, practical way:
                                 <Download className="h-3 w-3 mr-1" /> Download
                               </button>
                               {!hasUsableFile(artifact) && <span className="text-xs text-gray-400">File unavailable</span>}
-                              <button
-                                type="button"
-                                onClick={() => archiveArtifact(artifact)}
-                                disabled={artifact.archived || artifact.status === "archived" || archivingEvidenceId === artifact.id}
-                                title={artifact.archived || artifact.status === "archived" ? "Evidence archived" : "Archive evidence"}
-                                className="flex items-center text-xs px-2 py-1 text-gray-600 hover:bg-gray-100 rounded disabled:text-gray-400 disabled:hover:bg-transparent"
-                              >
-                                {archivingEvidenceId === artifact.id
-                                  ? <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                                  : <Archive className="h-3 w-3 mr-1" />}
-                                Archive
-                              </button>
+                              {libraryEvidenceContext?.canManage && (
+                                <button
+                                  type="button"
+                                  onClick={() => archiveArtifact(artifact)}
+                                  disabled={artifact.archived || artifact.status === "archived" || archivingEvidenceId === artifact.id}
+                                  title={artifact.archived || artifact.status === "archived" ? "Evidence archived" : "Archive evidence"}
+                                  className="flex items-center text-xs px-2 py-1 text-gray-600 hover:bg-gray-100 rounded disabled:text-gray-400 disabled:hover:bg-transparent"
+                                >
+                                  {archivingEvidenceId === artifact.id
+                                    ? <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                    : <Archive className="h-3 w-3 mr-1" />}
+                                  Archive
+                                </button>
+                              )}
                             </div>
                         </div>
                         ))}

@@ -3,6 +3,7 @@ import { Download, FileText, Loader2, RefreshCw } from "lucide-react";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { buildPoamReport, formatPoamReportDate, type PoamReportData, type PoamReportItem } from "../src/poamReport";
+import { logActivityEvent } from "../src/activityLog";
 import type { PoamItem } from "../types";
 
 type Props = {
@@ -121,7 +122,18 @@ export const PoamReport: React.FC<Props> = props => {
     setIsGenerating(true);
     setError("");
     try {
-      setReport(await buildPoamReport(props));
+      const generated = await buildPoamReport(props);
+      setReport(generated);
+      void logActivityEvent({
+        orgId: props.orgId,
+        orgName: generated.organization.legalName,
+        action: "report.generated",
+        targetType: "report",
+        targetId: "poam",
+        targetLabel: "POA&M Report",
+        summary: "POA&M Report generated",
+        metadata: {assessmentId: props.assessmentId, assessmentLevel: props.assessmentLevel},
+      });
     } catch (reportError) {
       console.error("[poam-report] generation failed", reportError);
       setError("Unable to generate the POA&M report.");
@@ -153,6 +165,7 @@ export const PoamReport: React.FC<Props> = props => {
     return (
       <div className="bg-white border rounded-lg p-6 shadow-sm animate-fadeIn">
         <h2 className="text-xl font-bold text-gray-900">POA&M Report</h2>
+        <p className="text-sm font-semibold text-gray-700 mt-1">{report.organization.legalName}</p>
         <p className="text-sm text-gray-600 mt-3">No POA&M items found for this assessment.</p>
         <button type="button" onClick={generate} className="mt-5 inline-flex items-center px-3 py-2 border rounded-md text-sm text-gray-700 hover:bg-gray-50"><RefreshCw className="h-4 w-4 mr-2" /> Refresh</button>
       </div>
