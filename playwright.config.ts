@@ -1,4 +1,22 @@
 import { defineConfig, devices } from "@playwright/test";
+import fs from "node:fs";
+import path from "node:path";
+
+const envPath = path.resolve(__dirname, ".env.e2e");
+if (fs.existsSync(envPath)) {
+  for (const line of fs.readFileSync(envPath, "utf8").split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const separator = trimmed.indexOf("=");
+    if (separator === -1) continue;
+    const key = trimmed.slice(0, separator).trim();
+    const value = trimmed.slice(separator + 1).trim();
+    if (key && process.env[key] === undefined) process.env[key] = value;
+  }
+}
+
+const baseURL = process.env.E2E_BASE_URL || "http://127.0.0.1:5173";
+console.log(`Playwright Base URL: ${baseURL}`);
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -13,7 +31,7 @@ export default defineConfig({
     ["junit", { outputFile: "test-results/junit.xml" }],
   ],
   use: {
-    baseURL: process.env.E2E_BASE_URL || "http://127.0.0.1:5173",
+    baseURL,
     screenshot: "only-on-failure",
     trace: "retain-on-failure",
     video: "retain-on-failure",
