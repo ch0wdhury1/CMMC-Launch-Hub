@@ -39,6 +39,19 @@ Do not share credentials. Report unexpected organization names, users, or data i
 
 Inactive or disabled accounts should receive an Access Disabled screen.
 
+## Forgot Password / Reset Password
+
+1. Open https://cmmc-launch-hub.web.app.
+2. Select Forgot Password.
+3. Enter the email address you use to sign in.
+4. Select Send Password Reset Link.
+5. If an account exists for that email, Firebase Auth sends a password reset email.
+6. Follow the email instructions and return to the login page.
+
+The reset screen intentionally uses the same success message whether or not an account exists for the submitted email. A password reset does not approve pending registrations, reactivate inactive accounts, change organization membership, or change roles.
+
+If you still need help, contact your organization administrator or CMMC Launch Hub support. Include your organization name and the email address you use to sign in. Do not send or share your password.
+
 ## Update Your Information
 
 1. Open Profile.

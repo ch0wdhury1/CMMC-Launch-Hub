@@ -81,6 +81,26 @@ Do not request passwords. Do not ask users to share credentials.
 5. If the user sees another organization, treat as Critical.
 6. If the expected organization is unavailable, escalate to the Technical Owner.
 
+### Forgot Password / Password Reset
+
+1. Ask the user to open the hosted login page.
+2. Select Forgot Password.
+3. Enter the email address used to sign in.
+4. Select Send Password Reset Link.
+5. Confirm the generic message appears: "If an account exists for this email, a password reset link has been sent."
+6. Remind the user to check inbox, spam, and any email filtering system.
+7. If the user still cannot access the app after resetting their password, verify account, organization, membership, and role status.
+
+Do not ask for or record passwords. Do not tell the user whether an email exists in Firebase Auth.
+
+### Pending or Inactive Account Distinction
+
+- Pending message: "Your registration is pending approval."
+- Inactive or disabled message: "Your account is inactive or disabled. Contact your organization administrator."
+- Password reset does not approve a pending registration.
+- Password reset does not reactivate an inactive or disabled user.
+- Password reset does not change organization membership or role.
+
 ### Unexpected Controls
 
 1. Record the user role and visible controls.

@@ -68,6 +68,15 @@ Registration creation and row-specific approval are implemented workflows, but t
 4. Export CSV when an organization-scoped support record is needed.
 5. Escalate immediately if another organization appears.
 
+### Account Recovery Support
+
+1. Direct users who forgot a password to the Forgot Password link on the hosted login page.
+2. Confirm users enter the email address they use to sign in.
+3. Confirm the generic reset message appears.
+4. Do not ask users for passwords and do not record passwords in support notes.
+5. If the user remains blocked after reset, review account status, organization status, membership status, and role.
+6. Distinguish password recovery from access approval: reset emails do not approve pending registrations, reactivate inactive users, change organization membership, or change roles.
+
 ### Maintain Company Profile
 
 1. Open Profile.

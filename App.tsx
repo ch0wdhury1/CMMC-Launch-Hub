@@ -7,6 +7,7 @@ import {
   signOut,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
+  sendPasswordResetEmail,
 } from "firebase/auth";
 import { auth, db } from "./src/firebase";
 
@@ -53,6 +54,31 @@ import { subscribeActiveOrgMembers, type ActiveOrgMember } from "./src/responsib
 import { logActivityEvent } from "./src/activityLog";
 
 import { Home, ChevronRight, Key, ShieldAlert, Database, Loader2 } from "lucide-react";
+
+const PASSWORD_RESET_SUCCESS_MESSAGE = "If an account exists for this email, a password reset link has been sent.";
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const friendlyLoginError = (error: any): string => {
+  const code = String(error?.code || error?.message || "").toLowerCase();
+  if (code.includes("too-many-requests")) return "Too many login attempts. Please wait and try again or reset your password.";
+  if (code.includes("network") || code.includes("unavailable") || code.includes("timeout")) return "Unable to sign in right now. Please check your connection and try again.";
+  if (code.includes("invalid-email")) return "Please enter a valid email address.";
+  if (
+    code.includes("wrong-password")
+    || code.includes("invalid-credential")
+    || code.includes("invalid-login-credentials")
+    || code.includes("user-not-found")
+  ) return "Invalid email or password.";
+  return "Unable to sign in right now. Please check your connection and try again.";
+};
+
+const friendlyPasswordResetError = (error: any): string | null => {
+  const code = String(error?.code || error?.message || "").toLowerCase();
+  if (code.includes("invalid-email")) return "Please enter a valid email address.";
+  if (code.includes("user-not-found")) return null;
+  if (code.includes("network") || code.includes("unavailable") || code.includes("timeout")) return "Unable to send a reset link right now. Please check your connection and try again.";
+  return "Unable to send a reset link right now. Please try again.";
+};
 
 
 /* =========================================================
@@ -229,7 +255,7 @@ function AuthorizedAppGate({ authUser, onLogout }: { authUser: User; onLogout: (
           if (!cancelled) setAccess({
             status: user?.status === "pending" || !user ? "pending" : "disabled",
             message: user?.status === "pending" || !user
-              ? "Your registration has been received and is awaiting approval. You will receive access after your organization has been approved."
+              ? "Your registration is pending approval."
               : "Your account is inactive or disabled. Contact your organization administrator.",
           });
           return;
@@ -302,7 +328,7 @@ function AuthorizedAppGate({ authUser, onLogout }: { authUser: User; onLogout: (
           <ShieldAlert className="mx-auto mb-4 h-12 w-12 text-amber-500" />
           <h1 className="text-xl font-bold text-gray-900">{access.status === "pending" ? "Account Pending Approval" : "Access Disabled"}</h1>
           <p className="mt-3 text-sm text-gray-600">{access.message}</p>
-          <button type="button" onClick={onLogout} className="mt-6 rounded bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800">Logout</button>
+          <button type="button" onClick={onLogout} className="mt-6 rounded bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800">Back to Login</button>
         </div>
       </div>
     );
@@ -1276,7 +1302,7 @@ onDiagnosticsClick={isSuperAdmin ? () => setIsDiagnosticsOpen(true) : undefined}
   );
 }
 
-type PublicRoute = "/login" | "/register" | "/registration-submitted";
+type PublicRoute = "/login" | "/register" | "/registration-submitted" | "/forgot-password";
 
 const publicNavigate = (path: PublicRoute) => {
   window.history.pushState({}, "", path);
@@ -1297,6 +1323,7 @@ function PublicAuthRouter() {
   const getRoute = (): PublicRoute => {
     if (window.location.pathname === "/register") return "/register";
     if (window.location.pathname === "/registration-submitted") return "/registration-submitted";
+    if (window.location.pathname === "/forgot-password") return "/forgot-password";
     return "/login";
   };
   const [route, setRoute] = useState<PublicRoute>(getRoute);
@@ -1311,6 +1338,7 @@ function PublicAuthRouter() {
 
   if (route === "/register") return <RegistrationScreen />;
   if (route === "/registration-submitted") return <RegistrationSubmittedScreen />;
+  if (route === "/forgot-password") return <ForgotPasswordScreen />;
   return <LoginScreen />;
 }
 
@@ -1325,7 +1353,7 @@ function LoginScreen() {
     try {
       await signInWithEmailAndPassword(auth, email.trim().toLowerCase(), password);
     } catch (error: any) {
-      setMsg(error?.message || "Unable to login.");
+      setMsg(friendlyLoginError(error));
     }
   };
 
@@ -1333,13 +1361,65 @@ function LoginScreen() {
     <PublicShell>
       <section className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
         <h1 className="text-2xl font-bold text-gray-900">Login</h1>
-        <form onSubmit={submit} className="mt-5 space-y-4">
+        <form onSubmit={submit} noValidate className="mt-5 space-y-4">
           <label className="block text-sm font-medium text-gray-700">Email<input required type="email" value={email} onChange={event => setEmail(event.target.value)} className="mt-1 w-full rounded border border-gray-300 px-3 py-2" /></label>
           <label className="block text-sm font-medium text-gray-700">Password<input required type="password" value={password} onChange={event => setPassword(event.target.value)} className="mt-1 w-full rounded border border-gray-300 px-3 py-2" /></label>
+          <button type="button" onClick={() => publicNavigate("/forgot-password")} className="text-sm font-semibold text-blue-700 hover:underline">Forgot Password?</button>
           <button type="submit" className="w-full rounded bg-blue-700 px-4 py-2 font-semibold text-white hover:bg-blue-800">Login</button>
           {msg && <p className="text-sm text-red-700">{msg}</p>}
         </form>
         <button type="button" onClick={() => publicNavigate("/register")} className="mt-5 text-sm font-semibold text-blue-700 hover:underline">Register New Organization</button>
+      </section>
+    </PublicShell>
+  );
+}
+
+function ForgotPasswordScreen() {
+  const [email, setEmail] = useState("");
+  const [msg, setMsg] = useState("");
+  const [isSuccess, setIsSuccess] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const cleanEmail = email.trim().toLowerCase();
+    setMsg("");
+    setIsSuccess(false);
+    if (!cleanEmail) return setMsg("Email is required.");
+    if (!emailPattern.test(cleanEmail)) return setMsg("Please enter a valid email address.");
+    setSubmitting(true);
+    try {
+      await sendPasswordResetEmail(auth, cleanEmail);
+      setIsSuccess(true);
+      setMsg(PASSWORD_RESET_SUCCESS_MESSAGE);
+    } catch (error: any) {
+      const safeMessage = friendlyPasswordResetError(error);
+      if (!safeMessage) {
+        setIsSuccess(true);
+        setMsg(PASSWORD_RESET_SUCCESS_MESSAGE);
+      } else {
+        setMsg(safeMessage);
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <PublicShell>
+      <section className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+        <h1 className="text-2xl font-bold text-gray-900">Forgot Password</h1>
+        <p className="mt-2 text-sm text-gray-600">Enter the email address you use to sign in.</p>
+        <form onSubmit={submit} noValidate className="mt-5 space-y-4">
+          <label className="block text-sm font-medium text-gray-700">Email<input required type="email" value={email} onChange={event => setEmail(event.target.value)} className="mt-1 w-full rounded border border-gray-300 px-3 py-2" /></label>
+          <button type="submit" disabled={submitting} className="w-full rounded bg-blue-700 px-4 py-2 font-semibold text-white hover:bg-blue-800 disabled:opacity-60">{submitting ? "Sending..." : "Send Password Reset Link"}</button>
+          {msg && <p className={`text-sm ${isSuccess ? "text-emerald-700" : "text-red-700"}`}>{msg}</p>}
+        </form>
+        <div className="mt-5 space-y-3 text-sm text-gray-600">
+          <p>Still need help? Contact your organization administrator or CMMC Launch Hub support.</p>
+          <p>Include your organization name and the email address you use to sign in.</p>
+        </div>
+        <button type="button" onClick={() => publicNavigate("/login")} className="mt-5 text-sm font-semibold text-blue-700 hover:underline">Back to Login</button>
       </section>
     </PublicShell>
   );
