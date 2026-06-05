@@ -4,6 +4,7 @@ import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { buildPoamReport, formatPoamReportDate, type PoamReportData, type PoamReportItem } from "../src/poamReport";
 import { logActivityEvent } from "../src/activityLog";
+import { addReportFooter, keyValueTable, notProvided, reportColors, sectionTitle } from "../services/reportPdfUtils";
 import type { PoamItem } from "../types";
 
 type Props = {
@@ -30,22 +31,29 @@ const Metric = ({ label, value }: { label: string; value: number }) => (
 
 const itemLabel = (item: PoamReportItem) => item.practiceIds.join(", ") || item.id;
 
-const exportPdf = (report: PoamReportData) => {
-  const doc = new jsPDF({ orientation: "landscape" });
+export const exportPoamReportPdf = (report: PoamReportData) => {
+  const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "letter" });
+  const pageHeight = doc.internal.pageSize.getHeight();
   const margin = 12;
-  let y = 14;
+  let y = 16;
   const addTitle = (title: string) => {
-    if (y > 185) {
+    if (y > pageHeight - 28) {
       doc.addPage();
-      y = 14;
+      y = 16;
     }
-    doc.setFontSize(12);
-    doc.setTextColor(17, 24, 39);
-    doc.text(title, margin, y);
-    y += 6;
+    y = sectionTitle(doc, title, y, margin);
   };
-  const addTable = (head: string[], body: Array<Array<string | number>>) => {
-    autoTable(doc, { startY: y, head: [head], body, theme: "grid", styles: { fontSize: 7, cellPadding: 1.8 } });
+  const addTable = (head: string[], body: Array<Array<string | number>>, columnStyles: Record<number, any> = {}) => {
+    autoTable(doc, {
+      startY: y,
+      head: [head],
+      body: body.map(row => row.map(cell => notProvided(cell))),
+      theme: "grid",
+      margin: { left: margin, right: margin, bottom: 15 },
+      styles: { fontSize: 7, cellPadding: 1.8, overflow: "linebreak", valign: "top" },
+      headStyles: { fillColor: reportColors.blue },
+      columnStyles,
+    });
     y = (doc as any).lastAutoTable.finalY + 7;
   };
   const addList = (items: string[]) => {
@@ -53,9 +61,9 @@ const exportPdf = (report: PoamReportData) => {
     doc.setTextColor(55, 65, 81);
     items.forEach((item, index) => {
       const lines = doc.splitTextToSize(`${index + 1}. ${item}`, 270);
-      if (y + lines.length * 4 > 195) {
+      if (y + lines.length * 4 > pageHeight - 18) {
         doc.addPage();
-        y = 14;
+        y = 16;
       }
       doc.text(lines, margin, y);
       y += lines.length * 4 + 1;
@@ -67,17 +75,22 @@ const exportPdf = (report: PoamReportData) => {
       ? items.map(item => [priority, itemLabel(item), item.owner, item.status.replace("_", " "), formatPoamReportDate(item.dueDate)])
       : [[priority, "No items", "-", "-", "-"]]);
 
-  doc.setFontSize(17);
-  doc.setTextColor(0, 87, 163);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(19);
+  doc.setTextColor(...reportColors.blue);
   doc.text("POA&M Report", margin, y);
-  y += 7;
+  y += 8;
   doc.setFontSize(8);
   doc.setTextColor(75, 85, 99);
-  doc.text(`Generated ${report.generatedAt.toLocaleString()}`, margin, y);
-  y += 8;
+  doc.text(`${report.organization.legalName} | Generated ${report.generatedAt.toLocaleString()}`, margin, y);
+  y += 10;
 
-  addTitle("Organization Summary");
-  addTable(["Organization", "CAGE", "UEI", "Assessment Level"], [[report.organization.legalName, report.organization.cageCode, report.organization.uei, report.organization.assessmentLevel]]);
+  y = keyValueTable(doc, y, [
+    ["Organization", report.organization.legalName],
+    ["CAGE", report.organization.cageCode],
+    ["UEI", report.organization.uei],
+    ["Assessment Level", report.organization.assessmentLevel],
+  ], margin);
   addTitle("POA&M Summary Dashboard");
   addTable(["Total", "Open", "In Progress", "Closed", "High", "Medium", "Low", "Overdue"], [[
     report.summary.totalItems, report.summary.openItems, report.summary.inProgressItems, report.summary.closedItems,
@@ -86,24 +99,35 @@ const exportPdf = (report: PoamReportData) => {
   addTitle("Open Items by Priority");
   addTable(["Priority", "Practice", "Owner", "Status", "Due Date"], groupRows([
     ["High", report.openByPriority.high], ["Medium", report.openByPriority.medium], ["Low", report.openByPriority.low], ["Unassigned / Unknown", report.openByPriority.unknown],
-  ]));
+  ]), { 1: { cellWidth: 54 }, 2: { cellWidth: 45 }, 3: { cellWidth: 30 } });
   addTitle("Upcoming / Overdue Items");
   addTable(["Group", "Practice", "Owner", "Priority", "Due Date"], groupRows([
     ["Overdue", report.schedule.overdue], ["Due Within 30 Days", report.schedule.dueWithin30Days], ["No Due Date", report.schedule.noDueDate],
-  ]));
+  ]), { 1: { cellWidth: 54 }, 2: { cellWidth: 45 }, 3: { cellWidth: 30 } });
   addTitle("Owner Responsibility Summary");
   addTable(["Owner", "Open", "In Progress", "Closed", "Overdue"], report.owners.map(owner => [owner.owner, owner.openCount, owner.inProgressCount, owner.closedCount, owner.overdueCount]));
   addTitle("Detailed POA&M Table");
   addTable(["Practice ID", "Objective ID", "Weakness / Gap", "Remediation Plan", "Owner", "Priority", "Status", "Due Date", "Last Updated"], report.details.map(item => [
     item.practiceIds.join(", ") || "-", item.objectiveIds.join(", ") || "-", item.weakness, item.remediationPlan, item.owner,
     item.priority || "unknown", item.status.replace("_", " "), formatPoamReportDate(item.dueDate), formatPoamReportDate(item.lastUpdated),
-  ]));
+  ]), {
+    0: { cellWidth: 23 },
+    1: { cellWidth: 21 },
+    2: { cellWidth: 46 },
+    3: { cellWidth: 50 },
+    4: { cellWidth: 28 },
+    5: { cellWidth: 18 },
+    6: { cellWidth: 20 },
+    7: { cellWidth: 22 },
+    8: { cellWidth: 22 },
+  });
   addTitle("Closed Items Summary");
   addTable(["Practice", "Weakness / Gap", "Owner", "Completed"], report.closedItems.length > 0
     ? report.closedItems.map(item => [itemLabel(item), item.weakness, item.owner, formatPoamReportDate(item.completedDate || item.lastUpdated)])
-    : [["-", "No closed items", "-", "-"]]);
+    : [["-", "No closed items", "-", "-"]], { 1: { cellWidth: 120 } });
   addTitle("Recommended Remediation Focus");
   addList(report.recommendations);
+  addReportFooter(doc, "CMMC Launch Hub — POA&M Report", margin);
   doc.save(`POAM_Report_${report.generatedAt.toISOString().slice(0, 10)}.pdf`);
 };
 
@@ -167,7 +191,10 @@ export const PoamReport: React.FC<Props> = props => {
         <h2 className="text-xl font-bold text-gray-900">POA&M Report</h2>
         <p className="text-sm font-semibold text-gray-700 mt-1">{report.organization.legalName}</p>
         <p className="text-sm text-gray-600 mt-3">No POA&M items found for this assessment.</p>
-        <button type="button" onClick={generate} className="mt-5 inline-flex items-center px-3 py-2 border rounded-md text-sm text-gray-700 hover:bg-gray-50"><RefreshCw className="h-4 w-4 mr-2" /> Refresh</button>
+        <div className="mt-5 flex flex-wrap gap-2">
+          <button type="button" onClick={generate} className="inline-flex items-center px-3 py-2 border rounded-md text-sm text-gray-700 hover:bg-gray-50"><RefreshCw className="h-4 w-4 mr-2" /> Refresh</button>
+          <button type="button" onClick={() => exportPoamReportPdf(report)} disabled={!props.canExport} title={props.canExport ? "Export PDF" : "PDF export requires Org Admin or SuperAdmin access"} className="inline-flex items-center px-3 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700 disabled:opacity-50"><Download className="h-4 w-4 mr-2" /> Export PDF</button>
+        </div>
       </div>
     );
   }
@@ -178,7 +205,7 @@ export const PoamReport: React.FC<Props> = props => {
         <div><h2 className="text-xl font-bold text-gray-900">POA&M Report</h2><p className="text-sm text-gray-500 mt-1">Generated {report.generatedAt.toLocaleString()}</p></div>
         <div className="flex gap-2">
           <button type="button" onClick={generate} disabled={isGenerating} className="inline-flex items-center px-3 py-2 border rounded-md text-sm text-gray-700 hover:bg-gray-50"><RefreshCw className={`h-4 w-4 mr-2 ${isGenerating ? "animate-spin" : ""}`} /> Refresh</button>
-          <button type="button" onClick={() => exportPdf(report)} disabled={!props.canExport} title={props.canExport ? "Export PDF" : "PDF export requires Org Admin or SuperAdmin access"} className="inline-flex items-center px-3 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700 disabled:opacity-50"><Download className="h-4 w-4 mr-2" /> Export PDF</button>
+          <button type="button" onClick={() => exportPoamReportPdf(report)} disabled={!props.canExport} title={props.canExport ? "Export PDF" : "PDF export requires Org Admin or SuperAdmin access"} className="inline-flex items-center px-3 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700 disabled:opacity-50"><Download className="h-4 w-4 mr-2" /> Export PDF</button>
         </div>
       </div>
 

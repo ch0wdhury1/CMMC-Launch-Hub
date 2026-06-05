@@ -7,6 +7,7 @@ import {
   type ExecutiveReadinessReportData,
 } from "../src/executiveReadinessReport";
 import { logActivityEvent } from "../src/activityLog";
+import { addReportFooter, keyValueTable, notProvided, reportColors, sectionTitle } from "../services/reportPdfUtils";
 import type { Domain, EvidenceSummary, PoamItem, PracticeRecord } from "../types";
 
 type Props = {
@@ -36,52 +37,58 @@ const Metric = ({ label, value }: { label: string; value: React.ReactNode }) => 
 );
 
 const exportPdf = (report: ExecutiveReadinessReportData) => {
-  const doc = new jsPDF();
+  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "letter" });
   const pageWidth = doc.internal.pageSize.getWidth();
-  const margin = 14;
-  let y = 16;
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 15;
+  let y = 18;
   const addTitle = (title: string) => {
-    if (y > 265) {
+    if (y > pageHeight - 34) {
       doc.addPage();
-      y = 16;
+      y = 18;
     }
-    doc.setFontSize(13);
-    doc.setTextColor(17, 24, 39);
-    doc.text(title, margin, y);
-    y += 7;
+    y = sectionTitle(doc, title, y, margin);
   };
   const addWrappedText = (text: string) => {
     doc.setFontSize(9);
     doc.setTextColor(55, 65, 81);
-    const lines = doc.splitTextToSize(text, pageWidth - margin * 2);
-    if (y + lines.length * 4 > 280) {
+    const lines = doc.splitTextToSize(notProvided(text), pageWidth - margin * 2);
+    if (y + lines.length * 4 > pageHeight - 20) {
       doc.addPage();
-      y = 16;
+      y = 18;
     }
     doc.text(lines, margin, y);
     y += lines.length * 4 + 4;
   };
   const addTable = (head: string[], body: Array<Array<string | number>>) => {
-    autoTable(doc, { startY: y, head: [head], body, theme: "grid", styles: { fontSize: 8 } });
+    autoTable(doc, {
+      startY: y,
+      head: [head],
+      body: body.map(row => row.map(cell => notProvided(cell))),
+      theme: "grid",
+      margin: { left: margin, right: margin, bottom: 18 },
+      styles: { fontSize: 8, cellPadding: 2.2, overflow: "linebreak", valign: "top" },
+      headStyles: { fillColor: reportColors.blue },
+    });
     y = (doc as any).lastAutoTable.finalY + 8;
   };
 
-  doc.setFontSize(18);
-  doc.setTextColor(0, 87, 163);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(22);
+  doc.setTextColor(...reportColors.blue);
   doc.text("Executive Readiness Report", margin, y);
-  y += 8;
+  y += 9;
   doc.setFontSize(9);
   doc.setTextColor(75, 85, 99);
-  doc.text(`Generated ${report.generatedAt.toLocaleString()}`, margin, y);
-  y += 9;
+  doc.text(`${report.organization.legalName} | Generated ${report.generatedAt.toLocaleString()}`, margin, y);
+  y += 12;
 
-  addTitle("Organization Summary");
-  addTable(["Organization", "CAGE", "UEI", "Assessment Level"], [[
-    report.organization.legalName,
-    report.organization.cageCode,
-    report.organization.uei,
-    report.organization.assessmentLevel,
-  ]]);
+  y = keyValueTable(doc, y, [
+    ["Organization", report.organization.legalName],
+    ["CAGE", report.organization.cageCode],
+    ["UEI", report.organization.uei],
+    ["Assessment Level", report.organization.assessmentLevel],
+  ], margin);
 
   addTitle("Readiness Summary");
   addTable(["Overall Readiness", "Completed", "In Progress", "Not Started"], [[
@@ -115,6 +122,7 @@ const exportPdf = (report: ExecutiveReadinessReportData) => {
 
   addTitle("Recommended Next Steps");
   report.recommendations.forEach((recommendation, index) => addWrappedText(`${index + 1}. ${recommendation}`));
+  addReportFooter(doc, "CMMC Launch Hub — Executive Readiness Report", margin);
   doc.save(`Executive_Readiness_Report_${report.generatedAt.toISOString().slice(0, 10)}.pdf`);
 };
 

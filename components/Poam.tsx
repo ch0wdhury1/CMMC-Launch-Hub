@@ -1,7 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { PoamItem, PoamStatus, PoamPriority, CompanyProfile, Practice, ResponsibilityMatrixEntry } from '../types';
-import { generatePoamPdf } from '../services/poamGenerator';
-import { Download, PlusCircle, Filter, X, Save, Calendar, User, Tag, ArrowUpCircle, Clock, CheckCircle } from 'lucide-react';
+import { PlusCircle, Filter, X, Save, Calendar, User, Tag, ArrowUpCircle, Clock, CheckCircle, FileText } from 'lucide-react';
 import { ResponsibilityAssignmentSelect, type ResponsibilityAssignmentContext } from './ResponsibilityAssignmentSelect';
 
 interface PoamProps {
@@ -12,6 +11,7 @@ interface PoamProps {
   addPoamItem: (item: Omit<PoamItem, 'id' | 'createdAt' | 'source'>) => void;
   responsibilityMatrix: ResponsibilityMatrixEntry[];
   assignmentContext?: ResponsibilityAssignmentContext;
+  onOpenReport?: () => void;
 }
 
 // --- PoamItemModal Sub-component ---
@@ -130,7 +130,7 @@ const PoamItemModal: React.FC<PoamItemModalProps> = ({ item, allPractices, onClo
 };
 
 // --- Main POA&M Component ---
-export const Poam: React.FC<PoamProps> = ({ poamItems, allPractices, companyProfile, updatePoamItem, addPoamItem, responsibilityMatrix, assignmentContext }) => {
+export const Poam: React.FC<PoamProps> = ({ poamItems, allPractices, companyProfile, updatePoamItem, addPoamItem, responsibilityMatrix, assignmentContext, onOpenReport }) => {
   const [statusFilter, setStatusFilter] = useState<PoamStatus | 'all'>('all');
   const [priorityFilter, setPriorityFilter] = useState<PoamPriority | 'all'>('all');
   const [assigneeFilter, setAssigneeFilter] = useState('all');
@@ -165,10 +165,6 @@ export const Poam: React.FC<PoamProps> = ({ poamItems, allPractices, companyProf
     }
   };
   
-  const handleDownloadPdf = async () => {
-    await generatePoamPdf({ poamItems, companyProfile, responsibilityMatrix });
-  };
-
   const getStatusChip = (status: PoamStatus) => {
     const styles = {
       open: 'bg-red-100 text-red-800',
@@ -201,8 +197,8 @@ export const Poam: React.FC<PoamProps> = ({ poamItems, allPractices, companyProf
                 <button onClick={handleAddItem} className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-md shadow-sm hover:bg-blue-700">
                     <PlusCircle className="h-5 w-5 mr-2" /> Add Item
                 </button>
-                <button onClick={handleDownloadPdf} className="flex items-center px-4 py-2 bg-gray-600 text-white rounded-md shadow-sm hover:bg-gray-700">
-                    <Download className="h-5 w-5 mr-2" /> Download PDF
+                <button onClick={onOpenReport} className="flex items-center px-4 py-2 bg-gray-600 text-white rounded-md shadow-sm hover:bg-gray-700">
+                    <FileText className="h-5 w-5 mr-2" /> POA&amp;M Report
                 </button>
             </div>
         </div>

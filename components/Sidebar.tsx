@@ -49,7 +49,6 @@ type Props = {
   onReadinessReportsClick: () => void;
   onSystemSecurityPlanClick: () => void;
   onPoamClick: () => void;
-  onPoamReportClick: () => void;
   onResponsibilityMatrixClick: () => void;
   onTrainingClick: () => void;
   onNewsUpdatesClick: () => void;
@@ -115,7 +114,6 @@ export function Sidebar(props: Props) {
     onReadinessReportsClick,
     onSystemSecurityPlanClick,
     onPoamClick,
-    onPoamReportClick,
     onResponsibilityMatrixClick,
     onTrainingClick,
     onNewsUpdatesClick,
@@ -569,13 +567,6 @@ useEffect(() => {
             >
               <span className="ml-7">System Security Plan (SSP)</span>
               {!access.reporting.ssp && <Lock className="h-3 w-3 ml-auto text-gray-400" />}
-            </button>
-
-            <button
-              className={navClass(activeViewInfo?.type === "poamReport")}
-              onClick={onPoamReportClick}
-            >
-              <span className="ml-7">POA&amp;M Report</span>
             </button>
 
             <button

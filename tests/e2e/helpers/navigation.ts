@@ -32,6 +32,13 @@ export async function goToPractice(page: Page, practiceId = qaFixture.practiceId
 }
 export async function goToReports(page: Page, reportName: "Executive Readiness Report" | "POA&M Report" = "Executive Readiness Report") {
   await page.getByRole("button", { name: "COMPLIANCE REPORTING", exact: true }).click();
+  if (reportName === "POA&M Report") {
+    await page.getByRole("button", { name: "POA&M", exact: true }).click();
+    await expect(page.getByRole("heading", { name: /Plan of Action & Milestones|POA&M/i }).first()).toBeVisible();
+    await page.getByRole("button", { name: "POA&M Report", exact: true }).click();
+    await expect(page.getByRole("heading", { name: reportName, exact: true }).first()).toBeVisible();
+    return;
+  }
   await page.getByRole("button", { name: reportName, exact: true }).click();
   await expect(page.getByRole("heading", { name: reportName, exact: true }).first()).toBeVisible();
 }

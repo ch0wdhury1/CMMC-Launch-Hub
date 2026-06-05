@@ -1154,6 +1154,7 @@ case "domain": {
             addPoamItem={addPoamItem}
             responsibilityMatrix={responsibilityMatrix}
             assignmentContext={assignmentContext}
+            onOpenReport={() => setView({ type: "poamReport" })}
           />
         );
 
@@ -1258,7 +1259,6 @@ onDiagnosticsClick={isSuperAdmin ? () => setIsDiagnosticsOpen(true) : undefined}
           onReadinessReportsClick={() => setView({ type: "readinessReports" })}
           onSystemSecurityPlanClick={() => setView({ type: "systemSecurityPlan" })}
           onPoamClick={() => setView({ type: "poam" })}
-          onPoamReportClick={() => setView({ type: "poamReport" })}
           onResponsibilityMatrixClick={() => setView({ type: "responsibilityMatrix" })}
           onTrainingClick={() => setView({ type: "training" })}
           onNewsUpdatesClick={() => setView({ type: "newsUpdates" })}

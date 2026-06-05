@@ -154,6 +154,10 @@ Files changed:
   - Removed the full CMMC practice/objective dump from the SPRS export.
   - Preserved the `CMMC Launch Hub — SPRS Scorecard` footer with page numbers.
 
+- `services/sspGenerator.ts`
+  - Phase 27F rebuilt SSP PDF formatting while preserving the existing COMM_L2 export gate.
+  - SSP export behavior remains tier-controlled by `canExport={hasL2}` from `App.tsx`.
+
 - `App.tsx`
   - Passes `canExport={hasL2}` to System Security Plan.
 
@@ -179,6 +183,9 @@ Validation results:
   - Generated `test-results/manual-sprs/SPRS_Scorecard_Current_Assessment.pdf` from the app.
   - PDF inspection found 6 pages, no blank pages, mapped controls present, old CMMC practice/objective dump absent, and footer present on every page.
   - Local QA org did not expose an unauthorized SSP download path. A positive COMM_L2 visual check requires a COMM_L2 fixture/account in the validation environment.
+- Phase 27F reporting polish validation:
+  - Generated and inspected Executive, POA&M, SPRS, SSP, and SRM PDFs locally.
+  - SSP/SRM were validated through the local Vite module graph because the current QA org tier hides those entries in the app.
 
 Validation limitation:
 
