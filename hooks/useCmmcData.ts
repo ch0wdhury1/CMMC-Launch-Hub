@@ -1,5 +1,6 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { doc, getDoc } from "firebase/firestore";
 import {
   Domain,
   Practice,
@@ -55,6 +56,7 @@ import {
 import { uploadEvidenceFile } from "../src/evidenceStorage";
 import { requestEvidenceOcr } from "../src/evidenceOcr";
 import { logActivityEvent } from "../src/activityLog";
+import { db } from "../src/firebase";
 
 import { generateReadinessReport } from '../services/geminiService';
 import { READINESS_QUESTIONS } from '../data/readinessQuestions';
@@ -587,6 +589,25 @@ export const useCmmcData = (options: UseCmmcDataOptions = {}) => {
           sourceOfTruthMode: "Firestore",
           lastSavedAt: firestoreState.assessment?.lastSavedAt,
         });
+
+        const orgSnapshot = await getDoc(doc(db, "orgs", orgId));
+        const orgData = orgSnapshot.exists() ? orgSnapshot.data() : null;
+        const orgCompanyProfile = orgData?.companyProfile;
+        if (orgCompanyProfile) {
+          setCompanyProfile(prev => ({
+            ...(prev || defaultCompanyProfile),
+            ...(orgCompanyProfile as any),
+            companyName: orgCompanyProfile.legalName || orgCompanyProfile.companyName || orgData?.name || prev?.companyName || defaultCompanyProfile.companyName,
+            address: orgCompanyProfile.address || orgData?.address || prev?.address,
+            website: orgCompanyProfile.website || orgData?.website || prev?.website,
+            primaryContactName: orgCompanyProfile.contacts?.primary?.name || orgData?.primaryContactName || prev?.primaryContactName,
+            primaryContactEmail: orgCompanyProfile.contacts?.primary?.email || orgData?.primaryContactEmail || prev?.primaryContactEmail,
+            primaryContactPhone: orgCompanyProfile.contacts?.primary?.phone || orgData?.primaryContactPhone || prev?.primaryContactPhone,
+            secondaryContactName: orgCompanyProfile.contacts?.secondary?.name || prev?.secondaryContactName,
+            secondaryContactEmail: orgCompanyProfile.contacts?.secondary?.email || prev?.secondaryContactEmail,
+            secondaryContactPhone: orgCompanyProfile.contacts?.secondary?.phone || prev?.secondaryContactPhone,
+          } as CompanyProfile));
+        }
 
         setDataSourceInfo(prev => `${prev} | Firestore assessment: ${assessment.assessmentId}`);
         setFirestoreLoadKey(key);

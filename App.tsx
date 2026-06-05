@@ -1055,7 +1055,17 @@ case "domain": {
       }
 
       case "profile":
-	return <ProfilePage />;
+	return (
+          <ProfilePage
+            readinessMetrics={{
+              completionPercent: Math.round(scores.practiceCompletionScore || scores.overallReadinessScore || 0),
+              practicesAssessed: practiceRecords.filter(record => record.status !== "not_assessed").length,
+              evidenceCount: evidenceSummary.totalEvidenceCount,
+              openPoamCount: poamItems.filter(item => item.status !== "completed").length,
+              sprsScore,
+            }}
+          />
+        );
 
         // return (
         //   <ProfilePage

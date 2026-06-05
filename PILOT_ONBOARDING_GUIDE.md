@@ -62,6 +62,20 @@ If you still need help, contact your organization administrator or CMMC Launch H
 
 You cannot use this workflow to change your email, role, account status, active state, organization assignment, or SuperAdmin status.
 
+## Complete The Company Profile
+
+OrgAdmins and SuperAdmins can maintain the Company Profile. Contributors, Assessors, and Viewers can review permitted profile information but cannot edit the organization record.
+
+Use Profile as the organization source-of-truth record for:
+
+- Organization identity, contacts, and website.
+- CAGE, UEI, optional DUNS, and NAICS codes.
+- FCI/CUI, assessment level, MSP/MSSP, employee, user, and location details.
+- Headquarters, additional locations, and external providers.
+- Read-only readiness metrics and data-quality flags.
+
+Complete missing fields before generating customer-facing reports or SSP exports.
+
 ## Navigate Assessments
 
 1. Open Command Dashboard.
@@ -109,10 +123,11 @@ Record the filename and displayed OCR status, then contact support if the failur
 ### POA&M Report
 
 1. Expand COMPLIANCE REPORTING.
-2. Open POA&M Report.
-3. Select Generate Report when available.
-4. Confirm the signed-in organization name appears.
-5. Review the report or the valid empty state.
+2. Open POA&M.
+3. Select POA&M Report.
+4. Select Generate Report when available.
+5. Confirm the signed-in organization name appears.
+6. Review the report or the valid empty state.
 
 Report any missing or incorrect organization name immediately.
 
@@ -120,7 +135,7 @@ Report any missing or incorrect organization name immediately.
 
 OrgAdmins should also:
 
-1. Review Company Information.
+1. Review Company Profile completeness and data-quality flags.
 2. Review Users for the organization.
 3. Confirm no users from another organization are visible.
 4. Open Activity Center and confirm only your organization activity is visible.

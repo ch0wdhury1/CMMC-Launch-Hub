@@ -18,8 +18,14 @@ export const notProvided = (value: unknown): string => {
 export const cleanFilePart = (value: string) =>
   notProvided(value).replace(/[^a-z0-9_-]+/gi, "_").replace(/^_+|_+$/g, "") || "Report";
 
+const addressText = (address: unknown) => {
+  if (!address || typeof address === "string") return address;
+  const value = address as { street?: string; city?: string; state?: string; zip?: string; country?: string };
+  return [value.street, value.city, value.state, value.zip, value.country].filter(Boolean).join(", ");
+};
+
 export const companyName = (profile: CompanyProfile | null | undefined, fallback?: string) =>
-  notProvided(profile?.companyName || fallback);
+  notProvided((profile as any)?.legalName || profile?.companyName || (profile as any)?.dbaName || fallback);
 
 export function addReportFooter(doc: jsPDF, label: string, margin = 15) {
   const pageCount = (doc as any).internal.getNumberOfPages();
@@ -58,7 +64,7 @@ export function drawCompanyHeader(doc: jsPDF, profile: CompanyProfile | null | u
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
   doc.setTextColor(...reportColors.muted);
-  const detail = [profile?.address, profile?.website].filter(Boolean).join(" | ");
+  const detail = [addressText(profile?.address), profile?.website].filter(Boolean).join(" | ");
   if (detail) doc.text(detail, margin + logoSize + 6, 24, { maxWidth: pageWidth - margin * 2 - logoSize - 6 });
   if (title) doc.text(title, pageWidth - margin, 18, { align: "right" });
   doc.setDrawColor(...reportColors.border);

@@ -22,6 +22,15 @@ interface SystemSecurityPlanProps {
 
 const policyOptions = POLICIES_PROCEDURES.map(p => p.title);
 
+const formatAddress = (address: CompanyProfile["address"]) => {
+  if (!address) return "";
+  if (typeof address === "string") return address;
+  return [address.street, address.city, address.state, address.zip, address.country].filter(Boolean).join(", ");
+};
+
+const profileCompanyName = (profile: CompanyProfile | null) =>
+  (profile as any)?.legalName || profile?.companyName || (profile as any)?.dbaName || "Company Name";
+
 const CompanyHeader = ({ profile }: { profile: CompanyProfile | null }) => (
   <div className="flex items-start p-4 mb-6 bg-gray-50 border rounded-lg">
     {profile?.companyLogo ? (
@@ -30,8 +39,8 @@ const CompanyHeader = ({ profile }: { profile: CompanyProfile | null }) => (
       <div className="h-16 w-16 bg-gray-200 rounded-md mr-4 flex items-center justify-center text-xs text-gray-500">No Logo</div>
     )}
     <div>
-      <h2 className="font-bold text-xl text-gray-800">{profile?.companyName || 'Company Name'}</h2>
-      <p className="text-sm text-gray-600">{profile?.address}</p>
+      <h2 className="font-bold text-xl text-gray-800">{profileCompanyName(profile)}</h2>
+      <p className="text-sm text-gray-600">{formatAddress(profile?.address)}</p>
       <a href={profile?.website} className="text-sm text-blue-600 hover:underline">{profile?.website}</a>
     </div>
   </div>
@@ -235,7 +244,7 @@ const SectionControls: React.FC<{ data?: (Practice & { status: PracticeStatus; s
         const { srmEntry } = p;
         let respText = 'Responsibility not assigned in SRM.';
         if (srmEntry) {
-            const companyName = companyProfile?.companyName || 'the organization';
+            const companyName = profileCompanyName(companyProfile);
             const { responsibility, providerName, internalOwner } = srmEntry;
             if (responsibility === 'customer') {
                 respText = `Responsibility: This control is primarily the responsibility of ${companyName} (Customer).`;

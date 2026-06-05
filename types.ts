@@ -162,8 +162,10 @@ export interface UserProfile {
 export interface CompanyProfile {
   id: string;
   companyName: string;
+  legalName?: string;
+  dbaName?: string;
   companyLogo?: string;
-  address?: string;
+  address?: string | OrgCompanyProfile["address"];
   website?: string;
   users: UserProfile[];
   primaryContactName?: string;
@@ -172,6 +174,15 @@ export interface CompanyProfile {
   secondaryContactName?: string;
   secondaryContactEmail?: string;
   secondaryContactPhone?: string;
+  cageCode?: string;
+  uei?: string;
+  duns?: string;
+  naics?: string;
+  naicsCodes?: string;
+  contacts?: OrgCompanyProfile["contacts"];
+  cmmc?: OrgCompanyProfile["cmmc"];
+  scope?: OrgCompanyProfile["scope"];
+  providers?: OrgCompanyProfile["providers"];
 }
 
 export interface OrgCompanyProfile {
@@ -180,6 +191,7 @@ export interface OrgCompanyProfile {
   website?: string;
   industry?: string;
   naics?: string;
+  naicsCodes?: string;
   cageCode?: string;
   uei?: string;
   duns?: string;
@@ -208,6 +220,11 @@ export interface OrgCompanyProfile {
     assessmentLevel?: "L1" | "L2";
     handlesFCI?: "yes" | "no" | "unknown";
     handlesCUI?: "yes" | "no" | "unknown";
+    mspMsspUsed?: "yes" | "no" | "unknown";
+    mspMsspName?: string;
+    employeeCount?: string;
+    userCount?: string;
+    locationCount?: string;
     contractingAgency?: string;
     systemName?: string;
     systemDescription?: string;
@@ -216,6 +233,17 @@ export interface OrgCompanyProfile {
     externalServiceProviders?: string;
     cloudProviders?: string;
     itProvider?: string;
+  };
+  scope?: {
+    headquarters?: string;
+    additionalLocations?: string;
+  };
+  providers?: {
+    msp?: string;
+    mssp?: string;
+    cloudProvider?: string;
+    emailProvider?: string;
+    backupProvider?: string;
   };
 }
 

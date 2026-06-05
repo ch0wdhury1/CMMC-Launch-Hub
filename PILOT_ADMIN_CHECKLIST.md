@@ -40,9 +40,12 @@ Hosted URL: https://cmmc-launch-hub.web.app
 
 ## OrgAdmin Profile Checklist
 
-- [ ] Review Company Information.
-- [ ] Confirm the legal or display name is correct.
-- [ ] Confirm primary contact information is current.
+- [ ] Review Company Profile as the organization source-of-truth record.
+- [ ] Confirm legal name, DBA name, website, primary contact, and secondary contact fields are current.
+- [ ] Confirm CAGE, UEI, optional DUNS, and NAICS codes are current.
+- [ ] Confirm FCI/CUI, assessment level, MSP/MSSP, employee count, user count, and location count are current.
+- [ ] Confirm headquarters, additional locations, and external provider fields are current.
+- [ ] Review Profile Completeness and Data Quality Flags.
 - [ ] Use Edit My Info for supported personal identity updates.
 - [ ] Reload after personal information changes and confirm persistence.
 - [ ] Do not attempt to self-edit email, role, status, active state, organization ID, or SuperAdmin status.
@@ -75,7 +78,7 @@ Hosted URL: https://cmmc-launch-hub.web.app
 - [ ] Generate the Executive Readiness Report.
 - [ ] Confirm the signed-in organization name appears.
 - [ ] Confirm no other organization identity appears.
-- [ ] Generate the POA&M Report or review its valid empty state.
+- [ ] Open POA&M, then use the POA&M Report button to generate the report or review its valid empty state.
 - [ ] Confirm the signed-in organization name appears in the POA&M report.
 - [ ] Export PDF only when the role permits it.
 

@@ -1,4 +1,4 @@
-import { jsPDF } from 'jspdf';
+﻿import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Practice, PracticeRecord, ReadinessAnswers, ReadinessScores, CompanyProfile, ResponsibilityMatrixEntry } from '../types';
 import { SystemProfile } from '../hooks/useSspData';
@@ -46,6 +46,24 @@ const responsibilityText = (
   return `Customer responsibility. Internal owner: ${notProvided(entry.internalOwner)}.`;
 };
 
+const contactName = (companyProfile: CompanyProfile | null | undefined, contact: "primary" | "secondary") =>
+  (companyProfile as any)?.contacts?.[contact]?.name
+  || (contact === "primary" ? companyProfile?.primaryContactName : companyProfile?.secondaryContactName);
+
+const contactEmail = (companyProfile: CompanyProfile | null | undefined, contact: "primary" | "secondary") =>
+  (companyProfile as any)?.contacts?.[contact]?.email
+  || (contact === "primary" ? companyProfile?.primaryContactEmail : companyProfile?.secondaryContactEmail);
+
+const contactPhone = (companyProfile: CompanyProfile | null | undefined, contact: "primary" | "secondary") =>
+  (companyProfile as any)?.contacts?.[contact]?.phone
+  || (contact === "primary" ? companyProfile?.primaryContactPhone : companyProfile?.secondaryContactPhone);
+
+const addressText = (address: unknown) => {
+  if (!address || typeof address === 'string') return address;
+  const value = address as { street?: string; city?: string; state?: string; zip?: string; country?: string };
+  return [value.street, value.city, value.state, value.zip, value.country].filter(Boolean).join(', ');
+};
+
 export const generateSspPdf = async ({
   profile,
   scores,
@@ -62,7 +80,11 @@ export const generateSspPdf = async ({
   const recordMap = new Map(records.map(record => [record.id, record]));
   const cmmcLevel = practices.some(practice => practice.level === 2) ? 'CMMC Level 2' : 'CMMC Level 1';
   const assessmentName = profile.systemName || 'Current Assessment';
-  const orgName = companyProfile?.companyName || profile.organizationName || 'Organization name not provided';
+  const orgName = companyName(companyProfile, profile.organizationName || 'Organization name not provided');
+  const cmmcProfile = (companyProfile as any)?.cmmc || {};
+  const scopeProfile = (companyProfile as any)?.scope || {};
+  const providers = (companyProfile as any)?.providers || {};
+  const headquarters = scopeProfile.headquarters || addressText(companyProfile?.address);
 
   // Page 1: cover and summary
   drawCompanyHeader(doc, companyProfile, 'System Security Plan', margin);
@@ -81,8 +103,8 @@ export const generateSspPdf = async ({
     ['Organization Name', orgName],
     ['Assessment Name', assessmentName],
     ['CMMC Level', cmmcLevel],
-    ['Primary Contact', `${notProvided(profile.contactName)} | ${notProvided(profile.contactEmail)}`],
-    ['Company Address', companyProfile?.address],
+    ['Primary Contact', `${notProvided(contactName(companyProfile, 'primary') || profile.contactName)} | ${notProvided(contactEmail(companyProfile, 'primary') || profile.contactEmail)}`],
+    ['Company Address', headquarters],
     ['Website', companyProfile?.website],
     ['Prepared By', 'CMMC Launch Hub'],
   ], margin);
@@ -111,16 +133,19 @@ export const generateSspPdf = async ({
   drawCompanyHeader(doc, companyProfile, 'Organization Profile', margin);
   let y = sectionTitle(doc, 'Organization Profile', 52, margin);
   y = keyValueTable(doc, y, [
-    ['Legal Name', companyProfile?.companyName || profile.organizationName],
-    ['DBA / Display Name', companyProfile?.companyName],
+    ['Legal Name', (companyProfile as any)?.legalName || companyProfile?.companyName || profile.organizationName],
+    ['DBA / Display Name', (companyProfile as any)?.dbaName],
     ['CAGE', (companyProfile as any)?.cageCode],
     ['UEI', (companyProfile as any)?.uei],
-    ['NAICS', (companyProfile as any)?.naics],
-    ['Primary Contact', profile.contactName || companyProfile?.primaryContactName],
-    ['Phone', companyProfile?.primaryContactPhone],
-    ['Email', profile.contactEmail || companyProfile?.primaryContactEmail],
+    ['DUNS', (companyProfile as any)?.duns],
+    ['NAICS', (companyProfile as any)?.naicsCodes || (companyProfile as any)?.naics],
+    ['Primary Contact', contactName(companyProfile, 'primary') || profile.contactName],
+    ['Phone', contactPhone(companyProfile, 'primary')],
+    ['Email', contactEmail(companyProfile, 'primary') || profile.contactEmail],
+    ['Secondary Contact', contactName(companyProfile, 'secondary')],
+    ['Secondary Contact Email', contactEmail(companyProfile, 'secondary')],
     ['Website', companyProfile?.website],
-    ['Address', companyProfile?.address],
+    ['Address', headquarters],
   ], margin);
 
   y = sectionTitle(doc, 'Policies and Procedures Identified', y + 2, margin);
@@ -131,19 +156,26 @@ export const generateSspPdf = async ({
   drawCompanyHeader(doc, companyProfile, 'Assessment Scope', margin);
   y = sectionTitle(doc, 'System / Assessment Scope', 52, margin);
   y = keyValueTable(doc, y, [
-    ['Assessment Level', cmmcLevel],
-    ['System Name', profile.systemName],
-    ['System Description', profile.systemDescription],
-    ['Scope Notes', profile.scopeNotes],
-    ['Handles FCI', (answers as any).handlesFci || (answers as any).fci || 'Not provided'],
-    ['Handles CUI', (answers as any).handlesCui || (answers as any).cui || 'Not provided'],
-    ['Cloud Platform', (answers as any).cloudPlatform],
-    ['Boundary Notes', (answers as any).boundaryNotes || profile.scopeNotes],
-    ['Locations', (answers as any).locations || (answers as any).facilityLocations],
+    ['Assessment Level', cmmcProfile.assessmentLevel || cmmcLevel],
+    ['System Name', cmmcProfile.systemName || profile.systemName],
+    ['System Description', cmmcProfile.systemDescription || profile.systemDescription],
+    ['Scope Notes', cmmcProfile.systemBoundarySummary || profile.scopeNotes],
+    ['Handles FCI', cmmcProfile.handlesFCI || (answers as any).handlesFci || (answers as any).fci || 'Not provided'],
+    ['Handles CUI', cmmcProfile.handlesCUI || (answers as any).handlesCui || (answers as any).cui || 'Not provided'],
+    ['Cloud Platform', providers.cloudProvider || cmmcProfile.cloudProviders || (answers as any).cloudPlatform],
+    ['Boundary Notes', cmmcProfile.systemBoundarySummary || (answers as any).boundaryNotes || profile.scopeNotes],
+    ['Headquarters', headquarters],
+    ['Additional Locations', scopeProfile.additionalLocations || (answers as any).locations || (answers as any).facilityLocations],
+    ['Employee Count', cmmcProfile.employeeCount],
+    ['User Count', cmmcProfile.userCount],
+    ['Location Count', cmmcProfile.locationCount],
     ['Remote Workers', (answers as any).remoteWorkerCount],
     ['VPN for Remote Access', (answers as any).vpnForRemote],
     ['Business Firewall', (answers as any).businessFirewall],
-    ['MSP / MSSP', (answers as any).mspName || (answers as any).msspName],
+    ['MSP / MSSP Used', cmmcProfile.mspMsspUsed],
+    ['MSP / MSSP Name', cmmcProfile.mspMsspName || providers.msp || providers.mssp || (answers as any).mspName || (answers as any).msspName],
+    ['Email Provider', providers.emailProvider],
+    ['Backup Provider', providers.backupProvider],
   ], margin);
 
   y = sectionTitle(doc, 'Scope Narrative', y + 2, margin);
@@ -237,6 +269,6 @@ export const generateSspPdf = async ({
     },
   });
 
-  addReportFooter(doc, 'CMMC Launch Hub � System Security Plan |', margin);
+  addReportFooter(doc, 'CMMC Launch Hub — System Security Plan |', margin);
   doc.save(`SSP_${cleanFilePart(orgName)}_${generatedAt.toISOString().split('T')[0]}.pdf`);
 };
