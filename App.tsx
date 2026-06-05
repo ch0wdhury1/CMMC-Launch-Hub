@@ -17,7 +17,7 @@ import { SuperAdminPanel } from "./components/SuperAdminPanel";
 
 import { AdminPanel } from "./components/AdminPanel";
 import { Sidebar } from "./components/Sidebar";
-import { Dashboard } from "./components/Dashboard";
+import { OrganizationDashboard } from "./components/OrganizationDashboard";
 import { DomainView } from "./components/DomainView";
 import { PracticeView } from "./components/PracticeView";
 import { AssistMePanel } from "./components/AssistMePanel";
@@ -938,16 +938,26 @@ if (view.type === "domain") {
         return <AdminPanel />;
       case "dashboard":
         return (
-          <Dashboard
+          <OrganizationDashboard
+            orgId={currentOrgId}
+            role={orgRole}
+            companyProfile={companyProfile}
+            subscriptionLevel={effectiveSubscriptionLevel}
             domains={domains}
-            highRiskPractices={highRiskPractices}
             practiceRecords={practiceRecords}
             scores={scores}
-            onDomainClick={handleNavClick}
+            evidenceSummary={evidenceSummary}
+            poamItems={poamItems}
+            sprsScore={sprsScore}
+            onProfileClick={() => setView({ type: "profile" })}
             onPracticeClick={(practiceId) => setView({ type: "practice", practiceId })}
-            onResumeAssessment={(id) => setView(id ? { type: "practice", practiceId: id } : { type: "dashboard" })}
-            onSecurityAnalyzerClick={() => setView({ type: "readinessAnalyzer" })}
-            onReadinessReportsClick={() => setView({ type: "readinessReports" })}
+            onEvidenceLibraryClick={() => setView({ type: "evidenceLibrary" })}
+            onExecutiveReportClick={() => setView({ type: "executive" })}
+            onSprsClick={() => setView({ type: "sprs" })}
+            onPoamClick={() => setView({ type: "poam" })}
+            onSspClick={() => setView({ type: "systemSecurityPlan" })}
+            onResponsibilityMatrixClick={() => setView({ type: "responsibilityMatrix" })}
+            onInvitationsClick={() => setView({ type: "orgInvitations" })}
           />
         );
 

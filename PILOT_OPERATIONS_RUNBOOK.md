@@ -73,6 +73,16 @@ Registration creation and row-specific approval are implemented workflows, but t
 
 ## OrgAdmin Procedures
 
+### Use Organization Dashboard
+
+1. Open Command Dashboard after sign-in.
+2. Review the organization header for tier, subscription status, CMMC level access, profile completeness, and last activity.
+3. Review readiness summary cards for completion, SPRS score, practices assessed, evidence, POA&M, active users, and pending invitations.
+4. Review Domain Readiness to identify incomplete or unassessed domains.
+5. Use Next Actions for simple operational follow-up such as completing the company profile, reviewing POA&M, inviting team members, uploading evidence, or generating reports.
+6. Review Recent Activity for the last organization-scoped activity records.
+7. Use Reporting Shortcuts only when the current tier exposes the report.
+
 ### Review Organization Activity
 
 1. Open Activity Center from System Tools.

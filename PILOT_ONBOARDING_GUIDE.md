@@ -32,12 +32,24 @@ Do not share credentials. Report unexpected organization names, users, or data i
 1. Open https://cmmc-launch-hub.web.app.
 2. Sign in with your approved pilot account.
 3. Confirm the application shell loads.
-4. Open Profile.
+4. Confirm Command Dashboard shows your Organization Dashboard.
 5. Confirm the displayed organization name is correct.
-6. Confirm your role-specific controls match your expected responsibilities.
-7. Stop and contact support if you see another organization, unexpected users, SuperAdmin controls, or controls that do not match your role.
+6. Review tier, subscription status, CMMC access, profile completeness, readiness cards, domain readiness, recent activity, and report shortcuts.
+7. Open Profile when you need to verify company profile details.
+8. Confirm your role-specific controls match your expected responsibilities.
+9. Stop and contact support if you see another organization, unexpected users, SuperAdmin controls, or controls that do not match your role.
 
 Inactive or disabled accounts should receive an Access Disabled screen.
+
+## Use The Organization Dashboard
+
+The Organization Dashboard is the normal landing page for OrgAdmin, OrgOwner, Assessor, Contributor, and Viewer users.
+
+- OrgAdmins and OrgOwners see the full operational snapshot, including profile completeness, user and invitation counts, and admin next actions.
+- Contributors and Assessors see readiness, evidence, activity, assigned-work-oriented next actions when available, and permitted report shortcuts.
+- Viewers see read-only readiness and report information without mutation or admin actions.
+
+Use the dashboard to decide whether to complete the profile, continue assessment work, review evidence, open POA&M, generate reports, or invite approved team members.
 
 ## Forgot Password / Reset Password
 
