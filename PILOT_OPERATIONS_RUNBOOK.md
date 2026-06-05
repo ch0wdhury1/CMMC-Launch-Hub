@@ -29,6 +29,19 @@ This runbook defines the routine operating procedures for the CMMC Launch Hub co
 
 ## SuperAdmin Procedures
 
+### Review System Health Dashboard
+
+1. Sign in with a SuperAdmin account.
+2. Open System Health from System Tools.
+3. Review health summary cards for organization, user, pending request, evidence, reporting, and recent activity counts.
+4. Review OCR Health for 30-day success, failure, success-rate, and recent failure details.
+5. Review Reporting Health for Executive, POA&M, other report counts, last generated report, and most active organization.
+6. Review Organization Health by active, inactive, or archived status.
+7. Review System Alerts for OCR failure spikes, disabled organizations, high pending counts, and organizations with no activity for more than 30 days.
+8. Use View Full Activity Center when an alert or metric requires audit-level review.
+
+The System Health Dashboard is read-only and SuperAdmin-only. It does not send notifications, change access, change tiers, change membership, or change billing.
+
 ### Review Activity Center
 
 1. Sign in with a SuperAdmin account.

@@ -7,6 +7,11 @@ export async function goToSuperAdmin(page: Page) {
   await page.getByRole("button", { name: "Super Admin", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Pending Registrations", exact: true })).toBeVisible();
 }
+export async function goToSystemHealth(page: Page) {
+  await page.getByRole("button", { name: "SYSTEM TOOLS", exact: true }).click();
+  await page.getByRole("button", { name: "System Health", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "System Health", exact: true })).toBeVisible();
+}
 export async function goToAdmin(page: Page) {
   await page.getByRole("button", { name: "Admin", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Organization Admin", exact: true })).toBeVisible();

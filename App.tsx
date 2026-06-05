@@ -37,6 +37,7 @@ import { SystemSecurityPlan } from "./components/SystemSecurityPlan";
 import { Poam } from "./components/Poam";
 import { PoamReport } from "./components/PoamReport";
 import { ActivityCenter } from "./components/ActivityCenter";
+import { SystemHealthDashboard } from "./components/SystemHealthDashboard";
 import { ResponsibilityMatrixPage } from "./components/ResponsibilityMatrixPage";
 import { TrainingModule } from "./components/training/TrainingModule";
 import { NewsUpdates } from "./components/NewsUpdates";
@@ -168,6 +169,7 @@ type ViewState =
   | { type: "poam" }
   | { type: "poamReport" }
   | { type: "activityCenter" }
+  | { type: "systemHealth" }
   | { type: "responsibilityMatrix" }
   | { type: "training" }
   | { type: "newsUpdates" };
@@ -191,6 +193,7 @@ export type ActiveViewInfo =
   | { type: "poam"; name: "poam" }
   | { type: "poamReport"; name: "poamReport" }
   | { type: "activityCenter"; name: "activityCenter" }
+  | { type: "systemHealth"; name: "systemHealth" }
   | { type: "responsibilityMatrix"; name: "responsibilityMatrix" }
   | { type: "training"; name: "training" }
   | { type: "newsUpdates"; name: "newsUpdates" };
@@ -765,6 +768,7 @@ if (view.type === "domain") {
     if (view.type === "poamReport") return { type: "poamReport", name: "poamReport" };
     if (view.type === "responsibilityMatrix") return { type: "responsibilityMatrix", name: "responsibilityMatrix" };
     if (view.type === "activityCenter") return { type: "activityCenter", name: "activityCenter" };
+    if (view.type === "systemHealth") return { type: "systemHealth", name: "systemHealth" };
     if (view.type === "training") return { type: "training", name: "training" };
     if (view.type === "newsUpdates") return { type: "newsUpdates", name: "newsUpdates" };
     return { type: "dashboard", name: "dashboard" };
@@ -815,6 +819,7 @@ if (view.type === "domain") {
     if (view.type === "poamReport") return "POA&M Report";
     if (view.type === "responsibilityMatrix") return "Responsibility Matrix";
     if (view.type === "activityCenter") return "Activity Center";
+    if (view.type === "systemHealth") return "System Health";
     if (view.type === "training") return "Training Modules";
     if (view.type === "newsUpdates") return "News Updates";
     return "CMMC Launch Hub";
@@ -874,6 +879,7 @@ if (view.type === "domain") {
           "poamReport",
           "responsibilityMatrix",
           "activityCenter",
+          "systemHealth",
           "training",
           "newsUpdates",
         ].includes(view.type) && (
@@ -1169,6 +1175,14 @@ case "domain": {
           />
         );
 
+      case "systemHealth":
+        return (
+          <SystemHealthDashboard
+            isSuperAdmin={isSuperAdmin}
+            onActivityCenterClick={() => setView({ type: "activityCenter" })}
+          />
+        );
+
       case "training":
         return <TrainingModule />;
 
@@ -1236,6 +1250,8 @@ onDiagnosticsClick={isSuperAdmin ? () => setIsDiagnosticsOpen(true) : undefined}
           canManageInvitations={isSuperAdmin || orgRole === "orgOwner" || isOrgAdmin}
           onActivityCenterClick={() => setView({ type: "activityCenter" })}
           canViewActivityCenter={isSuperAdmin || orgRole === "orgOwner" || isOrgAdmin}
+          onSystemHealthClick={() => setView({ type: "systemHealth" })}
+          canViewSystemHealth={isSuperAdmin}
           onSecurityAnalyzerClick={() => setView({ type: "readinessAnalyzer" })}
           onReadinessReportsClick={() => setView({ type: "readinessReports" })}
           onSystemSecurityPlanClick={() => setView({ type: "systemSecurityPlan" })}

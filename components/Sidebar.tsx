@@ -43,6 +43,8 @@ type Props = {
   canManageInvitations: boolean;
   onActivityCenterClick: () => void;
   canViewActivityCenter: boolean;
+  onSystemHealthClick: () => void;
+  canViewSystemHealth: boolean;
   onSecurityAnalyzerClick: () => void;
   onReadinessReportsClick: () => void;
   onSystemSecurityPlanClick: () => void;
@@ -107,6 +109,8 @@ export function Sidebar(props: Props) {
     canManageInvitations,
     onActivityCenterClick,
     canViewActivityCenter,
+    onSystemHealthClick,
+    canViewSystemHealth,
     onSecurityAnalyzerClick,
     onReadinessReportsClick,
     onSystemSecurityPlanClick,
@@ -510,6 +514,15 @@ useEffect(() => {
                 onClick={onActivityCenterClick}
               >
                 <span className="ml-7">Activity Center</span>
+              </button>
+            )}
+
+            {canViewSystemHealth && (
+              <button
+                className={navClass(activeViewInfo?.type === "systemHealth")}
+                onClick={onSystemHealthClick}
+              >
+                <span className="ml-7">System Health</span>
               </button>
             )}
           </div>

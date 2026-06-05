@@ -123,6 +123,27 @@ Use this workflow for organization requests and organization-level access suppor
 
 Registration creation and row-specific approval are implemented operational workflows, but destructive automated coverage remains intentionally skipped until disposable fixtures are available. Use extra care and manual verification.
 
+## System Health Dashboard Troubleshooting
+
+Use this workflow for pilot monitoring, metric review, and operational alerts.
+
+1. Sign in with a SuperAdmin account.
+2. Open System Tools, then System Health.
+3. Confirm health summary cards render.
+4. Review OCR Health when evidence processing issues are reported.
+5. Review Reporting Health when report generation or report identity issues are reported.
+6. Review Organization Health and apply active, inactive, or archived filters.
+7. Review System Alerts for OCR failure spikes, disabled organizations, high pending registrations, high pending invitations, and organizations with no activity for more than 30 days.
+8. Use View Full Activity Center to inspect the underlying audit entries.
+
+Access expectations:
+
+- SuperAdmin can access System Health.
+- OrgAdmin, Viewer, Contributor, and Assessor cannot access System Health.
+- The dashboard is read-only and does not send notifications or mutate pilot data.
+
+Escalate if System Health shows another role can access the page, if metrics indicate cross-organization visibility outside SuperAdmin use, or if critical alerts line up with user-reported incidents.
+
 ## OrgAdmin Support Workflow
 
 Use this workflow for organization user, invitation, company profile, assessment, evidence, and report support.
