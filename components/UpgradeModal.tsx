@@ -1,15 +1,43 @@
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { X, ShieldCheck, Zap, ArrowRight, CheckCircle2 } from 'lucide-react';
 
 interface UpgradeModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onUpgrade: () => void;
+  onUpgrade: () => Promise<"submitted" | "already-pending" | "already-l2">;
 }
 
 export const UpgradeModal: React.FC<UpgradeModalProps> = ({ isOpen, onClose, onUpgrade }) => {
+  const [message, setMessage] = useState("");
+  const [requesting, setRequesting] = useState(false);
+  useEffect(() => {
+    if (isOpen) {
+      setMessage("");
+      setRequesting(false);
+    }
+  }, [isOpen]);
   if (!isOpen) return null;
+
+  const handleUpgrade = async () => {
+    setRequesting(true);
+    setMessage("");
+    try {
+      const result = await onUpgrade();
+      if (result === "already-pending") {
+        setMessage("Upgrade request already pending.");
+      } else if (result === "already-l2") {
+        setMessage("Your organization is already on COMM_L2.");
+      } else {
+        setMessage("Upgrade request submitted. A SuperAdmin will review your request.");
+      }
+    } catch (error) {
+      const text = error instanceof Error ? error.message : "Unable to submit upgrade request.";
+      setMessage(text.includes("already pending") ? "Upgrade request already pending." : text);
+    } finally {
+      setRequesting(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[200] animate-fadeIn" onClick={onClose}>
@@ -75,17 +103,20 @@ export const UpgradeModal: React.FC<UpgradeModalProps> = ({ isOpen, onClose, onU
                     >
                         Maybe Later
                     </button>
-                    <button 
-                        onClick={() => {
-                            onUpgrade();
-                            onClose();
-                        }}
-                        className="px-6 py-3 bg-blue-600 text-white rounded-xl text-sm font-bold shadow-lg hover:bg-blue-700 transition-all flex items-center justify-center"
+                    <button
+                        onClick={() => void handleUpgrade()}
+                        disabled={requesting}
+                        className="px-6 py-3 bg-blue-600 text-white rounded-xl text-sm font-bold shadow-lg hover:bg-blue-700 transition-all flex items-center justify-center disabled:cursor-not-allowed disabled:bg-gray-400"
                     >
-                        Upgrade Now
+                        {requesting ? "Submitting..." : "Upgrade Now"}
                         <ArrowRight className="ml-2 h-4 w-4" />
                     </button>
                 </div>
+                {message && (
+                    <p className="mt-4 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-center text-sm font-semibold text-blue-800">
+                        {message}
+                    </p>
+                )}
                 <button className="w-full mt-4 text-xs font-bold text-blue-600 hover:underline uppercase tracking-widest py-2">
                     Contact Compliance Expert
                 </button>

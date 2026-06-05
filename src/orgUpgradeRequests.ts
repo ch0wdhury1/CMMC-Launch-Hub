@@ -5,11 +5,14 @@ export type OrgUpgradeRequest = {
   id: string;
   type: "upgradeRequest";
   orgId: string;
+  orgName?: string;
+  organization?: string;
   requestedTier: "COMM_L2";
-  currentTier: "COMM_L1";
+  currentTier: string;
   status: "pending" | "approved" | "rejected" | "archived";
   requestedByUid: string;
   requestedByEmail?: string;
+  requestedByName?: string;
   createdAt?: any;
 };
 
@@ -30,19 +33,26 @@ export async function createTierUpgradeRequest(params: {
   orgId: string;
   requestedByUid: string;
   requestedByEmail?: string;
+  requestedByName?: string;
+  orgName?: string;
+  currentTier?: string;
 }): Promise<string> {
   const snapshot = await getDocs(upgradeRequestsQuery(params.orgId));
   if (upgradeRequestsFromSnapshot(snapshot).some(request => request.status === "pending")) {
-    throw new Error("Upgrade request pending.");
+    throw new Error("Upgrade request already pending.");
   }
+  const orgName = String(params.orgName || "").trim();
   const ref = await addDoc(collection(db, "accessRequests"), {
     type: "upgradeRequest",
     orgId: params.orgId,
+    orgName,
+    organization: orgName,
     requestedTier: "COMM_L2",
-    currentTier: "COMM_L1",
+    currentTier: params.currentTier || "COMM_L1",
     status: "pending",
     requestedByUid: params.requestedByUid,
     requestedByEmail: params.requestedByEmail || "",
+    requestedByName: params.requestedByName || "",
     createdAt: serverTimestamp(),
   });
   return ref.id;

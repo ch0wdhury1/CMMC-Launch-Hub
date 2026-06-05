@@ -57,6 +57,7 @@ import { Practice } from "./types";
 import { SPRS_CONTROLS } from "./data/sprsControls";
 import { subscribeActiveOrgMembers, type ActiveOrgMember } from "./src/responsibilityAssignments";
 import { logActivityEvent } from "./src/activityLog";
+import { createTierUpgradeRequest } from "./src/orgUpgradeRequests";
 
 import { Home, ChevronRight, Key, ShieldAlert, Database, Loader2 } from "lucide-react";
 
@@ -185,7 +186,7 @@ export type ActiveViewInfo =
   | { type: "admin"; name: "admin" }
   | { type: "superAdmin"; name: "superAdmin" }
   | { type: "dashboard"; name: "dashboard" }
-  | { type: "domain"; name: string }
+  | { type: "domain"; domainName: string; label: string }
   | { type: "practice"; name: string; domainName: string }
   | { type: "executive"; name: "executive" }
   | { type: "profile"; name: "profile" }
@@ -525,7 +526,6 @@ const getDomainDisplayLabel = (domainKey: string) => {
     evidenceSummary,
     recoveryDiagnostics,
     poamItems,
-    upgradeSubscription,
     updatePoamItem,
     addPoamItem,
     responsibilityMatrix,
@@ -679,7 +679,9 @@ const getDomainDisplayLabel = (domainKey: string) => {
     if (!Array.isArray(raw)) return [];
     return raw.map((d: any) => ({
       id: d.domain_id,
-      name: `${d.domain_name} (${d.domain_id})`,
+      name: /\([^)]+\)\s*$/.test(String(d.domain_name ?? ""))
+        ? String(d.domain_name)
+        : `${d.domain_name} (${d.domain_id})`,
       description: d.domain_description,
       practices: Array.isArray(d.objectives)
         ? d.objectives.map((o: any) => ({
@@ -754,9 +756,13 @@ const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
 
     // if (view.type === "domain") return { type: "domain", name: view.domainName };
 
-if (view.type === "domain") {
-  return { type: "domain", label: getDomainDisplayLabel(view.domainName) };
-}
+    if (view.type === "domain") {
+      return {
+        type: "domain",
+        domainName: view.domainName,
+        label: getDomainDisplayLabel(view.domainName),
+      };
+    }
 
     if (view.type === "practice") {
       const practice = (typeof view.practiceId === "string" && view.practiceId.includes(".L2-")
@@ -785,7 +791,7 @@ if (view.type === "domain") {
     if (view.type === "training") return { type: "training", name: "training" };
     if (view.type === "newsUpdates") return { type: "newsUpdates", name: "newsUpdates" };
     return { type: "dashboard", name: "dashboard" };
-  }, [view, practiceMap]);
+  }, [view, practiceMap, l2PracticeMap, l2DomainsMap, domains]);
 
   const sprsScore = useMemo(() => {
     const maxScore = 110;
@@ -817,13 +823,49 @@ if (view.type === "domain") {
     || "Your Organization"
   );
 
+  const handleUpgradeRequest = useCallback(async (): Promise<"submitted" | "already-pending" | "already-l2"> => {
+    if (effectiveSubscriptionLevel === "COMM_L2") return "already-l2";
+    if (!currentOrgId || !currentUid) throw new Error("Current organization is unavailable.");
+    try {
+      const requestId = await createTierUpgradeRequest({
+        orgId: currentOrgId,
+        orgName: organizationDisplayName,
+        currentTier: effectiveSubscriptionLevel || "COMM_L1",
+        requestedByUid: currentUid,
+        requestedByEmail: auth.currentUser?.email || (profile as any)?.email || "",
+        requestedByName: auth.currentUser?.displayName || (profile as any)?.displayName || (profile as any)?.fullName || "",
+      });
+      void logActivityEvent({
+        orgId: currentOrgId,
+        orgName: organizationDisplayName,
+        action: "tier.requested",
+        actorUid: currentUid,
+        actorEmail: auth.currentUser?.email || (profile as any)?.email || "",
+        actorName: auth.currentUser?.displayName || (profile as any)?.displayName || (profile as any)?.fullName || "",
+        targetType: "accessRequest",
+        targetId: requestId,
+        targetLabel: "COMM_L2",
+        summary: `Tier upgrade requested from ${effectiveSubscriptionLevel || "COMM_L1"} to COMM_L2`,
+        metadata: {currentTier: effectiveSubscriptionLevel || "COMM_L1", requestedTier: "COMM_L2"},
+      });
+      return "submitted";
+    } catch (error) {
+      if (error instanceof Error && error.message.toLowerCase().includes("pending")) {
+        return "already-pending";
+      }
+      throw error;
+    }
+  }, [currentOrgId, currentUid, effectiveSubscriptionLevel, organizationDisplayName, profile]);
+
   const pageTitle = useMemo(() => {
     if (view.type === "admin") return "Admin Panel";
     if (view.type === "superAdmin") return "Super Admin";
     if (view.type === "dashboard") return "Command Dashboard";
-    if (view.type === "domain") return view.domainName;
+    if (view.type === "domain") return getDomainDisplayLabel(view.domainName);
     if (view.type === "practice") {
-      const p = practiceMap.get(view.practiceId);
+      const p = (typeof view.practiceId === "string" && view.practiceId.includes(".L2-")
+        ? l2PracticeMap.get(view.practiceId)
+        : practiceMap.get(view.practiceId));
       return p ? `Practice: ${p.id}` : "Practice";
     }
     if (view.type === "executive") return "Executive Readiness Report";
@@ -847,9 +889,20 @@ if (view.type === "domain") {
     if (view.type === "training") return "Training Modules";
     if (view.type === "newsUpdates") return "News Updates";
     return "CMMC Launch Hub";
-  }, [view, practiceMap]);
+  }, [view, practiceMap, l2PracticeMap, l2DomainsMap, domains]);
 
   const Breadcrumbs = () => {
+    const currentPractice = view.type === "practice"
+      ? (typeof view.practiceId === "string" && view.practiceId.includes(".L2-")
+        ? l2PracticeMap.get(view.practiceId)
+        : practiceMap.get(view.practiceId))
+      : null;
+    const currentPracticeDomainKey = currentPractice
+      ? (String(currentPractice.id || "").includes(".L2-") && currentPractice.domainId
+        ? `__L2__:${currentPractice.domainId}`
+        : currentPractice.domainName)
+      : "";
+    const currentPracticeDomainLabel = currentPracticeDomainKey ? getDomainDisplayLabel(currentPracticeDomainKey) : "";
     const dashboardButton = (
       <button onClick={() => setView({ type: "dashboard" })} className="hover:underline flex items-center">
         <Home className="h-4 w-4 mr-1" /> Dashboard
@@ -865,7 +918,7 @@ if (view.type === "domain") {
         {view.type === "domain" && (
           <>
             <ChevronRight className="h-4 w-4 mx-1" />
-            <span>{view.domainName}</span>
+            <span>{getDomainDisplayLabel(view.domainName)}</span>
           </>
         )}
 
@@ -874,17 +927,14 @@ if (view.type === "domain") {
             <ChevronRight className="h-4 w-4 mx-1" />
             <button
               onClick={() => {
-                const practice = (typeof view.practiceId === "string" && view.practiceId.includes(".L2-")
-          ? l2PracticeMap.get(view.practiceId)
-          : practiceMap.get(view.practiceId));
-                if (practice) setView({ type: "domain", domainName: practice.domainName });
+                if (currentPracticeDomainKey) setView({ type: "domain", domainName: currentPracticeDomainKey });
               }}
               className="hover:underline"
             >
-              {practiceMap.get(view.practiceId)?.domainName}
+              {currentPracticeDomainLabel}
             </button>
             <ChevronRight className="h-4 w-4 mx-1" />
-            <span className="font-medium text-gray-700">{practiceMap.get(view.practiceId)?.id}</span>
+            <span className="font-medium text-gray-700">{currentPractice?.id}</span>
           </>
         )}
 
@@ -1374,7 +1424,7 @@ onDiagnosticsClick={isSuperAdmin ? () => setIsDiagnosticsOpen(true) : undefined}
       <UpgradeModal
         isOpen={isUpgradeModalOpen}
         onClose={() => setIsUpgradeModalOpen(false)}
-        onUpgrade={upgradeSubscription}
+        onUpgrade={handleUpgradeRequest}
       />
 
       <FeedbackButton
