@@ -38,6 +38,10 @@ import { Poam } from "./components/Poam";
 import { PoamReport } from "./components/PoamReport";
 import { ActivityCenter } from "./components/ActivityCenter";
 import { SystemHealthDashboard } from "./components/SystemHealthDashboard";
+import { FeedbackButton } from "./components/FeedbackButton";
+import { PilotParticipantBanner } from "./components/PilotParticipantBanner";
+import { SupportPage } from "./components/SupportPage";
+import { SuperAdminFeedbackReview } from "./components/SuperAdminFeedbackReview";
 import { ResponsibilityMatrixPage } from "./components/ResponsibilityMatrixPage";
 import { TrainingModule } from "./components/training/TrainingModule";
 import { NewsUpdates } from "./components/NewsUpdates";
@@ -152,6 +156,7 @@ async function bootstrapUser() {
 
 type ViewState =
   | { type: "admin" }
+  | { type: "superAdmin" }
   | { type: "dashboard" }
   | { type: "domain"; domainName: string }
   | { type: "practice"; practiceId: string }
@@ -170,12 +175,15 @@ type ViewState =
   | { type: "poamReport" }
   | { type: "activityCenter" }
   | { type: "systemHealth" }
+  | { type: "feedbackReview" }
+  | { type: "support" }
   | { type: "responsibilityMatrix" }
   | { type: "training" }
   | { type: "newsUpdates" };
 
 export type ActiveViewInfo =
   | { type: "admin"; name: "admin" }
+  | { type: "superAdmin"; name: "superAdmin" }
   | { type: "dashboard"; name: "dashboard" }
   | { type: "domain"; name: string }
   | { type: "practice"; name: string; domainName: string }
@@ -194,6 +202,8 @@ export type ActiveViewInfo =
   | { type: "poamReport"; name: "poamReport" }
   | { type: "activityCenter"; name: "activityCenter" }
   | { type: "systemHealth"; name: "systemHealth" }
+  | { type: "feedbackReview"; name: "feedbackReview" }
+  | { type: "support"; name: "support" }
   | { type: "responsibilityMatrix"; name: "responsibilityMatrix" }
   | { type: "training"; name: "training" }
   | { type: "newsUpdates"; name: "newsUpdates" };
@@ -739,6 +749,7 @@ const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
 
   const activeViewInfo = useMemo((): ActiveViewInfo => {
     if (view.type === "admin") return { type: "admin", name: "admin" };
+    if (view.type === "superAdmin") return { type: "superAdmin", name: "superAdmin" };
     if (view.type === "dashboard") return { type: "dashboard", name: "dashboard" };
 
     // if (view.type === "domain") return { type: "domain", name: view.domainName };
@@ -769,6 +780,8 @@ if (view.type === "domain") {
     if (view.type === "responsibilityMatrix") return { type: "responsibilityMatrix", name: "responsibilityMatrix" };
     if (view.type === "activityCenter") return { type: "activityCenter", name: "activityCenter" };
     if (view.type === "systemHealth") return { type: "systemHealth", name: "systemHealth" };
+    if (view.type === "feedbackReview") return { type: "feedbackReview", name: "feedbackReview" };
+    if (view.type === "support") return { type: "support", name: "support" };
     if (view.type === "training") return { type: "training", name: "training" };
     if (view.type === "newsUpdates") return { type: "newsUpdates", name: "newsUpdates" };
     return { type: "dashboard", name: "dashboard" };
@@ -796,8 +809,17 @@ if (view.type === "domain") {
     return maxScore - penalty;
   }, [practiceRecordMap]);
 
+  const organizationDisplayName = String(
+    (companyProfile as any)?.legalName
+    || companyProfile?.companyName
+    || (profile as any)?.orgName
+    || currentOrgId
+    || "Your Organization"
+  );
+
   const pageTitle = useMemo(() => {
     if (view.type === "admin") return "Admin Panel";
+    if (view.type === "superAdmin") return "Super Admin";
     if (view.type === "dashboard") return "Command Dashboard";
     if (view.type === "domain") return view.domainName;
     if (view.type === "practice") {
@@ -820,6 +842,8 @@ if (view.type === "domain") {
     if (view.type === "responsibilityMatrix") return "Responsibility Matrix";
     if (view.type === "activityCenter") return "Activity Center";
     if (view.type === "systemHealth") return "System Health";
+    if (view.type === "feedbackReview") return "Feedback Review";
+    if (view.type === "support") return "Pilot Support";
     if (view.type === "training") return "Training Modules";
     if (view.type === "newsUpdates") return "News Updates";
     return "CMMC Launch Hub";
@@ -880,6 +904,8 @@ if (view.type === "domain") {
           "responsibilityMatrix",
           "activityCenter",
           "systemHealth",
+          "feedbackReview",
+          "support",
           "training",
           "newsUpdates",
         ].includes(view.type) && (
@@ -1206,6 +1232,12 @@ case "domain": {
           />
         );
 
+      case "feedbackReview":
+        return <SuperAdminFeedbackReview isSuperAdmin={isSuperAdmin} />;
+
+      case "support":
+        return <SupportPage />;
+
       case "training":
         return <TrainingModule />;
 
@@ -1275,6 +1307,9 @@ onDiagnosticsClick={isSuperAdmin ? () => setIsDiagnosticsOpen(true) : undefined}
           canViewActivityCenter={isSuperAdmin || orgRole === "orgOwner" || isOrgAdmin}
           onSystemHealthClick={() => setView({ type: "systemHealth" })}
           canViewSystemHealth={isSuperAdmin}
+          onFeedbackReviewClick={() => setView({ type: "feedbackReview" })}
+          canViewFeedbackReview={isSuperAdmin}
+          onSupportClick={() => setView({ type: "support" })}
           onSecurityAnalyzerClick={() => setView({ type: "readinessAnalyzer" })}
           onReadinessReportsClick={() => setView({ type: "readinessReports" })}
           onSystemSecurityPlanClick={() => setView({ type: "systemSecurityPlan" })}
@@ -1290,6 +1325,13 @@ onDiagnosticsClick={isSuperAdmin ? () => setIsDiagnosticsOpen(true) : undefined}
             <header className="flex justify-between items-center mb-2">
               <h1 className="text-3xl font-bold text-gray-900">{pageTitle}</h1>
             </header>
+
+            {!isSuperAdmin && currentOrgId && (
+              <PilotParticipantBanner
+                orgName={organizationDisplayName}
+                onSupportClick={() => setView({ type: "support" })}
+              />
+            )}
 
             <Breadcrumbs />
             {renderContent()}
@@ -1333,6 +1375,16 @@ onDiagnosticsClick={isSuperAdmin ? () => setIsDiagnosticsOpen(true) : undefined}
         isOpen={isUpgradeModalOpen}
         onClose={() => setIsUpgradeModalOpen(false)}
         onUpgrade={upgradeSubscription}
+      />
+
+      <FeedbackButton
+        orgId={currentOrgId}
+        orgName={organizationDisplayName}
+        uid={currentUid}
+        userEmail={auth.currentUser?.email || (profile as any)?.email || ""}
+        userName={auth.currentUser?.displayName || (profile as any)?.displayName || (profile as any)?.fullName || ""}
+        role={isSuperAdmin ? "superAdmin" : orgRole || "member"}
+        pageLabel={pageTitle}
       />
 
       <AppFooter />

@@ -213,6 +213,39 @@ function validActivityEventCreate() {
     );
 }
 
+function validPilotFeedbackCreate() {
+  let orgId = request.resource.data.orgId;
+  return isSignedIn()
+    && request.resource.data.keys().hasOnly([
+      "orgId", "orgName", "uid", "userEmail", "userName", "role",
+      "category", "message", "page", "status", "createdAt", "updatedAt"
+    ])
+    && request.resource.data.uid == request.auth.uid
+    && request.resource.data.category in ["Bug", "Feature Request", "Question", "Other"]
+    && request.resource.data.message is string
+    && request.resource.data.status == "new"
+    && request.resource.data.createdAt == request.time
+    && request.resource.data.updatedAt == request.time
+    && (
+      isSuperAdmin()
+      || (
+        orgId is string
+        && isActiveOrgMember(orgId)
+        && myOrgId() == orgId
+      )
+    );
+}
+
+function validPilotFeedbackStatusUpdate() {
+  return isSuperAdmin()
+    && request.resource.data.diff(resource.data).changedKeys().hasOnly([
+      "status", "updatedAt", "reviewedByUid"
+    ])
+    && request.resource.data.status in ["new", "reviewed", "closed"]
+    && request.resource.data.updatedAt == request.time
+    && request.resource.data.reviewedByUid == request.auth.uid;
+}
+
 
 
 
@@ -235,6 +268,13 @@ function validActivityEventCreate() {
       allow read: if canReadActivityEvents(resource.data.orgId);
       allow create: if validActivityEventCreate();
       allow update, delete: if false;
+    }
+
+    match /pilotFeedback/{feedbackId} {
+      allow read: if isSuperAdmin();
+      allow create: if validPilotFeedbackCreate();
+      allow update: if validPilotFeedbackStatusUpdate();
+      allow delete: if false;
     }
 
 

@@ -27,6 +27,80 @@ This runbook defines the routine operating procedures for the CMMC Launch Hub co
 5. Use the header Save action after assessment changes and wait for the Saved state before navigating away or reloading.
 6. Record any unexpected access, persistence, evidence, OCR, or reporting behavior in the pilot support log.
 
+## Pilot Launch Workflows
+
+### Pilot Onboarding Workflow
+
+1. Confirm the organization fits the initial pilot profile: Connecticut manufacturer, supplier, or defense contractor.
+2. Confirm the intended tier and whether the organization needs Level 1 or Level 2 workflows.
+3. Identify the primary OrgAdmin and initial pilot users.
+4. Collect source-of-truth organization profile fields before or during onboarding.
+5. Approve or activate the organization through the SuperAdmin workflow.
+6. Confirm the OrgAdmin can sign in and sees the correct organization.
+7. Open Command Dashboard and review Organization Dashboard.
+8. Open Profile and complete Company Profile source-of-truth fields.
+9. Invite approved pilot users with least-privileged roles.
+10. Walk through one assessment practice, one evidence upload, OCR expectations, and report generation.
+11. Record onboarding completion, open questions, and follow-up actions.
+
+### Pilot Support Workflow
+
+1. Capture organization, user, role, page, time, browser, expected result, and actual result.
+2. Ask for screenshots or exact displayed messages when available.
+3. Classify the issue as access, profile, assessment, evidence/OCR, reporting, dashboard, activity, tiering, or documentation.
+4. Check Organization Dashboard, Activity Center, and System Health where the role permits.
+5. Reproduce with the least-privileged appropriate test account when practical.
+6. Distinguish fixture limitation, user/data issue, documentation issue, and application defect.
+7. Provide a workaround only when it does not weaken security or change data structures.
+8. Record resolution and whether follow-up validation is required.
+
+### Pilot Escalation Workflow
+
+Escalate immediately when any of the following occur:
+
+- Cross-organization data appears.
+- Unauthorized SuperAdmin controls appear.
+- Viewer users see evidence upload, archive, unarchive, or mutation controls.
+- Report identity shows the wrong organization.
+- Evidence is unavailable after successful upload.
+- Profile or assessment saves fail repeatedly.
+- OCR failures spike across multiple organizations.
+
+Escalation steps:
+
+1. Stop the affected workflow and preserve screenshots, filenames, timestamps, and account details.
+2. Do not change credentials, Firestore rules, Storage rules, or data structures as an ad hoc fix.
+3. Notify pilot technical support and pilot leadership.
+4. Review Activity Center and System Health.
+5. Reproduce in a controlled account when safe.
+6. Patch only verified defects.
+7. Run targeted validation before resuming the workflow.
+
+### Pilot Feedback Collection Process
+
+Collect feedback during onboarding, weekly check-ins, and closeout.
+
+Feedback categories:
+
+- Onboarding clarity.
+- Organization Dashboard usefulness.
+- Company Profile field clarity.
+- Assessment workflow.
+- Evidence upload and OCR.
+- Report readability.
+- Tier/package fit.
+- Support responsiveness.
+
+For each feedback item, record:
+
+- Organization.
+- Role.
+- Workflow.
+- Pain point or requested improvement.
+- Severity.
+- Whether it blocks pilot success.
+- Recommended follow-up phase.
+
 ## SuperAdmin Procedures
 
 ### Review System Health Dashboard

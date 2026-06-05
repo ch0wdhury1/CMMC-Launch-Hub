@@ -6,7 +6,9 @@ import {
   GraduationCap,
   Wrench,
   FileText,
+  HelpCircle,
   Lock,
+  MessageSquare,
   ChevronDown,
   ChevronRight,
 } from "lucide-react";
@@ -45,6 +47,9 @@ type Props = {
   canViewActivityCenter: boolean;
   onSystemHealthClick: () => void;
   canViewSystemHealth: boolean;
+  onFeedbackReviewClick: () => void;
+  canViewFeedbackReview: boolean;
+  onSupportClick: () => void;
   onSecurityAnalyzerClick: () => void;
   onReadinessReportsClick: () => void;
   onSystemSecurityPlanClick: () => void;
@@ -110,6 +115,9 @@ export function Sidebar(props: Props) {
     canViewActivityCenter,
     onSystemHealthClick,
     canViewSystemHealth,
+    onFeedbackReviewClick,
+    canViewFeedbackReview,
+    onSupportClick,
     onSecurityAnalyzerClick,
     onReadinessReportsClick,
     onSystemSecurityPlanClick,
@@ -497,6 +505,14 @@ useEffect(() => {
               <span className="ml-7">Evidence Library</span>
             </button>
 
+            <button
+              className={navClass(activeViewInfo?.type === "support")}
+              onClick={onSupportClick}
+            >
+              <HelpCircle className="ml-7 mr-2 h-4 w-4 text-gray-300" />
+              <span>Pilot Support</span>
+            </button>
+
             {canManageInvitations && (
               <button
                 className={navClass(activeViewInfo?.type === "orgInvitations")}
@@ -521,6 +537,16 @@ useEffect(() => {
                 onClick={onSystemHealthClick}
               >
                 <span className="ml-7">System Health</span>
+              </button>
+            )}
+
+            {canViewFeedbackReview && (
+              <button
+                className={navClass(activeViewInfo?.type === "feedbackReview")}
+                onClick={onFeedbackReviewClick}
+              >
+                <MessageSquare className="ml-7 mr-2 h-4 w-4 text-gray-300" />
+                <span>Feedback Review</span>
               </button>
             )}
           </div>

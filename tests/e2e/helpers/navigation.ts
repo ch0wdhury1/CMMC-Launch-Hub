@@ -12,6 +12,16 @@ export async function goToSystemHealth(page: Page) {
   await page.getByRole("button", { name: "System Health", exact: true }).click();
   await expect(page.getByRole("heading", { name: "System Health", exact: true })).toBeVisible();
 }
+export async function goToPilotSupport(page: Page) {
+  await page.getByRole("button", { name: "SYSTEM TOOLS", exact: true }).click();
+  await page.getByRole("complementary").getByRole("button", { name: "Pilot Support", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Support Page", exact: true })).toBeVisible();
+}
+export async function goToFeedbackReview(page: Page) {
+  await page.getByRole("button", { name: "SYSTEM TOOLS", exact: true }).click();
+  await page.getByRole("button", { name: "Feedback Review", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "SuperAdmin Feedback Review", exact: true })).toBeVisible();
+}
 export async function goToAdmin(page: Page) {
   await page.getByRole("button", { name: "Admin", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Organization Admin", exact: true })).toBeVisible();
