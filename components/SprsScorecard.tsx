@@ -1,18 +1,16 @@
-
 import React, { useState, useMemo, useCallback } from 'react';
 import { Practice, CompanyProfile, PracticeRecord, ReadinessScores, Domain } from '../types';
 import { SprsControl, SPRS_CONTROLS } from '../data/sprsControls';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { getCompanyHeaderHtml } from '../services/pdfUtils';
 import { CheckCircle, XCircle, HelpCircle, ChevronDown, RefreshCw, Download } from 'lucide-react';
 
 interface SprsScorecardProps {
   practiceRecords: PracticeRecord[];
   scores: ReadinessScores;
   companyProfile: CompanyProfile | null;
-  domains: Domain[]; // Added for PDF export
-  practiceMap: Map<string, Practice>; // Added for PDF export
+  domains: Domain[];
+  practiceMap: Map<string, Practice>;
 }
 
 type ControlStatus = "Met" | "Not Met" | "Not Assessed";
@@ -24,7 +22,7 @@ interface UiSprsControl extends SprsControl {
 
 const initialControlsState = SPRS_CONTROLS.map(control => ({
   ...control,
-  status: "Not Met" as ControlStatus, // Default to Not Met
+  status: "Not Met" as ControlStatus,
   note: "",
 }));
 
@@ -47,8 +45,6 @@ export const SprsScorecard: React.FC<SprsScorecardProps> = ({
   practiceRecords,
   scores,
   companyProfile,
-  domains, // Destructure domains
-  practiceMap, // Destructure practiceMap
 }) => {
   const [controls, setControls] = useState<UiSprsControl[]>(initialControlsState);
   const [assessmentName, setAssessmentName] = useState<string>("Current Assessment");
@@ -60,7 +56,7 @@ export const SprsScorecard: React.FC<SprsScorecardProps> = ({
       .filter(c => c.status === "Not Met")
       .reduce((sum, c) => sum + Math.abs(c.weight), 0);
     const finalScore = maxScore - penalties;
-    
+
     return {
       score: finalScore,
       metCount: controls.filter(c => c.status === "Met").length,
@@ -74,28 +70,15 @@ export const SprsScorecard: React.FC<SprsScorecardProps> = ({
   const handleAutoFill = useCallback(() => {
     setControls(currentControls => {
       const updatedControls = currentControls.map(control => {
-        // Don't overwrite manually changed statuses
-        if (control.note || control.status !== 'Not Met') {
-          // A simple heuristic: if user has touched it, don't auto-fill.
-          // You might want a more robust "isDirty" flag in a real app.
-          return control;
-        }
+        if (control.note || control.status !== 'Not Met') return control;
+        if (!control.mappedPracticeIds || control.mappedPracticeIds.length === 0) return control;
 
-        if (!control.mappedPracticeIds || control.mappedPracticeIds.length === 0) {
-          return control;
-        }
-        
         const allMet = control.mappedPracticeIds.every(id => {
           const record = practiceRecordMap.get(id);
           return record?.status === 'met';
         });
 
-        if (allMet) {
-          return { ...control, status: "Met" as ControlStatus };
-        } else {
-          // It's already "Not Met" by default, so no change needed, but explicit for clarity
-          return { ...control, status: "Not Met" as ControlStatus };
-        }
+        return allMet ? { ...control, status: "Met" as ControlStatus } : { ...control, status: "Not Met" as ControlStatus };
       });
       return updatedControls;
     });
@@ -106,7 +89,7 @@ export const SprsScorecard: React.FC<SprsScorecardProps> = ({
   const handleStatusChange = (id: string, newStatus: ControlStatus) => {
     setControls(prev => prev.map(c => c.id === id ? { ...c, status: newStatus } : c));
   };
-  
+
   const handleNoteChange = (id: string, newNote: string) => {
     setControls(prev => prev.map(c => c.id === id ? { ...c, note: newNote } : c));
   };
@@ -117,141 +100,119 @@ export const SprsScorecard: React.FC<SprsScorecardProps> = ({
       return acc;
     }, {} as Record<string, UiSprsControl[]>);
   }, [controls]);
-  
+
   const handleExportPdf = async () => {
-    const doc = new jsPDF();
-    // Fix: Define pageWidth and margin
+    const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "letter" });
     const pageWidth = doc.internal.pageSize.width;
+    const pageHeight = doc.internal.pageSize.height;
     const margin = 15;
+    const organizationName = companyProfile?.companyName || "Organization name not provided";
+    const generatedAt = new Date();
+    const completion = `${scores.practiceCompletionScore}%`;
 
-    const headerHtml = getCompanyHeaderHtml(companyProfile); // Moved here so it's defined
-    await doc.html(headerHtml, {
-      x: 15,
-      y: 15,
-      width: 180,
-      windowWidth: 650,
-    });
-
-    // Start content after the header (estimated position)
-    let yPos = 90;
-
-    doc.setFontSize(24).setTextColor(40, 58, 86); // Dark blue for main title
-    doc.text("SPRS Scorecard & CMMC Assessment", 15, yPos);
-    yPos += 15;
-    
-    doc.setFontSize(14).setTextColor(100);
-    doc.text(`Assessment: ${assessmentName}`, 15, yPos);
-    yPos += 20; // Extra space after subtitle
-
-    // Summary Table
-    autoTable(doc, {
-        startY: yPos,
-        head: [['Summary']],
-        body: [
-            [`Final SPRS Score: ${score}`],
-            [`Controls Met: ${metCount}`],
-            [`Controls Not Met: ${notMetCount}`],
-            [`Controls Not Assessed: ${notAssessedCount}`],
-            [`Overall CMMC L1 Completion: ${scores.practiceCompletionScore}%`],
-        ],
-        theme: 'grid',
-        headStyles: { fillColor: [0, 87, 163] } // Match primary blue
-    });
-    yPos = (doc as any).lastAutoTable.finalY + 15; // Space after summary table
-    
-    // SPRS Controls Table
-    doc.setFontSize(18).setTextColor(40, 58, 86);
-    doc.text("Mapped SPRS Controls Status", 15, yPos);
-    yPos += 10;
-    
-    const sprsTableData = controls.map(c => [c.id, doc.splitTextToSize(c.description, 70), c.weight, c.status, doc.splitTextToSize(c.note, 40)]);
-    autoTable(doc, {
-        startY: yPos,
-        head: [['NIST ID', 'Description', 'Weight', 'Status', 'Note']],
-        body: sprsTableData,
-        theme: 'striped',
-        headStyles: { fillColor: [0, 87, 163] },
-        columnStyles: { 0: { cellWidth: 25 }, 1: { cellWidth: 75 }, 2: { cellWidth: 15, halign: 'center' }, 3: { cellWidth: 25 }, 4: { cellWidth: 'auto' } },
-        didParseCell: function (data) {
-          if (data.section === 'body' && data.column.index === 3) {
-            if (data.cell.raw === 'Met') data.cell.styles.textColor = [34, 139, 34]; // Green
-            if (data.cell.raw === 'Not Met') data.cell.styles.textColor = [255, 0, 0]; // Red
-            if (data.cell.raw === 'Not Assessed') data.cell.styles.textColor = [128, 128, 128]; // Gray
-          }
-        },
-        // Handles page breaks
-        didDrawPage: (data) => {
-            yPos = data.cursor?.y || 15; // Update yPos for subsequent content
+    const drawHeader = () => {
+      const logoSize = 18;
+      if (companyProfile?.companyLogo) {
+        try {
+          doc.addImage(`data:image/png;base64,${companyProfile.companyLogo}`, "PNG", margin, 12, logoSize, logoSize);
+        } catch (error) {
+          doc.setFillColor(226, 232, 240);
+          doc.roundedRect(margin, 12, logoSize, logoSize, 1.5, 1.5, "F");
         }
-    });
-
-    yPos = (doc as any).lastAutoTable.finalY + 20; // Update yPos after SPRS table
-
-    // CMMC Practices and Objectives Section
-    doc.addPage(); // Start this section on a new page
-    await doc.html(headerHtml, { x: 15, y: 15, width: 180, windowWidth: 650 });
-    yPos = 90; // Reset yPos for new page
-
-    doc.setFontSize(18).setTextColor(40, 58, 86);
-    doc.text("CMMC Practices & Assessment Objectives", 15, yPos);
-    yPos += 15;
-
-    // Filter and sort domains for display
-    const sortedDomains = domains.filter(d => d.practices.length > 0);
-
-    for (const domain of sortedDomains) {
-      if (yPos + 10 >= doc.internal.pageSize.height - 30) { // Check for space before new domain title
-        doc.addPage();
-        await doc.html(headerHtml, { x: 15, y: 15, width: 180, windowWidth: 650 });
-        yPos = 90; // Reset yPos for new page
+      } else {
+        doc.setFillColor(226, 232, 240);
+        doc.roundedRect(margin, 12, logoSize, logoSize, 1.5, 1.5, "F");
       }
-      doc.setFontSize(14).setTextColor(50, 70, 100);
-      doc.text(domain.name, 15, yPos);
-      yPos += 8;
 
-      for (const practice of domain.practices) {
-        if (yPos + 15 >= doc.internal.pageSize.height - 30) { // Check for space before new practice
-          doc.addPage();
-          await doc.html(headerHtml, { x: 15, y: 15, width: 180, windowWidth: 650 });
-          yPos = 90; // Reset yPos for new page
-        }
-        const practiceRecord = practiceRecordMap.get(practice.id);
-        // FIX: Safely access practiceRecord.status and provide a fallback.
-        const statusText = (practiceRecord?.status || 'not_assessed').replace(/_/g, ' ').toUpperCase();
-        
-        doc.setFontSize(11).setTextColor(0);
-        doc.text(`${practice.id}: ${practice.name} (Status: ${statusText})`, 20, yPos);
-        yPos += 7;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(12);
+      doc.setTextColor(17, 24, 39);
+      doc.text(organizationName, margin + logoSize + 6, 18);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(75, 85, 99);
+      const headerDetails = [companyProfile?.address, companyProfile?.website].filter(Boolean).join(" | ");
+      if (headerDetails) doc.text(headerDetails, margin + logoSize + 6, 24, { maxWidth: pageWidth - margin * 2 - logoSize - 6 });
+      doc.setDrawColor(209, 213, 219);
+      doc.line(margin, 36, pageWidth - margin, 36);
+    };
 
-        for (const objective of practice.assessment_objectives) {
-          if (yPos + 10 >= doc.internal.pageSize.height - 30) { // Check for space before new objective
-            doc.addPage();
-            await doc.html(headerHtml, { x: 15, y: 15, width: 180, windowWidth: 650 });
-            yPos = 90; // Reset yPos for new page
-            doc.setFontSize(14).setTextColor(50, 70, 100);
-            doc.text(`(Cont.) ${domain.name}`, 15, yPos);
-            yPos += 8;
-          }
-          doc.setFontSize(9).setTextColor(70);
-          const objText = `  - ${objective.id}: ${objective.text}`;
-          const splitObjText = doc.splitTextToSize(objText, pageWidth - margin * 2 - 10);
-          doc.text(splitObjText, 25, yPos);
-          yPos += (splitObjText.length * 5) + 3; // Adjust line height based on split text
+    drawHeader();
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(22);
+    doc.setTextColor(40, 58, 86);
+    doc.text("SPRS Scorecard", margin, 54);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.setTextColor(75, 85, 99);
+    doc.text(`Assessment: ${assessmentName}`, margin, 63);
+    doc.text(`Organization: ${organizationName}`, margin, 70);
+    doc.text(`Generated: ${generatedAt.toLocaleString()}`, margin, 77);
+
+    autoTable(doc, {
+      startY: 90,
+      head: [['Final SPRS Score', 'Controls Met', 'Not Met', 'Not Assessed', 'Completion']],
+      body: [[String(score), String(metCount), String(notMetCount), String(notAssessedCount), completion]],
+      theme: 'grid',
+      styles: { fontSize: 11, cellPadding: 4, halign: 'center' },
+      headStyles: { fillColor: [0, 87, 163], halign: 'center' },
+      bodyStyles: { fontStyle: 'bold' },
+      columnStyles: { 0: { fontSize: 16, textColor: [0, 87, 163] } },
+    });
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.setTextColor(75, 85, 99);
+    const summaryNote = "This export summarizes the SPRS scorecard only. It does not include the full CMMC practice or assessment-objective detail.";
+    doc.text(doc.splitTextToSize(summaryNote, pageWidth - margin * 2), margin, ((doc as any).lastAutoTable.finalY || 116) + 12);
+
+    doc.addPage();
+    drawHeader();
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(16);
+    doc.setTextColor(40, 58, 86);
+    doc.text("Mapped SPRS Controls Status", margin, 50);
+
+    const sprsTableData = controls.map(c => [c.id, c.family, c.description, String(c.weight), c.status, c.note || ""]);
+    autoTable(doc, {
+      startY: 58,
+      head: [['NIST ID', 'Family', 'Description', 'Weight', 'Status', 'Note']],
+      body: sprsTableData,
+      theme: 'striped',
+      margin: { top: 42, right: margin, bottom: 18, left: margin },
+      styles: { fontSize: 7.5, cellPadding: 2, overflow: 'linebreak', valign: 'top' },
+      headStyles: { fillColor: [0, 87, 163] },
+      columnStyles: {
+        0: { cellWidth: 17 },
+        1: { cellWidth: 28 },
+        2: { cellWidth: 76 },
+        3: { cellWidth: 14, halign: 'center' },
+        4: { cellWidth: 23 },
+        5: { cellWidth: 28 },
+      },
+      didParseCell: data => {
+        if (data.section === 'body' && data.column.index === 4) {
+          if (data.cell.raw === 'Met') data.cell.styles.textColor = [34, 139, 34];
+          if (data.cell.raw === 'Not Met') data.cell.styles.textColor = [255, 0, 0];
+          if (data.cell.raw === 'Not Assessed') data.cell.styles.textColor = [128, 128, 128];
         }
-        yPos += 5; // Small gap between practices
-      }
-      yPos += 10; // Larger gap between domains
-    }
+      },
+      didDrawPage: () => {
+        if (doc.getCurrentPageInfo().pageNumber > 1) drawHeader();
+      },
+    });
 
     const pageCount = (doc as any).internal.getNumberOfPages();
-    for(let i = 1; i <= pageCount; i++) {
-        doc.setPage(i);
-        doc.setFontSize(9);
-        doc.setTextColor(150);
-        doc.text(`CMMC Launch Hub — SPRS Scorecard`, 15, doc.internal.pageSize.height - 10);
-        doc.text(`Page ${i} of ${pageCount}`, doc.internal.pageSize.width - 35, doc.internal.pageSize.height - 10);
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFontSize(9);
+      doc.setTextColor(150);
+      doc.text("CMMC Launch Hub — SPRS Scorecard", margin, pageHeight - 10);
+      doc.text(`Page ${i} of ${pageCount}`, pageWidth - margin, pageHeight - 10, { align: "right" });
     }
-    
+
     doc.save(`SPRS_Scorecard_${assessmentName.replace(/ /g, '_')}.pdf`);
   };
 
@@ -296,10 +257,9 @@ export const SprsScorecard: React.FC<SprsScorecardProps> = ({
             <span className="px-2 py-0.5 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">CMMC L1: {scores.practiceCompletionScore}%</span>
         </div>
       </div>
-      
+
       {/* Controls Table */}
       <div className="space-y-2">
-        {/* FIX: Add explicit type cast for Object.entries to fix unknown filter/length access */}
         {(Object.entries(groupedControls) as [string, UiSprsControl[]][]).map(([family, familyControls]) => {
             const familyMetCount = familyControls.filter(c => c.status === "Met").length;
             const isOpen = openFamilies[family] ?? false;

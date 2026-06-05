@@ -24,6 +24,33 @@ const apiBase = () => String(import.meta.env.VITE_API_BASE_URL || "").replace(/\
 export const isValidInvitationEmail = (email: string) =>
   /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizeEmail(email));
 
+const isActiveMember = (member: any) =>
+  member?.status === "active" && member?.active !== false;
+
+const getOrgSeatUsage = async (orgId: string) => {
+  const [orgSnapshot, membersSnapshot, invitationsSnapshot] = await Promise.all([
+    getDoc(doc(db, "orgs", orgId)),
+    getDocs(collection(db, "orgs", orgId, "members")),
+    getDocs(collection(db, "orgs", orgId, "invitations")),
+  ]);
+  const maxUsers = Number(orgSnapshot.data()?.maxUsers || 0);
+  const activeMembers = membersSnapshot.docs.filter(member => isActiveMember(member.data())).length;
+  const pendingInvitations = invitationsSnapshot.docs.filter(invitation => invitation.data()?.status === "pending").length;
+  return { orgSnapshot, maxUsers, activeMembers, pendingInvitations };
+};
+
+const assertOrgHasInvitationCapacity = (usage: { maxUsers: number; activeMembers: number; pendingInvitations: number }) => {
+  if (usage.maxUsers > 0 && usage.activeMembers + usage.pendingInvitations >= usage.maxUsers) {
+    throw new Error("This organization has reached its user limit. Cancel a pending invitation, remove a user, or upgrade before inviting another user.");
+  }
+};
+
+const assertOrgHasMemberCapacity = (usage: { maxUsers: number; activeMembers: number }) => {
+  if (usage.maxUsers > 0 && usage.activeMembers >= usage.maxUsers) {
+    throw new Error("This organization has reached its user limit. Contact your organization administrator.");
+  }
+};
+
 const invitationFromSnapshot = (snapshot: any): OrgInvitation => ({
   id: snapshot.id,
   ...(snapshot.data() as Omit<OrgInvitation, "id">),
@@ -81,19 +108,20 @@ export async function createOrgInvitation(params: {
   if (!isValidInvitationEmail(email)) throw new Error("Enter a valid email address.");
   if (!ORG_INVITATION_ROLES.includes(params.role)) throw new Error("Select a valid invitation role.");
 
+  const usage = await getOrgSeatUsage(params.orgId);
+  assertOrgHasInvitationCapacity(usage);
   const existing = await getDocs(collection(db, "orgs", params.orgId, "invitations"));
   if (existing.docs.some(invitation => invitation.data()?.email === email && invitation.data()?.status === "pending")) {
     throw new Error("A pending invitation already exists for this email.");
   }
 
-  const [orgSnapshot] = await Promise.all([getDoc(doc(db, "orgs", params.orgId))]);
   const invitationId = crypto.randomUUID();
   const invitedByName = auth.currentUser?.displayName || "";
   const invitedByEmail = auth.currentUser?.email || "";
   await setDoc(doc(db, "orgs", params.orgId, "invitations", invitationId), {
     id: invitationId,
     orgId: params.orgId,
-    orgName: orgSnapshot.data()?.companyProfile?.legalName || orgSnapshot.data()?.name || params.orgId,
+    orgName: usage.orgSnapshot.data()?.companyProfile?.legalName || usage.orgSnapshot.data()?.name || params.orgId,
     email,
     fullName: params.fullName?.trim() || "",
     role: params.role,
@@ -120,10 +148,11 @@ export async function acceptOrgInvitation(invitation: OrgInvitation, uid: string
   const invitationRef = doc(db, "orgs", invitation.orgId, "invitations", invitation.id);
   const memberRef = doc(db, "orgs", invitation.orgId, "members", uid);
   const userRef = doc(db, "users", uid);
-  const [freshInvitation, membership, user] = await Promise.all([
+  const [freshInvitation, membership, user, usage] = await Promise.all([
     getDoc(invitationRef),
     getDoc(memberRef),
     getDoc(userRef),
+    getOrgSeatUsage(invitation.orgId),
   ]);
 
   if (!freshInvitation.exists() || freshInvitation.data()?.status !== "pending") {
@@ -135,6 +164,7 @@ export async function acceptOrgInvitation(invitation: OrgInvitation, uid: string
 
   const existingMembership = membership.exists() ? membership.data() : null;
   const alreadyMember = existingMembership?.status === "active";
+  if (!alreadyMember) assertOrgHasMemberCapacity(usage);
   const role = alreadyMember ? existingMembership?.role : invitation.role;
   const displayName = user.data()?.displayName || user.data()?.fullName || invitation.fullName || invitation.email;
   const phone = user.data()?.phone || "";

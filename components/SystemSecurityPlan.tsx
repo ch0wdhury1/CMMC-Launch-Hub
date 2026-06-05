@@ -16,6 +16,8 @@ interface SystemSecurityPlanProps {
   sspData: ReturnType<typeof useSspData>;
   companyProfile: CompanyProfile | null;
   responsibilityMatrix: ResponsibilityMatrixEntry[];
+  canExport?: boolean;
+  exportDisabledReason?: string;
 }
 
 const policyOptions = POLICIES_PROCEDURES.map(p => p.title);
@@ -43,6 +45,8 @@ export const SystemSecurityPlan: React.FC<SystemSecurityPlanProps> = ({
   sspData,
   companyProfile,
   responsibilityMatrix,
+  canExport = true,
+  exportDisabledReason = "SSP PDF export requires COMM_L2 access.",
 }) => {
   const { systemProfile, updateSystemProfile, activePolicies, togglePolicy } = sspData;
   const [activeTab, setActiveTab] = useState('overview');
@@ -91,6 +95,10 @@ export const SystemSecurityPlan: React.FC<SystemSecurityPlanProps> = ({
 
 
   const handleDownload = async () => {
+    if (!canExport) {
+      alert(exportDisabledReason);
+      return;
+    }
     setIsDownloading(true);
     try {
         await generateSspPdf({
@@ -167,10 +175,12 @@ export const SystemSecurityPlan: React.FC<SystemSecurityPlanProps> = ({
             {isGenerating ? <Loader2 className="h-5 w-5 mr-2 animate-spin"/> : <RefreshCw className="h-5 w-5 mr-2"/>}
             {isGenerating ? 'Generating...' : 'Regenerate Preview'}
          </button>
-         <button onClick={handleDownload} disabled={isDownloading} className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-md shadow-sm hover:bg-blue-700 disabled:bg-blue-400">
-            {isDownloading ? <Loader2 className="h-5 w-5 mr-2 animate-spin"/> : <Download className="h-5 w-5 mr-2"/>}
-            {isDownloading ? 'Downloading...' : 'Download SSP PDF'}
-         </button>
+         {canExport && (
+           <button onClick={handleDownload} disabled={isDownloading} title="Download SSP PDF" className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-md shadow-sm hover:bg-blue-700 disabled:bg-blue-400">
+              {isDownloading ? <Loader2 className="h-5 w-5 mr-2 animate-spin"/> : <Download className="h-5 w-5 mr-2"/>}
+              {isDownloading ? 'Downloading...' : 'Download SSP PDF'}
+           </button>
+         )}
       </div>
     </div>
   );

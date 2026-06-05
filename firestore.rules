@@ -99,6 +99,17 @@ function acceptedInvitationAfterWrite(orgId, invitationId, memberUid) {
     ).data.acceptedBy == memberUid;
 }
 
+function orgDoc(orgId) {
+  return get(/databases/$(database)/documents/orgs/$(orgId)).data;
+}
+
+function orgHasCachedUserCapacity(orgId) {
+  return !exists(/databases/$(database)/documents/orgs/$(orgId))
+    || orgDoc(orgId).maxUsers == null
+    || orgDoc(orgId).activeMemberCount == null
+    || orgDoc(orgId).activeMemberCount < orgDoc(orgId).maxUsers;
+}
+
 function validAcceptedInvitationMembership(orgId, invitationId, memberUid) {
   return isSignedIn()
     && request.auth.uid == memberUid
@@ -107,6 +118,7 @@ function validAcceptedInvitationMembership(orgId, invitationId, memberUid) {
     && request.resource.data.active == true
     && request.resource.data.superAdmin == false
     && request.resource.data.role in ["orgAdmin", "contributor", "viewer", "assessor"]
+    && orgHasCachedUserCapacity(orgId)
     && acceptedInvitationAfterWrite(orgId, invitationId, memberUid);
 }
 
@@ -203,13 +215,6 @@ function validActivityEventCreate() {
 
 
 
-
-
-
-
-    function orgDoc(orgId) {
-      return get(/databases/$(database)/documents/orgs/$(orgId)).data;
-    }
 
     function isMyOrg(orgId) {
       return hasUserDoc() && myOrgId() == orgId;
@@ -338,6 +343,7 @@ match /orgs/{orgId} {
       );
 
     allow create: if canManageOrgInvitations(orgId)
+      && orgHasCachedUserCapacity(orgId)
       && request.resource.data.keys().hasOnly([
         "id", "orgId", "orgName", "email", "fullName", "role", "status", "invitedBy", "invitedByUid", "invitedByName", "invitedByEmail", "invitedByDisplay", "invitedAt"
       ])
@@ -462,14 +468,7 @@ match /orgMembers/{orgId}/members/{memberUid} {
   // ✅ SuperAdmin can create membership even when org is being created
   // in the same transaction (org doc may not "exist" during rules eval).
   allow create: if isSuperAdmin()
-    && (
-      !exists(/databases/$(database)/documents/orgs/$(orgId))
-      || (
-        orgDoc(orgId).maxUsers == null
-        || orgDoc(orgId).activeMemberCount == null
-        || orgDoc(orgId).activeMemberCount < orgDoc(orgId).maxUsers
-      )
-    );
+    && orgHasCachedUserCapacity(orgId);
 
   allow update, delete: if isSuperAdmin();
 }

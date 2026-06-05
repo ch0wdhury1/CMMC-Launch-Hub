@@ -1139,6 +1139,8 @@ case "domain": {
             sspData={sspData}
             companyProfile={companyProfile}
             responsibilityMatrix={responsibilityMatrix}
+            canExport={hasL2}
+            exportDisabledReason="SSP PDF export requires COMM_L2 access."
           />
         );
 
