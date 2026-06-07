@@ -5,6 +5,15 @@ import { db } from "../src/firebase";
 import { formatActivityDate, loadActivityEvents, type ActivityEvent } from "../src/activityLog";
 import type { CompanyProfile, Domain, EvidenceSummary, PoamItem, PracticeRecord, ReadinessScores } from "../types";
 
+const WELCOME_AUDIO_URL = "/audio/audio-01-welcome-note.mp3";
+const recommendedFirstSteps = [
+  "Complete Company Profile",
+  "Review Organization Dashboard",
+  "Complete First 5 Practices",
+  "Upload First Evidence",
+  "Generate Executive Report",
+];
+
 type DashboardRole = "orgOwner" | "orgAdmin" | "assessor" | "contributor" | "viewer" | string;
 
 type Props = {
@@ -240,12 +249,28 @@ export const OrganizationDashboard: React.FC<Props> = ({
     </section>
 
     <section className="rounded-lg border border-blue-200 bg-blue-50 p-4 shadow-sm">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <h3 className="text-lg font-bold text-blue-950">New to CMMC Launch Hub?</h3>
-          <p className="mt-1 text-sm text-blue-900">Start with the pilot quick guide, contact support, or send feedback without leaving your dashboard.</p>
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto]">
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(260px,360px)]">
+          <div>
+            <h3 className="text-lg font-bold text-blue-950">New to CMMC Launch Hub?</h3>
+            <p className="mt-1 text-sm text-blue-900">Start with the pilot quick guide, contact support, or send feedback without leaving your dashboard.</p>
+            <div className="mt-3 rounded-md border border-blue-200 bg-white p-3">
+              <div className="text-sm font-bold text-blue-950">Welcome Audio Tour</div>
+              <p className="mt-1 text-xs text-blue-800">Start here if this is your first time using CMMC Launch Hub.</p>
+              <audio controls className="mt-3 w-full">
+                <source src={WELCOME_AUDIO_URL} type="audio/mpeg" />
+                Your browser does not support the audio element.
+              </audio>
+            </div>
+          </div>
+          <div className="rounded-md border border-blue-200 bg-white p-3">
+            <div className="text-sm font-bold text-blue-950">Recommended First Steps</div>
+            <ol className="mt-2 space-y-1 pl-5 text-sm text-blue-900">
+              {recommendedFirstSteps.map(step => <li key={step} className="list-decimal">{step}</li>)}
+            </ol>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 xl:flex-col xl:items-stretch">
           <button type="button" onClick={onQuickStartGuideClick} className="inline-flex items-center rounded-md bg-blue-700 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-800">
             <BookOpen className="mr-2 h-4 w-4" /> Open Quick Start Guide
           </button>

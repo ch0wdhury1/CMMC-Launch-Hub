@@ -4,6 +4,7 @@ import { env, hasCredential } from "./helpers/env";
 import { goToFeedbackReview, goToPilotSupport } from "./helpers/navigation";
 
 const quickStartGuidePath = /\/user-guides\/CMMC_Launch_Hub_Quick_Start_Guide_v1\.0\.pdf$/;
+const welcomeAudioPath = "/audio/audio-01-welcome-note.mp3";
 
 test("OrgAdmin sees pilot banner, Support page, and feedback modal categories", async ({ page }) => {
   test.skip(!hasCredential(env.orgAdmin), "Provide E2E_ORGADMIN credentials.");
@@ -15,6 +16,10 @@ test("OrgAdmin sees pilot banner, Support page, and feedback modal categories", 
 
   await page.getByRole("button", { name: "Command Dashboard", exact: true }).click();
   await expect(page.getByRole("heading", { name: "New to CMMC Launch Hub?", exact: true })).toBeVisible();
+  await expect(page.getByText("Welcome Audio Tour", { exact: true })).toBeVisible();
+  await expect(page.locator(`audio source[src="${welcomeAudioPath}"]`)).toHaveCount(1);
+  const audioResponse = await page.request.get(welcomeAudioPath);
+  expect(audioResponse.ok()).toBeTruthy();
   await expect(page.getByRole("button", { name: "Open Quick Start Guide", exact: true })).toBeVisible();
   const guideResponse = await page.request.get("/user-guides/CMMC_Launch_Hub_Quick_Start_Guide_v1.0.pdf");
   expect(guideResponse.ok()).toBeTruthy();
