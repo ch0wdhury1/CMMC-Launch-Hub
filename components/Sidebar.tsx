@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
   LayoutDashboard,
+  BookOpen,
   Shield,
   ShieldCheck,
   GraduationCap,
@@ -50,6 +51,8 @@ type Props = {
   onFeedbackReviewClick: () => void;
   canViewFeedbackReview: boolean;
   onSupportClick: () => void;
+  onQuickStartGuideClick: () => void;
+  onSendFeedbackClick: () => void;
   onSecurityAnalyzerClick: () => void;
   onReadinessReportsClick: () => void;
   onSystemSecurityPlanClick: () => void;
@@ -118,6 +121,8 @@ export function Sidebar(props: Props) {
     onFeedbackReviewClick,
     canViewFeedbackReview,
     onSupportClick,
+    onQuickStartGuideClick,
+    onSendFeedbackClick,
     onSecurityAnalyzerClick,
     onReadinessReportsClick,
     onSystemSecurityPlanClick,
@@ -607,9 +612,37 @@ useEffect(() => {
       </div>
 
       {/* Current Tier footer */}
-      <div className="px-4 py-3 border-t border-gray-700 text-xs text-gray-300 flex items-center justify-between">
-        <span>Current Tier</span>
-        <span className="font-semibold text-white">{tier}</span>
+      <div className="border-t border-gray-700 px-3 py-3 text-xs text-gray-300">
+        <div className="mb-3 grid grid-cols-1 gap-1.5">
+          <button
+            type="button"
+            onClick={onQuickStartGuideClick}
+            className="flex items-center rounded px-2 py-1.5 text-left text-gray-200 hover:bg-gray-700/60"
+          >
+            <BookOpen className="mr-2 h-3.5 w-3.5 text-blue-300" />
+            Quick Start Guide
+          </button>
+          <button
+            type="button"
+            onClick={onSupportClick}
+            className="flex items-center rounded px-2 py-1.5 text-left text-gray-200 hover:bg-gray-700/60"
+          >
+            <HelpCircle className="mr-2 h-3.5 w-3.5 text-blue-300" />
+            Support
+          </button>
+          <button
+            type="button"
+            onClick={onSendFeedbackClick}
+            className="flex items-center rounded px-2 py-1.5 text-left text-gray-200 hover:bg-gray-700/60"
+          >
+            <MessageSquare className="mr-2 h-3.5 w-3.5 text-blue-300" />
+            Send Feedback
+          </button>
+        </div>
+        <div className="flex items-center justify-between border-t border-gray-700 pt-3">
+          <span>Current Tier</span>
+          <span className="font-semibold text-white">{tier}</span>
+        </div>
       </div>
     </aside>
   );

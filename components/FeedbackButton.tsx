@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { MessageSquare, X } from "lucide-react";
 import {
   PILOT_FEEDBACK_CATEGORIES,
@@ -14,6 +14,7 @@ type Props = {
   userName?: string | null;
   role?: string | null;
   pageLabel?: string | null;
+  triggerToken?: number;
 };
 
 export const FeedbackButton: React.FC<Props> = ({
@@ -24,6 +25,7 @@ export const FeedbackButton: React.FC<Props> = ({
   userName,
   role,
   pageLabel,
+  triggerToken,
 }) => {
   const [open, setOpen] = useState(false);
   const [category, setCategory] = useState<PilotFeedbackCategory>("Bug");
@@ -67,6 +69,10 @@ export const FeedbackButton: React.FC<Props> = ({
       setSubmitting(false);
     }
   };
+
+  useEffect(() => {
+    if (triggerToken && triggerToken > 0) setOpen(true);
+  }, [triggerToken]);
 
   return (
     <>

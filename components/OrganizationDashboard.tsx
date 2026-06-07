@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { collection, doc, getDoc, getDocs } from "firebase/firestore";
-import { Activity, AlertTriangle, ArrowRight, BarChart3, Database, FileText, ShieldCheck, Users } from "lucide-react";
+import { Activity, AlertTriangle, ArrowRight, BarChart3, BookOpen, Database, FileText, HelpCircle, MessageSquare, ShieldCheck, Users } from "lucide-react";
 import { db } from "../src/firebase";
 import { formatActivityDate, loadActivityEvents, type ActivityEvent } from "../src/activityLog";
 import type { CompanyProfile, Domain, EvidenceSummary, PoamItem, PracticeRecord, ReadinessScores } from "../types";
@@ -27,6 +27,9 @@ type Props = {
   onSspClick: () => void;
   onResponsibilityMatrixClick: () => void;
   onInvitationsClick: () => void;
+  onQuickStartGuideClick: () => void;
+  onSupportClick: () => void;
+  onSendFeedbackClick: () => void;
 };
 
 type OrgSnapshot = {
@@ -131,6 +134,9 @@ export const OrganizationDashboard: React.FC<Props> = ({
   onSspClick,
   onResponsibilityMatrixClick,
   onInvitationsClick,
+  onQuickStartGuideClick,
+  onSupportClick,
+  onSendFeedbackClick,
 }) => {
   const [org, setOrg] = useState<OrgSnapshot | null>(null);
   const [orgStats, setOrgStats] = useState<OrgStats>({ activeUsers: null, pendingInvitations: null });
@@ -229,6 +235,26 @@ export const OrganizationDashboard: React.FC<Props> = ({
           <div className="rounded border bg-gray-50 p-2"><div className="font-semibold uppercase text-gray-500">Status</div><div className="mt-1 font-bold capitalize text-gray-900">{org?.subscriptionStatus || "Active"}</div></div>
           <div className="rounded border bg-gray-50 p-2"><div className="font-semibold uppercase text-gray-500">CMMC Access</div><div className="mt-1 font-bold text-gray-900">{isL2 ? "L1 + L2" : "L1"}</div></div>
           <div className="rounded border bg-blue-50 p-2"><div className="font-semibold uppercase text-blue-700">Profile</div><div className="mt-1 font-bold text-blue-950">{completion.percent}% complete</div></div>
+        </div>
+      </div>
+    </section>
+
+    <section className="rounded-lg border border-blue-200 bg-blue-50 p-4 shadow-sm">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <h3 className="text-lg font-bold text-blue-950">New to CMMC Launch Hub?</h3>
+          <p className="mt-1 text-sm text-blue-900">Start with the pilot quick guide, contact support, or send feedback without leaving your dashboard.</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={onQuickStartGuideClick} className="inline-flex items-center rounded-md bg-blue-700 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-800">
+            <BookOpen className="mr-2 h-4 w-4" /> Open Quick Start Guide
+          </button>
+          <button type="button" onClick={onSupportClick} className="inline-flex items-center rounded-md border border-blue-300 bg-white px-3 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-100">
+            <HelpCircle className="mr-2 h-4 w-4" /> Pilot Support
+          </button>
+          <button type="button" onClick={onSendFeedbackClick} className="inline-flex items-center rounded-md border border-blue-300 bg-white px-3 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-100">
+            <MessageSquare className="mr-2 h-4 w-4" /> Send Feedback
+          </button>
         </div>
       </div>
     </section>

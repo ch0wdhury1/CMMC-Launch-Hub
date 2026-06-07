@@ -63,6 +63,7 @@ import { Home, ChevronRight, Key, ShieldAlert, Database, Loader2 } from "lucide-
 
 const PASSWORD_RESET_SUCCESS_MESSAGE = "If an account exists for this email, a password reset link has been sent.";
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const QUICK_START_GUIDE_URL = "/user-guides/CMMC_Launch_Hub_Quick_Start_Guide_v1.0.pdf";
 
 const friendlyLoginError = (error: any): string => {
   const code = String(error?.code || error?.message || "").toLowerCase();
@@ -731,6 +732,7 @@ const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
   };
 
   const [view, setView] = useState<ViewState>({ type: "dashboard" });
+  const [feedbackTrigger, setFeedbackTrigger] = useState(0);
 
   // Load Level 2 static dataset (from /public)
 
@@ -989,6 +991,17 @@ const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
     }
   };
 
+  const openQuickStartGuide = useCallback(() => {
+    const guideWindow = window.open(QUICK_START_GUIDE_URL, "_blank");
+    if (guideWindow) {
+      guideWindow.opener = null;
+    }
+  }, []);
+
+  const openFeedbackModal = useCallback(() => {
+    setFeedbackTrigger(value => value + 1);
+  }, []);
+
   const renderContent = () => {
     if (hasApiKey === false) {
       return (
@@ -1034,6 +1047,9 @@ const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
             onSspClick={() => setView({ type: "systemSecurityPlan" })}
             onResponsibilityMatrixClick={() => setView({ type: "responsibilityMatrix" })}
             onInvitationsClick={() => setView({ type: "orgInvitations" })}
+            onQuickStartGuideClick={openQuickStartGuide}
+            onSupportClick={() => setView({ type: "support" })}
+            onSendFeedbackClick={openFeedbackModal}
           />
         );
 
@@ -1360,6 +1376,8 @@ onDiagnosticsClick={isSuperAdmin ? () => setIsDiagnosticsOpen(true) : undefined}
           onFeedbackReviewClick={() => setView({ type: "feedbackReview" })}
           canViewFeedbackReview={isSuperAdmin}
           onSupportClick={() => setView({ type: "support" })}
+          onQuickStartGuideClick={openQuickStartGuide}
+          onSendFeedbackClick={openFeedbackModal}
           onSecurityAnalyzerClick={() => setView({ type: "readinessAnalyzer" })}
           onReadinessReportsClick={() => setView({ type: "readinessReports" })}
           onSystemSecurityPlanClick={() => setView({ type: "systemSecurityPlan" })}
@@ -1435,6 +1453,7 @@ onDiagnosticsClick={isSuperAdmin ? () => setIsDiagnosticsOpen(true) : undefined}
         userName={auth.currentUser?.displayName || (profile as any)?.displayName || (profile as any)?.fullName || ""}
         role={isSuperAdmin ? "superAdmin" : orgRole || "member"}
         pageLabel={pageTitle}
+        triggerToken={feedbackTrigger}
       />
 
       <AppFooter />
