@@ -2300,14 +2300,21 @@ app.post("/api/admin/sponsor-observer", requireAuth, async (req: any, res) => {
 
     let authUser: admin.auth.UserRecord | null = null;
     let loginCreated = false;
+    let temporaryPasswordApplied = false;
     if (uid) {
       authUser = await admin.auth().getUser(uid);
       if (authUser.email && authUser.email.toLowerCase() !== email) throw new Error("Email cannot be changed for an existing Sponsor Observer");
-      if (authUser.displayName !== displayName) {
-        authUser = await admin.auth().updateUser(uid, {displayName, disabled: status !== "active"});
-      } else {
-        authUser = await admin.auth().updateUser(uid, {disabled: status !== "active"});
+      const existingUserSnap = await db.doc(`users/${uid}`).get();
+      if (existingUserSnap.exists && existingUserSnap.data()?.roles?.pilotObserver !== true) {
+        throw new Error("Only existing Sponsor Observer accounts can be edited here.");
       }
+      const authUpdate: admin.auth.UpdateRequest = {displayName, disabled: status !== "active"};
+      if (temporaryPassword) {
+        if (temporaryPassword.length < 6) throw new Error("Temporary password must be at least 6 characters");
+        authUpdate.password = temporaryPassword;
+        temporaryPasswordApplied = true;
+      }
+      authUser = await admin.auth().updateUser(uid, authUpdate);
     } else {
       authUser = await findAuthUserByEmail(email);
       if (!authUser) {
@@ -2319,8 +2326,22 @@ app.post("/api/admin/sponsor-observer", requireAuth, async (req: any, res) => {
           disabled: status !== "active",
         });
         loginCreated = true;
+        temporaryPasswordApplied = true;
       } else {
-        authUser = await admin.auth().updateUser(authUser.uid, {displayName, disabled: status !== "active"});
+        if (temporaryPassword.length < 6) throw new Error("Temporary password must be at least 6 characters");
+        const existingUserSnap = await db.doc(`users/${authUser.uid}`).get();
+        const existingUser = existingUserSnap.data() || {};
+        const isExistingSponsorObserver = existingUser?.roles?.pilotObserver === true;
+        const hasExistingPlatformRole = existingUser?.roles?.superAdmin === true || typeof existingUser?.roles?.orgRole === "string" || typeof existingUser?.orgId === "string";
+        if (existingUserSnap.exists && !isExistingSponsorObserver && hasExistingPlatformRole) {
+          throw new Error("Email already belongs to an existing platform user. Use Edit for an existing Sponsor Observer or choose a different email.");
+        }
+        authUser = await admin.auth().updateUser(authUser.uid, {
+          displayName,
+          disabled: status !== "active",
+          password: temporaryPassword,
+        });
+        temporaryPasswordApplied = true;
       }
     }
 
@@ -2357,7 +2378,11 @@ app.post("/api/admin/sponsor-observer", requireAuth, async (req: any, res) => {
     return res.json({
       success: true,
       observer: after,
-      message: loginCreated ? "Sponsor Observer login created. Provide the temporary password to the user." : "Sponsor Observer saved.",
+      message: loginCreated
+        ? "Sponsor Observer login created. Share the temporary password securely with the sponsor observer."
+        : temporaryPasswordApplied
+          ? "Sponsor Observer login linked. Share the temporary password securely with the sponsor observer."
+          : "Sponsor Observer saved.",
     });
   } catch (error) {
     console.error("Sponsor observer save failed", error);

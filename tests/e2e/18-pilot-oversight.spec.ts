@@ -66,6 +66,7 @@ test("SuperAdmin can see Sponsor Observers management UI and Sponsor Program fie
   await expect(page.getByRole("heading", { name: "Add Sponsor Observer", exact: true })).toBeVisible();
   await expect(page.getByLabel("Sponsor for this Program")).toBeVisible();
   await expect(page.getByLabel("Sponsor for this Program").locator("option", { hasText: "CT Manufacturing Pilot" })).toHaveCount(1);
+  await expect(page.getByText("Share this temporary password securely with the sponsor observer. They can change it later using password reset.", { exact: true })).toBeVisible();
   await page.getByTitle("Close Sponsor Observer form").click();
   await logout(page);
 });

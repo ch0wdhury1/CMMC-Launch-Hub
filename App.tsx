@@ -277,9 +277,12 @@ function AuthorizedAppGate({ authUser, onLogout }: { authUser: User; onLogout: (
         const userSnap = await getDoc(doc(db, "users", authUser.uid));
         const user = userSnap.exists() ? userSnap.data() as any : null;
         if (!user || user.status !== "active") {
+          const missingMetadataMessage = "Your account setup is incomplete. Contact platform support to finish account activation.";
           if (!cancelled) setAccess({
             status: user?.status === "pending" || !user ? "pending" : "disabled",
-            message: user?.status === "pending" || !user
+            message: !user
+              ? missingMetadataMessage
+              : user?.status === "pending"
               ? "Your registration is pending approval."
               : "Your account is inactive or disabled. Contact your organization administrator.",
           });

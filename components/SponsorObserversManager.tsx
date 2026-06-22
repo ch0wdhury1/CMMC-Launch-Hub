@@ -95,6 +95,10 @@ export const SponsorObserversManager: React.FC<Props> = ({ isSuperAdmin }) => {
     if (!email || !displayName) return setError("Name and email are required.");
     if (!isEditing && form.temporaryPassword.length < 6) return setError("Temporary password must be at least 6 characters.");
     if (!isEditing && form.temporaryPassword !== form.confirmTemporaryPassword) return setError("Temporary passwords do not match.");
+    if (isEditing && (form.temporaryPassword || form.confirmTemporaryPassword)) {
+      if (form.temporaryPassword.length < 6) return setError("New temporary password must be at least 6 characters.");
+      if (form.temporaryPassword !== form.confirmTemporaryPassword) return setError("New temporary passwords do not match.");
+    }
     if (form.sponsorProgram === "Other" && !form.sponsorProgramOther.trim()) return setError("Enter the sponsor program name for Other.");
     setSaving(true);
     try {
@@ -102,7 +106,7 @@ export const SponsorObserversManager: React.FC<Props> = ({ isSuperAdmin }) => {
         uid: form.uid || undefined,
         email,
         displayName,
-        temporaryPassword: isEditing ? undefined : form.temporaryPassword,
+        temporaryPassword: isEditing && !form.temporaryPassword ? undefined : form.temporaryPassword,
         status: form.status,
         sponsorProgram: form.sponsorProgram,
         sponsorProgramOther: form.sponsorProgram === "Other" ? form.sponsorProgramOther.trim() : "",
@@ -168,10 +172,21 @@ export const SponsorObserversManager: React.FC<Props> = ({ isSuperAdmin }) => {
             <div className="mt-4 space-y-3">
               <label className="block text-sm text-gray-700">Name<input value={form.displayName} onChange={event => setForm(current => ({ ...current, displayName: event.target.value }))} className="mt-1 w-full rounded border px-3 py-2" /></label>
               <label className="block text-sm text-gray-700">Email<input type="email" value={form.email} readOnly={isEditing} onChange={event => setForm(current => ({ ...current, email: event.target.value }))} className="mt-1 w-full rounded border px-3 py-2 read-only:bg-gray-50" /></label>
-              {!isEditing && (
-                <div className="grid gap-3 md:grid-cols-2">
-                  <label className="block text-sm text-gray-700">Temporary Password<input type="password" autoComplete="new-password" value={form.temporaryPassword} onChange={event => setForm(current => ({ ...current, temporaryPassword: event.target.value }))} className="mt-1 w-full rounded border px-3 py-2" /></label>
-                  <label className="block text-sm text-gray-700">Confirm Password<input type="password" autoComplete="new-password" value={form.confirmTemporaryPassword} onChange={event => setForm(current => ({ ...current, confirmTemporaryPassword: event.target.value }))} className="mt-1 w-full rounded border px-3 py-2" /></label>
+              {isEditing ? (
+                <div className="space-y-2">
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <label className="block text-sm text-gray-700">New Temporary Password<input type="password" autoComplete="new-password" value={form.temporaryPassword} onChange={event => setForm(current => ({ ...current, temporaryPassword: event.target.value }))} className="mt-1 w-full rounded border px-3 py-2" /></label>
+                    <label className="block text-sm text-gray-700">Confirm New Password<input type="password" autoComplete="new-password" value={form.confirmTemporaryPassword} onChange={event => setForm(current => ({ ...current, confirmTemporaryPassword: event.target.value }))} className="mt-1 w-full rounded border px-3 py-2" /></label>
+                  </div>
+                  <p className="text-xs text-gray-500">Leave blank to keep the current login password. Enter a new temporary password only when reissuing access.</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <label className="block text-sm text-gray-700">Temporary Password<input type="password" autoComplete="new-password" value={form.temporaryPassword} onChange={event => setForm(current => ({ ...current, temporaryPassword: event.target.value }))} className="mt-1 w-full rounded border px-3 py-2" /></label>
+                    <label className="block text-sm text-gray-700">Confirm Password<input type="password" autoComplete="new-password" value={form.confirmTemporaryPassword} onChange={event => setForm(current => ({ ...current, confirmTemporaryPassword: event.target.value }))} className="mt-1 w-full rounded border px-3 py-2" /></label>
+                  </div>
+                  <p className="text-xs text-gray-500">Share this temporary password securely with the sponsor observer. They can change it later using password reset.</p>
                 </div>
               )}
               <label className="block text-sm text-gray-700">Sponsor for this Program<select value={form.sponsorProgram} onChange={event => setForm(current => ({ ...current, sponsorProgram: event.target.value }))} className="mt-1 w-full rounded border bg-white px-3 py-2">{SPONSOR_PROGRAM_OPTIONS.map(option => <option key={option} value={option}>{option}</option>)}</select></label>
