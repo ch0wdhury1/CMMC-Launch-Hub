@@ -1,5 +1,6 @@
 export const env = {
   superAdmin: credential("E2E_SUPERADMIN"),
+  pilotObserver: credential("E2E_PILOT_OBSERVER"),
   orgAdmin: credential("E2E_ORGADMIN"),
   contributor: credential("E2E_CONTRIBUTOR"),
   assessor: credential("E2E_ASSESSOR"),

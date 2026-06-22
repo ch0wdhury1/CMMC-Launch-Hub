@@ -121,6 +121,15 @@ async function isSuperAdminUser(uid: string) {
   return userSnap.exists && userSnap.data()?.status === "active" && userSnap.data()?.roles?.superAdmin === true;
 }
 
+const SPONSOR_PROGRAM_OPTIONS = new Set([
+  "CT Manufacturing Pilot",
+  "CCAT Sponsored Pilot",
+  "DECD / Office of Manufacturing Pilot",
+  "APEX Accelerator Pilot",
+  "Cyber Blue Star Internal Pilot",
+  "Other",
+]);
+
 const EVIDENCE_VALIDATION_STATUSES = new Set([
   "supportive",
   "partial",
@@ -2238,6 +2247,121 @@ app.post("/api/admin/create-invited-user-login", requireAuth, async (req: any, r
   } catch (error) {
     console.error("Invited user login creation failed", error);
     return res.status(400).json({success: false, errorMessage: error instanceof Error ? error.message : "Unable to create invited user login"});
+  }
+});
+
+app.get("/api/admin/sponsor-observers", requireAuth, async (req: any, res) => {
+  try {
+    if (!(await isSuperAdminUser(req.user.uid))) {
+      return res.status(403).json({success: false, errorMessage: "SuperAdmin access required"});
+    }
+    const snapshot = await db.collection("users").where("roles.pilotObserver", "==", true).limit(500).get();
+    const observers = snapshot.docs.map(docSnap => {
+      const data = docSnap.data();
+      return {
+        uid: docSnap.id,
+        email: data.email || "",
+        displayName: data.displayName || data.fullName || "",
+        fullName: data.fullName || data.displayName || "",
+        status: data.status || "active",
+        sponsorProgram: data.sponsorProgram || "",
+        sponsorProgramOther: data.sponsorProgramOther || "",
+        createdAt: data.createdAt || null,
+        updatedAt: data.updatedAt || null,
+        lastLoginAt: data.lastLoginAt || null,
+      };
+    });
+    return res.json({success: true, observers});
+  } catch (error) {
+    console.error("Sponsor observers load failed", error);
+    return res.status(500).json({success: false, errorMessage: "Unable to load sponsor observers"});
+  }
+});
+
+app.post("/api/admin/sponsor-observer", requireAuth, async (req: any, res) => {
+  try {
+    if (!(await isSuperAdminUser(req.user.uid))) {
+      return res.status(403).json({success: false, errorMessage: "SuperAdmin access required"});
+    }
+    const uid = typeof req.body?.uid === "string" ? req.body.uid.trim() : "";
+    const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
+    const displayName = typeof req.body?.displayName === "string" ? req.body.displayName.trim() : "";
+    const temporaryPassword = typeof req.body?.temporaryPassword === "string" ? req.body.temporaryPassword : "";
+    const status = req.body?.status === "inactive" ? "inactive" : "active";
+    const sponsorProgram = typeof req.body?.sponsorProgram === "string" ? req.body.sponsorProgram.trim() : "";
+    const sponsorProgramOther = sponsorProgram === "Other" && typeof req.body?.sponsorProgramOther === "string"
+      ? req.body.sponsorProgramOther.trim().slice(0, 120)
+      : "";
+
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("Valid email is required");
+    if (!displayName) throw new Error("Name is required");
+    if (!SPONSOR_PROGRAM_OPTIONS.has(sponsorProgram)) throw new Error("Select a valid sponsor program");
+    if (sponsorProgram === "Other" && !sponsorProgramOther) throw new Error("Sponsor Program Other is required");
+
+    let authUser: admin.auth.UserRecord | null = null;
+    let loginCreated = false;
+    if (uid) {
+      authUser = await admin.auth().getUser(uid);
+      if (authUser.email && authUser.email.toLowerCase() !== email) throw new Error("Email cannot be changed for an existing Sponsor Observer");
+      if (authUser.displayName !== displayName) {
+        authUser = await admin.auth().updateUser(uid, {displayName, disabled: status !== "active"});
+      } else {
+        authUser = await admin.auth().updateUser(uid, {disabled: status !== "active"});
+      }
+    } else {
+      authUser = await findAuthUserByEmail(email);
+      if (!authUser) {
+        if (temporaryPassword.length < 6) throw new Error("Temporary password must be at least 6 characters");
+        authUser = await admin.auth().createUser({
+          email,
+          password: temporaryPassword,
+          displayName,
+          disabled: status !== "active",
+        });
+        loginCreated = true;
+      } else {
+        authUser = await admin.auth().updateUser(authUser.uid, {displayName, disabled: status !== "active"});
+      }
+    }
+
+    const userRef = db.doc(`users/${authUser.uid}`);
+    const beforeSnap = await userRef.get();
+    const before = beforeSnap.data() || {};
+    const now = admin.firestore.FieldValue.serverTimestamp();
+    const after = {
+      uid: authUser.uid,
+      email,
+      displayName,
+      fullName: displayName,
+      status,
+      roles: {...(before.roles || {}), pilotObserver: true, superAdmin: false},
+      sponsorProgram,
+      sponsorProgramOther,
+      updatedAt: now,
+      updatedBy: req.user.uid,
+      ...(beforeSnap.exists ? {} : {createdAt: now, createdBy: req.user.uid}),
+    };
+    await userRef.set(after, {merge: true});
+    const activityBatch = db.batch();
+    addCleanupActivity(activityBatch, {
+      action: uid ? "update_sponsor_observer" : "create_sponsor_observer",
+      targetType: "user",
+      targetId: authUser.uid,
+      userId: authUser.uid,
+      performedBy: req.user.uid,
+      before,
+      after,
+      cleanupPhase: "28F-FIX",
+    });
+    await activityBatch.commit();
+    return res.json({
+      success: true,
+      observer: after,
+      message: loginCreated ? "Sponsor Observer login created. Provide the temporary password to the user." : "Sponsor Observer saved.",
+    });
+  } catch (error) {
+    console.error("Sponsor observer save failed", error);
+    return res.status(400).json({success: false, errorMessage: error instanceof Error ? error.message : "Unable to save Sponsor Observer"});
   }
 });
 

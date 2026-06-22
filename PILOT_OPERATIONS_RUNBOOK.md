@@ -321,3 +321,79 @@ Before any future pilot deployment:
 - Direct browser-level Firestore and Storage authorization-denial tests are not part of the current suite.
 - Registration creation and row-specific approval automated tests remain intentionally skipped until disposable fixtures are available.
 - Pilot readiness is not a substitute for formal CMMC certification, penetration testing, or production security assessment.
+## v1.1 Pilot Oversight Operations
+
+### Pilot Observer Purpose
+
+Pilot Observer access is intended for sponsor or program oversight users who need visibility across enrolled pilot organizations without administrative authority. Pilot observers may view the CMMC Pilot Dashboard and company-level readiness summaries. They must not be used for operational administration, approval workflows, evidence handling, or user management.
+
+User-facing terminology is Sponsor Observer. The internal role remains `pilotObserver`.
+
+### Creating Sponsor Observers
+
+SuperAdmin users can create and maintain Sponsor Observer users from the SuperAdmin dropdown.
+
+1. Open the SuperAdmin dropdown.
+2. Select Sponsor Observers.
+3. Select Add Sponsor Observer.
+4. Enter name, email, temporary password, status, and Sponsor for this Program.
+5. If Sponsor for this Program is Other, enter the program name in Sponsor Program Other.
+6. Save the Sponsor Observer.
+7. Provide the temporary password to the user using the same secure handoff process used for other SuperAdmin-created logins.
+
+The temporary password is not stored in Firestore. Sponsor Observer metadata is stored on `users/{uid}` with `roles.pilotObserver = true`, `sponsorProgram`, and optional `sponsorProgramOther`.
+
+### Sponsor Observer Access Boundaries
+
+Sponsor Observers can:
+
+- View the CMMC Pilot Dashboard.
+- View read-only Active Orgs summary data.
+- View aggregate readiness and activity summaries.
+- View sponsor program context in the dashboard header.
+
+Sponsor Observers cannot:
+
+- Approve or reject pending actions.
+- Edit organizations or users.
+- Upload, archive, delete, or download raw evidence files.
+- Modify assessments, company profiles, POA&M items, or reports.
+- Access destructive SuperAdmin controls.
+
+### Pilot Dashboard Usage
+
+Use the CMMC Pilot Dashboard to monitor pilot health across organizations:
+
+- Review active organization count, pilot users, average completion, average SPRS score, evidence uploaded, open POA&M items, generated reports, and feedback volume.
+- Use the Active Orgs table to compare company name, town, start date, tier, completion percentage, and SPRS score.
+- Open the Detail view for a company summary. The detail view is intentionally summary-only and does not expose raw evidence file contents.
+- Treat the progress chart as a current snapshot until historical tracking begins from the v1.1 release forward.
+
+### SuperAdmin Dropdown Navigation
+
+SuperAdmin users should use the header dropdown for high-frequency pilot operations:
+
+- Pilot Dashboard: program-level pilot oversight.
+- Main Dashboard: existing SuperAdmin registration and organization management.
+- Active Orgs: active organization status and tier monitoring.
+- Sponsor Observers: create and maintain read-only sponsor/program observer accounts.
+- Pending Actions: consolidated pending registrations, add-user/invitation requests, and tier upgrades.
+- Activity Center: audit activity review.
+- System Health: operational health and alerts.
+- Feedback Review: pilot feedback triage.
+
+### Active Orgs Monitoring
+
+The Active Orgs table now includes completion percentage, SPRS score, last activity, and a detail action. Use these fields to identify organizations that may need onboarding help, evidence support, assessment support, or sponsor follow-up.
+
+### Pending Actions Workflow
+
+Use Pending Actions as the first stop for approval triage:
+
+1. Review Pending Registrations.
+2. Review Pending Add-User / Invitations.
+3. Review Pending Upgrade Requests.
+4. Complete approvals only as SuperAdmin.
+5. Confirm any sensitive or unusual request with the organization contact before approval.
+
+Pilot Observers cannot access approval controls.

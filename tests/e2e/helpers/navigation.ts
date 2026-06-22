@@ -4,7 +4,8 @@ import { qaFixture } from "./fixtures";
 export const goToLogin = (page: Page) => page.goto("/login");
 export const goToRegister = (page: Page) => page.goto("/register");
 export async function goToSuperAdmin(page: Page) {
-  await page.getByRole("button", { name: "Super Admin", exact: true }).click();
+  await page.getByRole("button", { name: "SuperAdmin", exact: true }).click();
+  await page.getByRole("button", { name: "Main Dashboard", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Pending Registrations", exact: true })).toBeVisible();
 }
 export async function goToSystemHealth(page: Page) {

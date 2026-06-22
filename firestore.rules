@@ -22,6 +22,12 @@ service cloud.firestore {
         && userDoc().roles.superAdmin == true;
     }
 
+    function isPilotObserver() {
+      return hasUserDoc()
+        && userDoc().status == "active"
+        && userDoc().roles.pilotObserver == true;
+    }
+
     function myOrgId() {
       return hasUserDoc() ? userDoc().orgId : null;
     }
@@ -186,10 +192,15 @@ function canWriteAssessmentShell(orgId) {
 
 function canReadActivityEvents(orgId) {
   return isSuperAdmin()
+    || isPilotObserver()
     || (
       isActiveOrgMember(orgId)
       && orgMemberDoc(orgId).role in ["orgOwner", "orgAdmin"]
     );
+}
+
+function canReadPilotAssessmentSummary(orgId) {
+  return canReadAssessmentData(orgId) || isPilotObserver();
 }
 
 function validActivityEventCreate() {
@@ -271,7 +282,7 @@ function validPilotFeedbackStatusUpdate() {
     }
 
     match /pilotFeedback/{feedbackId} {
-      allow read: if isSuperAdmin();
+      allow read: if isSuperAdmin() || isPilotObserver();
       allow create: if validPilotFeedbackCreate();
       allow update: if validPilotFeedbackStatusUpdate();
       allow delete: if false;
@@ -312,7 +323,7 @@ match /orgs/{orgId} {
   // - super admin
   // - org owner (bootstrap safe)
   // - org member
-  allow read: if isSuperAdmin() || isActiveOrgMember(orgId);
+  allow read: if isSuperAdmin() || isPilotObserver() || isActiveOrgMember(orgId);
 
   // WRITE org:
   // - super admin only (MVP rule)
@@ -420,12 +431,12 @@ match /orgs/{orgId} {
 
   // --- assessment shell (Phase 4A) ---
   match /assessments/{assessmentId} {
-    allow read: if canReadAssessmentData(orgId);
+    allow read: if canReadPilotAssessmentSummary(orgId);
     allow create, update: if canWriteAssessmentShell(orgId);
     allow delete: if false;
 
     match /practiceRecords/{practiceId} {
-      allow read: if canReadAssessmentData(orgId);
+      allow read: if canReadPilotAssessmentSummary(orgId);
       allow create, update: if canWriteAssessmentShell(orgId);
       allow delete: if false;
 
@@ -464,13 +475,13 @@ match /orgs/{orgId} {
     }
 
     match /poamItems/{poamId} {
-      allow read: if canReadAssessmentData(orgId);
+      allow read: if canReadPilotAssessmentSummary(orgId);
       allow create, update: if canWriteAssessmentShell(orgId);
       allow delete: if false;
     }
 
     match /scoreSnapshots/{snapshotId} {
-      allow read: if canReadAssessmentData(orgId);
+      allow read: if canReadPilotAssessmentSummary(orgId);
       allow create: if canWriteAssessmentShell(orgId);
       allow update, delete: if false;
     }

@@ -42,6 +42,9 @@ import { FeedbackButton } from "./components/FeedbackButton";
 import { PilotParticipantBanner } from "./components/PilotParticipantBanner";
 import { SupportPage } from "./components/SupportPage";
 import { SuperAdminFeedbackReview } from "./components/SuperAdminFeedbackReview";
+import { PilotDashboard } from "./components/PilotDashboard";
+import { PendingActionsPage } from "./components/PendingActionsPage";
+import { SponsorObserversManager } from "./components/SponsorObserversManager";
 import { ResponsibilityMatrixPage } from "./components/ResponsibilityMatrixPage";
 import { TrainingModule } from "./components/training/TrainingModule";
 import { NewsUpdates } from "./components/NewsUpdates";
@@ -58,6 +61,7 @@ import { SPRS_CONTROLS } from "./data/sprsControls";
 import { subscribeActiveOrgMembers, type ActiveOrgMember } from "./src/responsibilityAssignments";
 import { logActivityEvent } from "./src/activityLog";
 import { createTierUpgradeRequest } from "./src/orgUpgradeRequests";
+import { APP_VERSION } from "./src/appVersion";
 
 import { Home, ChevronRight, Key, ShieldAlert, Database, Loader2 } from "lucide-react";
 
@@ -159,6 +163,9 @@ async function bootstrapUser() {
 type ViewState =
   | { type: "admin" }
   | { type: "superAdmin" }
+  | { type: "pilotDashboard" }
+  | { type: "sponsorObservers" }
+  | { type: "pendingActions" }
   | { type: "dashboard" }
   | { type: "domain"; domainName: string }
   | { type: "practice"; practiceId: string }
@@ -186,6 +193,9 @@ type ViewState =
 export type ActiveViewInfo =
   | { type: "admin"; name: "admin" }
   | { type: "superAdmin"; name: "superAdmin" }
+  | { type: "pilotDashboard"; name: "pilotDashboard" }
+  | { type: "sponsorObservers"; name: "sponsorObservers" }
+  | { type: "pendingActions"; name: "pendingActions" }
   | { type: "dashboard"; name: "dashboard" }
   | { type: "domain"; domainName: string; label: string }
   | { type: "practice"; name: string; domainName: string }
@@ -275,18 +285,18 @@ function AuthorizedAppGate({ authUser, onLogout }: { authUser: User; onLogout: (
           });
           return;
         }
-        if (user.roles?.superAdmin === true) {
+        if (user.roles?.superAdmin === true || user.roles?.pilotObserver === true) {
           if (!cancelled) setAccess({ status: "authorized" });
           void logActivityEvent({
             orgId: typeof user.orgId === "string" && user.orgId.trim() ? user.orgId.trim() : "superadmin",
-            orgName: "SuperAdmin",
+            orgName: user.roles?.pilotObserver === true ? "Pilot Oversight" : "SuperAdmin",
             action: "login.succeeded",
             actorUid: authUser.uid,
             actorEmail: authUser.email || user.email || "",
             actorName: user.displayName || user.fullName || authUser.displayName || "",
             targetType: "auth",
             targetId: authUser.uid,
-            summary: "SuperAdmin login succeeded",
+            summary: user.roles?.pilotObserver === true ? "Pilot observer login succeeded" : "SuperAdmin login succeeded",
           });
           return;
         }
@@ -367,6 +377,7 @@ function AuthedApp({ onLogout }: { onLogout: () => void }) {
   const profileRoles = (profile as any)?.roles || {};
   const profileOrgRole = String(profileRoles?.orgRole || "");
   const profileIsSuperAdmin = profileRoles?.superAdmin === true;
+  const profileIsPilotObserver = profileRoles?.pilotObserver === true;
 
   useEffect(() => {
     const orgId = profileOrgId; // user doc has top-level orgId
@@ -377,9 +388,10 @@ function AuthedApp({ onLogout }: { onLogout: () => void }) {
     // and has an org role (or is super admin).
     const userStatus = profileUserStatus; // "active" | "pending" | etc
     const isSA = profileIsSuperAdmin;
+    const isObserver = profileIsPilotObserver;
     const hasOrgRole = !!profileOrgRole;
 
-    if (!orgId || (!isSA && !hasOrgRole) || (userStatus && userStatus !== "active")) {
+    if (isObserver || !orgId || (!isSA && !hasOrgRole) || (userStatus && userStatus !== "active")) {
       setOrgTier(null);
       setOrgStatus(userStatus ?? null);
       return;
@@ -416,13 +428,14 @@ function AuthedApp({ onLogout }: { onLogout: () => void }) {
     return () => {
       cancelled = true;
     };
-  }, [profileIsSuperAdmin, profileOrgId, profileOrgRole, profileUserStatus]);
+  }, [profileIsPilotObserver, profileIsSuperAdmin, profileOrgId, profileOrgRole, profileUserStatus]);
 
   const ent = profile?.entitlements;
 
   // ✅ Role flags (users/{uid}.roles)
   const rolesAny: any = (profile as any)?.roles || {};
   const isSuperAdmin = rolesAny?.superAdmin === true;
+  const isPilotObserver = rolesAny?.pilotObserver === true;
   const orgRole = rolesAny?.orgRole;
   const isOrgAdmin = orgRole === "orgAdmin";
 
@@ -734,6 +747,12 @@ const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
   const [view, setView] = useState<ViewState>({ type: "dashboard" });
   const [feedbackTrigger, setFeedbackTrigger] = useState(0);
 
+  useEffect(() => {
+    if (isPilotObserver && !isSuperAdmin && view.type !== "pilotDashboard") {
+      setView({ type: "pilotDashboard" });
+    }
+  }, [isPilotObserver, isSuperAdmin, view.type]);
+
   // Load Level 2 static dataset (from /public)
 
 
@@ -754,6 +773,9 @@ const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
   const activeViewInfo = useMemo((): ActiveViewInfo => {
     if (view.type === "admin") return { type: "admin", name: "admin" };
     if (view.type === "superAdmin") return { type: "superAdmin", name: "superAdmin" };
+    if (view.type === "pilotDashboard") return { type: "pilotDashboard", name: "pilotDashboard" };
+    if (view.type === "sponsorObservers") return { type: "sponsorObservers", name: "sponsorObservers" };
+    if (view.type === "pendingActions") return { type: "pendingActions", name: "pendingActions" };
     if (view.type === "dashboard") return { type: "dashboard", name: "dashboard" };
 
     // if (view.type === "domain") return { type: "domain", name: view.domainName };
@@ -862,6 +884,9 @@ const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
   const pageTitle = useMemo(() => {
     if (view.type === "admin") return "Admin Panel";
     if (view.type === "superAdmin") return "Super Admin";
+    if (view.type === "pilotDashboard") return "CMMC Pilot Dashboard";
+    if (view.type === "sponsorObservers") return "Sponsor Observers";
+    if (view.type === "pendingActions") return "Pending Actions";
     if (view.type === "dashboard") return "Command Dashboard";
     if (view.type === "domain") return getDomainDisplayLabel(view.domainName);
     if (view.type === "practice") {
@@ -1022,9 +1047,31 @@ const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
       );
     }
 
-    switch (view.type) {
+      switch (view.type) {
       case "admin":
         return <AdminPanel />;
+      case "pilotDashboard":
+        return (
+          <PilotDashboard
+            canView={isSuperAdmin || isPilotObserver}
+            viewerLabel={isSuperAdmin ? "SuperAdmin" : "Pilot Observer"}
+            sponsorProgram={String((profile as any)?.sponsorProgram === "Other" ? (profile as any)?.sponsorProgramOther || "Other" : (profile as any)?.sponsorProgram || "")}
+          />
+        );
+      case "sponsorObservers":
+        return (
+          <div className="space-y-4">
+            <section className="rounded-lg border bg-white p-6 shadow-sm">
+              <h1 className="text-2xl font-bold text-gray-900">Sponsor Observers</h1>
+              <p className="mt-2 text-sm text-gray-600">
+                Manage sponsor/program observer accounts with read-only pilot oversight access.
+              </p>
+            </section>
+            <SponsorObserversManager isSuperAdmin={isSuperAdmin} />
+          </div>
+        );
+      case "pendingActions":
+        return <PendingActionsPage isSuperAdmin={isSuperAdmin} />;
       case "dashboard":
         return (
           <OrganizationDashboard
@@ -1055,7 +1102,7 @@ const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
 
 
 
-case "superAdmin":
+      case "superAdmin":
   return <SuperAdminPanel />;
 
 
@@ -1336,11 +1383,41 @@ case "domain": {
     );
   }
 
+  const superAdminMenuItems = isSuperAdmin ? [
+    { label: "Main Dashboard", onClick: () => setView({ type: "superAdmin" as const }) },
+    { label: "Pilot Dashboard", onClick: () => setView({ type: "pilotDashboard" as const }) },
+    { label: "Active Orgs", onClick: () => setView({ type: "superAdmin" as const }) },
+    { label: "Sponsor Observers", onClick: () => setView({ type: "sponsorObservers" as const }) },
+    { label: "Pending Actions", onClick: () => setView({ type: "pendingActions" as const }) },
+    { label: "Activity Center", onClick: () => setView({ type: "activityCenter" as const }) },
+    { label: "System Health", onClick: () => setView({ type: "systemHealth" as const }) },
+    { label: "Feedback Review", onClick: () => setView({ type: "feedbackReview" as const }) },
+  ] : undefined;
+
+  if (isPilotObserver && !isSuperAdmin) {
+    return (
+      <div className="flex min-h-screen flex-col bg-gray-50">
+        <header className="flex h-20 items-center justify-between border-b border-blue-900 bg-blue-800 px-6 shadow-md">
+          <div>
+            <h1 className="text-2xl font-bold leading-none text-white">CMMC Launch Hub</h1>
+            <p className="mt-1 text-sm font-semibold text-blue-200">{APP_VERSION}</p>
+          </div>
+          <button type="button" onClick={onLogout} className="rounded-md bg-red-700 px-3 py-2 text-sm font-semibold text-white hover:bg-red-600">Logout</button>
+        </header>
+        <main className="flex-1 overflow-y-auto p-4 md:p-6">
+          <div className="mx-auto max-w-7xl">{renderContent()}</div>
+        </main>
+        <AppFooter />
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col h-screen bg-gray-50">
       <AppHeader
         onAdminClick={orgRole === "orgOwner" || isOrgAdmin || isSuperAdmin ? () => setView({ type: "admin" }) : undefined}
         onSuperAdminClick={isSuperAdmin ? () => setView({ type: "superAdmin" }) : undefined}
+        superAdminMenuItems={superAdminMenuItems}
 	onSave={handleSaveAssessment}
         saveStatus={assessmentSaveStatus}
         saveMessage={assessmentSaveMessage}

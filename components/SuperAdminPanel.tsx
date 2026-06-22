@@ -893,8 +893,12 @@ useEffect(() => {
                       <th className="text-left p-3">Primary Contact</th>
                       <th className="text-left p-3">Start</th>
                       <th className="text-left p-3">End</th>
+                      <th className="text-left p-3">% Completed</th>
+                      <th className="text-left p-3">SPRS Score</th>
+                      <th className="text-left p-3">Last Activity</th>
                       <th className="text-left p-3">Pending Add-User</th>
                       <th className="text-left p-3">Pending Upgrade</th>
+                      <th className="text-left p-3">Detail</th>
                       <th className="text-left p-3">Save</th>
                     </tr>
                   </thead>
@@ -923,8 +927,12 @@ useEffect(() => {
                         </td>
                         <td className="p-3"><input type="date" value={orgAdminDrafts[o.id]?.subscriptionStartDate || ""} onChange={event => updateOrgDraft(o.id, "subscriptionStartDate", event.target.value)} className="border rounded px-2 py-1 text-xs" /></td>
                         <td className="p-3"><input type="date" value={orgAdminDrafts[o.id]?.subscriptionEndDate || ""} onChange={event => updateOrgDraft(o.id, "subscriptionEndDate", event.target.value)} className="border rounded px-2 py-1 text-xs" /></td>
+                        <td className="p-3">{Number((o as any).completionPercent ?? (o as any).readiness?.completionPercent ?? 0)}%</td>
+                        <td className="p-3">{Number((o as any).sprsScore ?? (o as any).readiness?.sprsScore ?? -250)}</td>
+                        <td className="p-3">{fmtDate((o as any).lastActivityAt || (o as any).updatedAt)}</td>
                         <td className="p-3">{o.pending?.addUser ?? 0}</td>
                         <td className="p-3">{o.pending?.upgrade ?? 0}</td>
+                        <td className="p-3"><button type="button" onClick={() => setSelectedUsersOrg(o)} className="px-2 py-1 rounded border text-blue-700 text-xs font-semibold hover:bg-blue-50">Detail</button></td>
                         <td className="p-3"><button type="button" onClick={() => saveOrgAdminFields(o)} disabled={actionBusyId === `org-save:${o.id}`} className="px-2 py-1 rounded bg-blue-600 text-white text-xs hover:bg-blue-700 disabled:opacity-50">Save</button></td>
                       </tr>
                     ))}
