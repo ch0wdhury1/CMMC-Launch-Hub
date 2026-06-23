@@ -8,6 +8,7 @@ type Props = {
   canView: boolean;
   viewerLabel: "SuperAdmin" | "Pilot Observer";
   sponsorProgram?: string;
+  onParticipantClick?: (orgId: string) => void;
 };
 
 const SummaryCard = ({ label, value, icon: Icon }: { label: string; value: string | number; icon: React.ComponentType<{ className?: string }> }) => (
@@ -27,7 +28,7 @@ const DetailRow = ({ label, value }: { label: string; value: React.ReactNode }) 
   </div>
 );
 
-export const PilotDashboard: React.FC<Props> = ({ canView, viewerLabel, sponsorProgram }) => {
+export const PilotDashboard: React.FC<Props> = ({ canView, viewerLabel, sponsorProgram, onParticipantClick }) => {
   const [data, setData] = useState<PilotOversightData | null>(null);
   const [selectedOrg, setSelectedOrg] = useState<PilotOrgSummary | null>(null);
   const [loading, setLoading] = useState(false);
@@ -139,7 +140,7 @@ export const PilotDashboard: React.FC<Props> = ({ canView, viewerLabel, sponsorP
                       <td className="p-3">{org.completionPercent}%</td>
                       <td className="p-3">{org.sprsScore}</td>
                       <td className="p-3">
-                        <button type="button" onClick={() => setSelectedOrg(org)} className="inline-flex items-center gap-1 rounded border px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50">
+                        <button type="button" onClick={() => onParticipantClick ? onParticipantClick(org.id) : setSelectedOrg(org)} className="inline-flex items-center gap-1 rounded border px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50">
                           <Eye className="h-3.5 w-3.5" /> Detail
                         </button>
                       </td>

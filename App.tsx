@@ -45,6 +45,11 @@ import { SuperAdminFeedbackReview } from "./components/SuperAdminFeedbackReview"
 import { PilotDashboard } from "./components/PilotDashboard";
 import { PendingActionsPage } from "./components/PendingActionsPage";
 import { SponsorObserversManager } from "./components/SponsorObserversManager";
+import { SponsorLayout } from "./components/SponsorLayout";
+import { SponsorParticipantsPage } from "./components/SponsorParticipantsPage";
+import { SponsorParticipantDetailPage } from "./components/SponsorParticipantDetailPage";
+import { SponsorRecentActivityPage } from "./components/SponsorRecentActivityPage";
+import { SponsorProfilePage } from "./components/SponsorProfilePage";
 import { ResponsibilityMatrixPage } from "./components/ResponsibilityMatrixPage";
 import { TrainingModule } from "./components/training/TrainingModule";
 import { NewsUpdates } from "./components/NewsUpdates";
@@ -61,7 +66,6 @@ import { SPRS_CONTROLS } from "./data/sprsControls";
 import { subscribeActiveOrgMembers, type ActiveOrgMember } from "./src/responsibilityAssignments";
 import { logActivityEvent } from "./src/activityLog";
 import { createTierUpgradeRequest } from "./src/orgUpgradeRequests";
-import { APP_VERSION } from "./src/appVersion";
 
 import { Home, ChevronRight, Key, ShieldAlert, Database, Loader2 } from "lucide-react";
 
@@ -165,6 +169,10 @@ type ViewState =
   | { type: "superAdmin" }
   | { type: "pilotDashboard" }
   | { type: "sponsorObservers" }
+  | { type: "sponsorParticipants" }
+  | { type: "sponsorParticipantDetail"; orgId: string }
+  | { type: "sponsorActivity" }
+  | { type: "sponsorProfile" }
   | { type: "pendingActions" }
   | { type: "dashboard" }
   | { type: "domain"; domainName: string }
@@ -195,6 +203,10 @@ export type ActiveViewInfo =
   | { type: "superAdmin"; name: "superAdmin" }
   | { type: "pilotDashboard"; name: "pilotDashboard" }
   | { type: "sponsorObservers"; name: "sponsorObservers" }
+  | { type: "sponsorParticipants"; name: "sponsorParticipants" }
+  | { type: "sponsorParticipantDetail"; name: "sponsorParticipantDetail" }
+  | { type: "sponsorActivity"; name: "sponsorActivity" }
+  | { type: "sponsorProfile"; name: "sponsorProfile" }
   | { type: "pendingActions"; name: "pendingActions" }
   | { type: "dashboard"; name: "dashboard" }
   | { type: "domain"; domainName: string; label: string }
@@ -750,11 +762,48 @@ const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
   const [view, setView] = useState<ViewState>({ type: "dashboard" });
   const [feedbackTrigger, setFeedbackTrigger] = useState(0);
 
-  useEffect(() => {
-    if (isPilotObserver && !isSuperAdmin && view.type !== "pilotDashboard") {
-      setView({ type: "pilotDashboard" });
+  const sponsorViewFromPath = useCallback((): ViewState => {
+    const path = window.location.pathname;
+    const detailMatch = path.match(/^\/sponsor\/participants\/([^/?#]+)/);
+    if (detailMatch?.[1]) return { type: "sponsorParticipantDetail", orgId: decodeURIComponent(detailMatch[1]) };
+    if (path === "/sponsor/participants") return { type: "sponsorParticipants" };
+    if (path === "/sponsor/activity") return { type: "sponsorActivity" };
+    if (path === "/sponsor/profile") return { type: "sponsorProfile" };
+    return { type: "pilotDashboard" };
+  }, []);
+
+  const sponsorPathForView = useCallback((nextView: ViewState) => {
+    if (nextView.type === "sponsorParticipants") return "/sponsor/participants";
+    if (nextView.type === "sponsorParticipantDetail") return `/sponsor/participants/${encodeURIComponent(nextView.orgId)}`;
+    if (nextView.type === "sponsorActivity") return "/sponsor/activity";
+    if (nextView.type === "sponsorProfile") return "/sponsor/profile";
+    return "/sponsor";
+  }, []);
+
+  const setSponsorView = useCallback((nextView: ViewState, replace = false) => {
+    setView(nextView);
+    const nextPath = sponsorPathForView(nextView);
+    if (window.location.pathname !== nextPath) {
+      const method = replace ? "replaceState" : "pushState";
+      window.history[method](null, "", nextPath);
     }
-  }, [isPilotObserver, isSuperAdmin, view.type]);
+  }, [sponsorPathForView]);
+
+  useEffect(() => {
+    if (!isPilotObserver || isSuperAdmin) return;
+    const allowed = ["pilotDashboard", "sponsorParticipants", "sponsorParticipantDetail", "sponsorActivity", "sponsorProfile"].includes(view.type);
+    if (!allowed) {
+      setSponsorView(sponsorViewFromPath(), true);
+    }
+  }, [isPilotObserver, isSuperAdmin, setSponsorView, sponsorViewFromPath, view.type]);
+
+  useEffect(() => {
+    if (!isPilotObserver || isSuperAdmin) return;
+    setSponsorView(sponsorViewFromPath(), true);
+    const onPopState = () => setView(sponsorViewFromPath());
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, [isPilotObserver, isSuperAdmin, setSponsorView, sponsorViewFromPath]);
 
   // Load Level 2 static dataset (from /public)
 
@@ -778,6 +827,10 @@ const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
     if (view.type === "superAdmin") return { type: "superAdmin", name: "superAdmin" };
     if (view.type === "pilotDashboard") return { type: "pilotDashboard", name: "pilotDashboard" };
     if (view.type === "sponsorObservers") return { type: "sponsorObservers", name: "sponsorObservers" };
+    if (view.type === "sponsorParticipants") return { type: "sponsorParticipants", name: "sponsorParticipants" };
+    if (view.type === "sponsorParticipantDetail") return { type: "sponsorParticipantDetail", name: "sponsorParticipantDetail" };
+    if (view.type === "sponsorActivity") return { type: "sponsorActivity", name: "sponsorActivity" };
+    if (view.type === "sponsorProfile") return { type: "sponsorProfile", name: "sponsorProfile" };
     if (view.type === "pendingActions") return { type: "pendingActions", name: "pendingActions" };
     if (view.type === "dashboard") return { type: "dashboard", name: "dashboard" };
 
@@ -889,6 +942,10 @@ const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
     if (view.type === "superAdmin") return "Super Admin";
     if (view.type === "pilotDashboard") return "CMMC Pilot Dashboard";
     if (view.type === "sponsorObservers") return "Sponsor Observers";
+    if (view.type === "sponsorParticipants") return "Sponsor Participants";
+    if (view.type === "sponsorParticipantDetail") return "Sponsor Participant Detail";
+    if (view.type === "sponsorActivity") return "Sponsor Recent Activity";
+    if (view.type === "sponsorProfile") return "Sponsor Profile";
     if (view.type === "pendingActions") return "Pending Actions";
     if (view.type === "dashboard") return "Command Dashboard";
     if (view.type === "domain") return getDomainDisplayLabel(view.domainName);
@@ -1059,8 +1116,17 @@ const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
             canView={isSuperAdmin || isPilotObserver}
             viewerLabel={isSuperAdmin ? "SuperAdmin" : "Pilot Observer"}
             sponsorProgram={String((profile as any)?.sponsorProgram === "Other" ? (profile as any)?.sponsorProgramOther || "Other" : (profile as any)?.sponsorProgram || "")}
+            onParticipantClick={isPilotObserver && !isSuperAdmin ? (orgId) => setSponsorView({ type: "sponsorParticipantDetail", orgId }) : undefined}
           />
         );
+      case "sponsorParticipants":
+        return <SponsorParticipantsPage onParticipantClick={(orgId) => setSponsorView({ type: "sponsorParticipantDetail", orgId })} />;
+      case "sponsorParticipantDetail":
+        return <SponsorParticipantDetailPage orgId={view.orgId} onBack={() => setSponsorView({ type: "sponsorParticipants" })} />;
+      case "sponsorActivity":
+        return <SponsorRecentActivityPage />;
+      case "sponsorProfile":
+        return <SponsorProfilePage profile={profile} />;
       case "sponsorObservers":
         return (
           <div className="space-y-4">
@@ -1398,20 +1464,24 @@ case "domain": {
   ] : undefined;
 
   if (isPilotObserver && !isSuperAdmin) {
+    const sponsorActiveView =
+      view.type === "sponsorParticipants" || view.type === "sponsorParticipantDetail" ? "participants" :
+      view.type === "sponsorActivity" ? "activity" :
+      view.type === "sponsorProfile" ? "profile" :
+      "dashboard";
     return (
-      <div className="flex min-h-screen flex-col bg-gray-50">
-        <header className="flex h-20 items-center justify-between border-b border-blue-900 bg-blue-800 px-6 shadow-md">
-          <div>
-            <h1 className="text-2xl font-bold leading-none text-white">CMMC Launch Hub</h1>
-            <p className="mt-1 text-sm font-semibold text-blue-200">{APP_VERSION}</p>
-          </div>
-          <button type="button" onClick={onLogout} className="rounded-md bg-red-700 px-3 py-2 text-sm font-semibold text-white hover:bg-red-600">Logout</button>
-        </header>
-        <main className="flex-1 overflow-y-auto p-4 md:p-6">
-          <div className="mx-auto max-w-7xl">{renderContent()}</div>
-        </main>
-        <AppFooter />
-      </div>
+      <SponsorLayout
+        activeView={sponsorActiveView}
+        onLogout={onLogout}
+        onNavigate={(nextView) => {
+          if (nextView === "participants") setSponsorView({ type: "sponsorParticipants" });
+          else if (nextView === "activity") setSponsorView({ type: "sponsorActivity" });
+          else if (nextView === "profile") setSponsorView({ type: "sponsorProfile" });
+          else setSponsorView({ type: "pilotDashboard" });
+        }}
+      >
+        {renderContent()}
+      </SponsorLayout>
     );
   }
 

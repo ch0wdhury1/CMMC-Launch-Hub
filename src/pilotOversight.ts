@@ -1,16 +1,31 @@
-import { collection, getDocs, query, where } from "firebase/firestore";
-import { db } from "./firebase";
+import { collection, doc, getDoc, getDocs, query, where } from "firebase/firestore";
+import { auth, db } from "./firebase";
 import { loadActivityEvents, type ActivityEvent } from "./activityLog";
 import { loadPilotFeedback } from "./pilotFeedback";
+
+export type DomainReadinessSummary = {
+  domain: string;
+  completed: number;
+  remaining: number;
+  total: number;
+  readinessPercent: number;
+  status: "Complete" | "In Progress" | "Not Started";
+};
 
 export type PilotOrgSummary = {
   id: string;
   companyName: string;
+  name?: string;
+  companyProfile?: any;
   town: string;
   state: string;
   startingDate: any;
   tier: string;
   status: string;
+  pilotParticipant?: boolean;
+  orgType?: string;
+  isInternal?: boolean;
+  internal?: boolean;
   completionPercent: number;
   sprsScore: number;
   usersCount: number;
@@ -23,6 +38,10 @@ export type PilotOrgSummary = {
   policyGenerated: boolean;
   reportsGenerated: number;
   lastActivity: any;
+  primaryContactEmail?: string;
+  primaryUserId?: string;
+  overallReadinessPercent: number;
+  domainReadiness: DomainReadinessSummary[];
 };
 
 export type PilotOversightData = {
@@ -54,10 +73,10 @@ export const formatPilotDate = (value: any) => {
 };
 
 const orgName = (org: any, id: string) => String(
-  org?.companyProfile?.legalName
+  org?.name
   || org?.companyProfile?.companyName
+  || org?.companyProfile?.legalName
   || org?.legalName
-  || org?.name
   || org?.displayName
   || id
 );
@@ -86,6 +105,62 @@ const numberValue = (...values: any[]) => {
 
 const statusValue = (value: any) => String(value || "").trim().toLowerCase();
 
+const isLocalhost = () => typeof window !== "undefined" && ["localhost", "127.0.0.1"].includes(window.location.hostname);
+
+const loadCurrentRoleFlags = async () => {
+  const uid = auth.currentUser?.uid;
+  if (!uid) return {};
+  try {
+    const snapshot = await getDoc(doc(db, "users", uid));
+    const data = snapshot.data() as any;
+    return data?.roles && typeof data.roles === "object" ? data.roles : {};
+  } catch (error) {
+    console.debug("[pilot-oversight] role diagnostic unavailable", error);
+    return {};
+  }
+};
+
+const logPilotDiagnostics = async (input: {
+  orgsLoaded: number;
+  activeOrgs: number;
+  participantOrgs: number;
+}) => {
+  if (!isLocalhost()) return;
+  console.debug("[pilot-oversight] participant load diagnostics", {
+    orgsLoadedBeforeFilter: input.orgsLoaded,
+    orgsAfterActiveFilter: input.activeOrgs,
+    orgsAfterInternalExclusion: input.participantOrgs,
+    currentUserRoleFlags: await loadCurrentRoleFlags(),
+  });
+};
+
+const logPilotReadIssue = (source: string, error: unknown) => {
+  if (!isLocalhost()) return;
+  const detail = error as any;
+  console.warn("[pilot-oversight] Firestore read diagnostic", {
+    source,
+    code: detail?.code || "",
+    message: detail?.message || String(error),
+  });
+};
+
+export function isPilotParticipantOrg(org: any) {
+  const id = String(org.id || "").toLowerCase();
+  const name = String(org.companyName || orgName(org, String(org.id || ""))).toLowerCase();
+  const orgType = String(org.orgType || org.type || "").toLowerCase();
+  const status = statusValue(org.status || "active");
+  if (status !== "active") return false;
+  if (org.isInternal === true || org.internal === true) return false;
+  if (["internal", "superadmin"].includes(orgType)) return false;
+  if (id.includes("cyber_blue_star") || id.includes("superadmin") || id.includes("internal")) return false;
+  if (name.includes("cyber blue star") || name.includes("superadmin") || name.includes("internal")) return false;
+  if (org.pilotParticipant === true) return true;
+
+  // TODO: replace this fallback with explicit org fields:
+  // pilotParticipant: true, orgType: "pilot", isInternal: false.
+  return true;
+}
+
 async function countCollection(path: string[]) {
   try {
     const snapshot = await getDocs(collection(db, path[0], ...path.slice(1)));
@@ -95,17 +170,67 @@ async function countCollection(path: string[]) {
   }
 }
 
+type FrameworkDomain = {
+  id: string;
+  name: string;
+  practiceIds: string[];
+};
+
+const frameworkCache = new Map<string, Promise<FrameworkDomain[]>>();
+
+async function loadFrameworkDomains(level: "default_l1" | "default_l2"): Promise<FrameworkDomain[]> {
+  const cacheKey = level;
+  if (!frameworkCache.has(cacheKey)) {
+    frameworkCache.set(cacheKey, (async () => {
+      const url = level === "default_l2" ? "/cmmc_l2_prepop.json" : "/cmmc_l1_prepop.json";
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`Unable to load ${url}`);
+      const data = await response.json();
+      return (data?.domains || []).map((domain: any) => ({
+        id: String(domain.domain_id || domain.id || domain.name || ""),
+        name: String(domain.domain_name || domain.name || domain.domain_id || "Unknown Domain"),
+        practiceIds: (domain.practices || [])
+          .map((practice: any) => String(practice.id || practice.requirementId || practice.practiceId || ""))
+          .filter(Boolean),
+      })).filter((domain: FrameworkDomain) => domain.id && domain.practiceIds.length > 0);
+    })());
+  }
+  return frameworkCache.get(cacheKey)!;
+}
+
+const practiceStatus = (record: any) => String(record?.status || record?.state || "not_assessed").toLowerCase();
+
+const isCompletedPractice = (record: any) => ["met", "partial", "not_met"].includes(practiceStatus(record));
+
 async function loadAssessmentSummary(orgId: string, assessmentId: "default_l1" | "default_l2") {
   try {
-    const [practiceRecords, poamItems, scoreSnapshots] = await Promise.all([
+    const [practiceRecords, poamItems, scoreSnapshots, frameworkDomains] = await Promise.all([
       getDocs(collection(db, "orgs", orgId, "assessments", assessmentId, "practiceRecords")),
       getDocs(collection(db, "orgs", orgId, "assessments", assessmentId, "poamItems")),
       getDocs(collection(db, "orgs", orgId, "assessments", assessmentId, "scoreSnapshots")),
+      loadFrameworkDomains(assessmentId).catch(() => []),
     ]);
-    const practices = practiceRecords.docs.map(item => item.data() as any);
-    const completed = practices.filter(item => ["met", "partial", "not_met"].includes(String(item.status || ""))).length;
-    const remaining = Math.max(0, practices.length - completed);
-    const completion = practices.length === 0 ? 0 : Math.round((completed / practices.length) * 100);
+    const practices = practiceRecords.docs.map(item => ({ practiceId: decodeURIComponent(item.id), ...(item.data() as any) }));
+    const practiceMap = new Map(practices.map(item => [String(item.practiceId || item.id || ""), item]));
+    const totalPracticeCount = frameworkDomains.reduce((sum, domain) => sum + domain.practiceIds.length, 0) || practices.length;
+    const completed = frameworkDomains.length > 0
+      ? frameworkDomains.reduce((sum, domain) => sum + domain.practiceIds.filter(practiceId => isCompletedPractice(practiceMap.get(practiceId))).length, 0)
+      : practices.filter(isCompletedPractice).length;
+    const remaining = Math.max(0, totalPracticeCount - completed);
+    const completion = totalPracticeCount === 0 ? 0 : Math.round((completed / totalPracticeCount) * 100);
+    const domainReadiness = frameworkDomains.map(domain => {
+      const domainCompleted = domain.practiceIds.filter(practiceId => isCompletedPractice(practiceMap.get(practiceId))).length;
+      const domainRemaining = Math.max(0, domain.practiceIds.length - domainCompleted);
+      const readinessPercent = domain.practiceIds.length === 0 ? 0 : Math.round((domainCompleted / domain.practiceIds.length) * 100);
+      return {
+        domain: domain.name,
+        completed: domainCompleted,
+        remaining: domainRemaining,
+        total: domain.practiceIds.length,
+        readinessPercent,
+        status: readinessPercent >= 100 ? "Complete" as const : domainCompleted > 0 ? "In Progress" as const : "Not Started" as const,
+      };
+    });
     const openPoam = poamItems.docs.filter(item => String((item.data() as any)?.status || "").toLowerCase() !== "completed").length;
     const latestScore = scoreSnapshots.docs
       .map(item => item.data() as any)
@@ -116,18 +241,35 @@ async function loadAssessmentSummary(orgId: string, assessmentId: "default_l1" |
       completionPercent: numberValue(latestScore?.completionPercent, latestScore?.practiceCompletionScore, completion),
       sprsScore: numberValue(latestScore?.sprsScore),
       openPoamCount: openPoam,
+      domainReadiness,
     };
   } catch {
-    return { practicesCompleted: 0, practicesRemaining: 0, completionPercent: 0, sprsScore: -250, openPoamCount: 0 };
+    return { practicesCompleted: 0, practicesRemaining: 0, completionPercent: 0, sprsScore: -250, openPoamCount: 0, domainReadiness: [] };
   }
+}
+
+export function pilotParticipantOrganizations(data: PilotOversightData) {
+  return data.organizations.filter(org => statusValue(org.status) === "active");
 }
 
 export async function loadPilotOversightData(): Promise<PilotOversightData> {
   const [orgSnapshot, activityEvents, feedbackItems, accessRequests] = await Promise.all([
-    getDocs(collection(db, "orgs")),
-    loadActivityEvents({ isSuperAdmin: true }),
-    loadPilotFeedback().catch(() => []),
-    getDocs(query(collection(db, "accessRequests"), where("status", "==", "pending"))).catch(() => null),
+    getDocs(collection(db, "orgs")).catch(error => {
+      logPilotReadIssue("orgs", error);
+      throw error;
+    }),
+    loadActivityEvents({ isSuperAdmin: true }).catch(error => {
+      logPilotReadIssue("activityEvents", error);
+      return [];
+    }),
+    loadPilotFeedback().catch(error => {
+      logPilotReadIssue("pilotFeedback", error);
+      return [];
+    }),
+    getDocs(query(collection(db, "accessRequests"), where("status", "==", "pending"))).catch(error => {
+      logPilotReadIssue("accessRequests", error);
+      return null;
+    }),
   ]);
   const orgs = orgSnapshot.docs.map(item => ({ id: item.id, ...(item.data() as any) }));
   const reportEvents = activityEvents.filter(event => event.action === "report.generated");
@@ -143,15 +285,22 @@ export async function loadPilotOversightData(): Promise<PilotOversightData> {
     const usersCount = numberValue(org.activeMemberCount, org.memberCount, await countCollection(["orgs", org.id, "members"]));
     const orgReports = reportsByOrg.get(org.id) || [];
     const orgActivity = activityByOrg.get(org.id) || [];
-    const evidenceCount = numberValue(org.evidenceCount, evidenceEvents.filter(event => event.orgId === org.id).length);
+    const evidenceCount = numberValue(org.evidenceCount, org.readiness?.evidenceCount, evidenceEvents.filter(event => event.orgId === org.id).length);
+    const participantName = orgName(org, org.id);
     return {
       id: org.id,
-      companyName: orgName(org, org.id),
+      companyName: participantName,
+      name: org.name,
+      companyProfile: org.companyProfile,
       town: town(org),
       state: state(org),
       startingDate: org.subscriptionStartDate || org.createdAt || org.approvedAt,
       tier: String(org.tier || org.subscriptionTier || "Not provided"),
       status: String(org.status || "active"),
+      pilotParticipant: org.pilotParticipant === true,
+      orgType: String(org.orgType || org.type || ""),
+      isInternal: org.isInternal === true,
+      internal: org.internal === true,
       completionPercent: assessment.completionPercent,
       sprsScore: assessment.sprsScore,
       usersCount,
@@ -164,10 +313,20 @@ export async function loadPilotOversightData(): Promise<PilotOversightData> {
       policyGenerated: orgReports.some(event => /policy/i.test(event.targetLabel || event.summary || "")),
       reportsGenerated: orgReports.length,
       lastActivity: orgActivity[0]?.createdAt,
+      primaryContactEmail: String(org.companyProfile?.primaryContactEmail || org.primaryContactEmail || org.ownerEmail || ""),
+      primaryUserId: String(org.ownerUid || org.primaryUserId || ""),
+      overallReadinessPercent: assessment.completionPercent,
+      domainReadiness: assessment.domainReadiness,
     };
   }));
 
-  const activeOrganizations = organizations.filter(org => statusValue(org.status) === "active");
+  const activeStatusOrganizations = organizations.filter(org => statusValue(org.status) === "active");
+  const activeOrganizations = activeStatusOrganizations.filter(isPilotParticipantOrg);
+  await logPilotDiagnostics({
+    orgsLoaded: orgs.length,
+    activeOrgs: activeStatusOrganizations.length,
+    participantOrgs: activeOrganizations.length,
+  });
   const averageCompletionPercent = activeOrganizations.length === 0 ? 0 : Math.round(activeOrganizations.reduce((sum, org) => sum + org.completionPercent, 0) / activeOrganizations.length);
   const averageSprsScore = activeOrganizations.length === 0 ? -250 : Math.round(activeOrganizations.reduce((sum, org) => sum + org.sprsScore, 0) / activeOrganizations.length);
   const pendingRegistrations = accessRequests?.docs.filter(item => (item.data() as any)?.type === "orgRegistration").length || 0;
@@ -183,9 +342,24 @@ export async function loadPilotOversightData(): Promise<PilotOversightData> {
       reportsGenerated: reportEvents.length,
       feedbackItems: feedbackItems.length + pendingRegistrations * 0,
     },
-    organizations: organizations.sort((a, b) => a.companyName.localeCompare(b.companyName)),
-    recentActivity: activityEvents.slice(0, 20),
+    organizations: organizations.filter(isPilotParticipantOrg).sort((a, b) => a.companyName.localeCompare(b.companyName)),
+    recentActivity: activityEvents.filter(event => organizations.some(org => org.id === event.orgId && isPilotParticipantOrg(org))).slice(0, 20),
     progressHistory: [{ label: "Current", averageCompletionPercent }],
     hasHistoricalSnapshots: false,
   };
+}
+
+export async function loadPilotParticipantDetail(orgId: string): Promise<{
+  organization: PilotOrgSummary | null;
+  activity: ActivityEvent[];
+}> {
+  const [data, allActivity] = await Promise.all([
+    loadPilotOversightData(),
+    loadActivityEvents({ isSuperAdmin: true }).catch(() => []),
+  ]);
+  const organization = data.organizations.find(org => org.id === orgId) || null;
+  const activity = allActivity
+    .filter(event => event.orgId === orgId)
+    .sort((a, b) => toTime(b.createdAt) - toTime(a.createdAt));
+  return { organization, activity };
 }

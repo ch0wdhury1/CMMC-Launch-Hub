@@ -1,4 +1,6 @@
 import { auth } from "./firebase";
+import { collection, getDocs } from "firebase/firestore";
+import { db } from "./firebase";
 
 export type PendingInvitationRequest = {
   id: string;
@@ -31,6 +33,7 @@ export type PendingAccessRequest = {
   requestedTier?: string;
   requestedByUid?: string;
   requestedByEmail?: string;
+  companyName?: string;
   createdAt?: unknown;
   status?: string;
   superAdminApprovalStatus?: string;
@@ -70,7 +73,35 @@ async function authenticatedRequest(path: string, init?: RequestInit) {
 }
 
 export async function loadPendingRequestInventory(): Promise<PendingRequestInventory> {
-  return authenticatedRequest("/api/admin/pending-requests");
+  const payload = await authenticatedRequest("/api/admin/pending-requests");
+  const orgSnapshot = await getDocs(collection(db, "orgs")).catch(() => null);
+  const orgNameMap = new Map<string, string>();
+  orgSnapshot?.docs.forEach(orgDoc => {
+    const org = orgDoc.data() as any;
+    const name = cleanOrgName(
+      org?.companyProfile?.companyName,
+      org?.name,
+      undefined,
+      "Unknown Organization"
+    );
+    orgNameMap.set(orgDoc.id, name);
+  });
+  const accessRequests = (payload.accessRequests || []).map((request: PendingAccessRequest) => {
+    if (request.type !== "upgradeRequest") return request;
+    const resolved = orgNameMap.get(request.orgId) || cleanOrgName(request.companyName, undefined, request.organization, "Unknown Organization");
+    return {...request, organization: resolved};
+  });
+  return {...payload, accessRequests};
+}
+
+function cleanOrgName(primary?: unknown, secondary?: unknown, tertiary?: unknown, fallback = "Unknown Organization") {
+  for (const value of [primary, secondary, tertiary]) {
+    const text = String(value || "").trim();
+    if (!text) continue;
+    if (text.toLowerCase() === "my company") continue;
+    return text;
+  }
+  return fallback;
 }
 
 export async function runPendingRequestControl(params: {

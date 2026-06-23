@@ -49,6 +49,14 @@ test("Pending Actions page renders the three pending sections", async ({ page })
   await page.getByRole("button", { name: "Pending Actions", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Pending Actions", exact: true }).nth(1)).toBeVisible();
   await expect(page.getByRole("heading", { name: "Pending Registrations", exact: true })).toBeVisible();
+  await expect(page.getByText("Loading pending registrations...")).toHaveCount(0, { timeout: 15000 });
+  const noPendingRegistrations = page.getByText("No pending registrations.", { exact: true });
+  if (!(await noPendingRegistrations.isVisible().catch(() => false))) {
+    await expect(page.getByRole("columnheader", { name: "Actions", exact: true }).first()).toBeVisible();
+    const pendingRegistrationRows = page.getByRole("row").filter({ has: page.getByRole("button", { name: "Approve", exact: true }) });
+    await expect(pendingRegistrationRows.first().getByRole("button", { name: "Approve", exact: true })).toBeVisible();
+    await expect(pendingRegistrationRows.first().getByRole("button", { name: "Cancel", exact: true })).toBeVisible();
+  }
   await expect(page.getByRole("heading", { name: "Pending Add-User / Invitations", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Pending Upgrade Requests", exact: true })).toBeVisible();
   await logout(page);
@@ -76,8 +84,27 @@ test("pilotObserver can access Pilot Dashboard without approval controls", async
   await login(page, env.pilotObserver.email, env.pilotObserver.password);
   await expect(page.getByRole("main").getByRole("heading", { name: "CMMC Pilot Dashboard", exact: true })).toBeVisible();
   await expect(page.getByText("Pilot Observer read-only oversight", { exact: true })).toBeVisible();
+  for (const label of ["Dashboard", "Participants", "Recent Activity", "My Profile", "Logout"]) {
+    await expect(page.getByRole("button", { name: label, exact: true })).toBeVisible();
+  }
+  await expect(page.getByRole("button", { name: "Command Dashboard", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "CMMC LEVEL 1", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "COMPLIANCE REPORTING", exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Approve", exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Reject", exact: true })).toHaveCount(0);
+  await logout(page);
+});
+
+test("pilotObserver can access Participants and Recent Activity pages", async ({ page }) => {
+  test.skip(!hasCredential(env.pilotObserver), "Provide E2E_PILOT_OBSERVER credentials.");
+  await login(page, env.pilotObserver.email, env.pilotObserver.password);
+  await page.getByRole("button", { name: "Participants", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Participants", exact: true })).toBeVisible();
+  await expect(page.getByRole("columnheader", { name: "Company Name", exact: true })).toBeVisible();
+  await expect(page.getByRole("columnheader", { name: "Evidence Count", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Recent Activity", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Recent Activity", exact: true })).toBeVisible();
+  await expect(page.getByRole("columnheader", { name: "Details / Summary", exact: true })).toBeVisible();
   await logout(page);
 });
 
@@ -86,6 +113,8 @@ test("OrgAdmin cannot access Pilot Dashboard navigation", async ({ page }) => {
   await login(page, env.orgAdmin.email, env.orgAdmin.password);
   await expectAppShell(page);
   await expect(page.getByRole("button", { name: "SuperAdmin", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Participants", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Recent Activity", exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Sponsor Observers", exact: true })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "CMMC Pilot Dashboard", exact: true })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Sponsor Observers", exact: true })).toHaveCount(0);

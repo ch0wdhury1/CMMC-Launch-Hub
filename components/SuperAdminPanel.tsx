@@ -128,7 +128,7 @@ export const SuperAdminPanel: React.FC = () => {
   const [pendingRegistrations, setPendingRegistrations] = useState<AccessRequestRow[]>([]);
   const [pendingRequestCounts, setPendingRequestCounts] = useState({addUser: 0, upgrade: 0});
 
-  // --- approve/deny state ---
+  // --- approve/cancel state ---
   const [actionBusyId, setActionBusyId] = useState<string | null>(null);
   const handlePendingRequestCounts = useCallback((counts: {addUser: number; upgrade: number}) => setPendingRequestCounts(counts), []);
   const scrollToPendingRequests = (id: string) => document.getElementById(id)?.scrollIntoView({behavior: "smooth", block: "start"});
@@ -362,25 +362,26 @@ const getOrgDefaultsForTier = (tier: string) => {
 
 
 
-  const denyRegistration = async (req: AccessRequestRow) => {
+  const cancelRegistration = async (req: AccessRequestRow) => {
     if (req.status && req.status !== "pending") return;
     if (!isSuperAdmin) return;
     setSaveMsg("");
     setActionBusyId(req.id);
     try {
       await updateDoc(doc(db, "accessRequests", req.id), {
-        status: "denied",
-        deniedAt: serverTimestamp(),
-        deniedByUid: (profile as any)?.uid || null,
+        status: "cancelled",
+        cancelledAt: serverTimestamp(),
+        cancelledByUid: (profile as any)?.uid || null,
+        cancelledByEmail: (profile as any)?.email || "",
         updatedAt: serverTimestamp(),
       });
 
 // ✅ remove from local pending list immediately
 setPendingRegistrations((prev) => prev.filter((r) => r.id !== req.id));
-setSaveMsg(`✅ Denied: ${req.primaryContactEmail || req.email || req.id}`);
+setSaveMsg(`Cancelled registration: ${req.primaryContactEmail || req.email || req.id}`);
     } catch (e: any) {
       console.error(e);
-      setSaveMsg(`❌ Deny failed: ${e?.message || e}`);
+      setSaveMsg(`Cancel failed: ${e?.message || e}`);
     } finally {
       setActionBusyId(null);
     }
@@ -846,15 +847,15 @@ useEffect(() => {
                               onClick={() => approveRegistration(r)}
                               className="px-3 py-1.5 rounded-md bg-emerald-600 text-white text-xs hover:bg-emerald-700 disabled:opacity-60"
                             >
-                              Approve
+                              {actionBusyId === r.id ? "Working..." : "Approve"}
                             </button>
                             <button
                               type="button"
                               disabled={actionBusyId === r.id}
-                              onClick={() => denyRegistration(r)}
+                              onClick={() => cancelRegistration(r)}
                               className="px-3 py-1.5 rounded-md bg-rose-600 text-white text-xs hover:bg-rose-700 disabled:opacity-60"
                             >
-                              Deny
+                              {actionBusyId === r.id ? "Working..." : "Cancel"}
                             </button>
                           </div>
                         </td>
