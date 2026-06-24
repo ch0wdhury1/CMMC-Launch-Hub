@@ -1,9 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
   archiveProgram,
+  addProgramObserver,
   createProgram,
   listProgramsWithCounts,
   reactivateProgram,
+  removeProgramObserver,
   updateProgram,
   type ProgramInput,
   type ProgramStatus,
@@ -56,6 +58,7 @@ export const ProgramManagementPage: React.FC<Props> = ({ isSuperAdmin }) => {
   const [showForm, setShowForm] = useState(false);
   const [draft, setDraft] = useState<ProgramInput>(emptyDraft);
   const [observerEmailsText, setObserverEmailsText] = useState("");
+  const [observerEmail, setObserverEmail] = useState("");
 
   const actorUid = String((profile as any)?.uid || "");
 
@@ -158,6 +161,63 @@ export const ProgramManagementPage: React.FC<Props> = ({ isSuperAdmin }) => {
     }
   };
 
+  const addObserver = async () => {
+    if (!editing) return;
+    setSaving(true);
+    setMessage("");
+    setError("");
+    try {
+      const assignment = await addProgramObserver(editing, observerEmail, actorUid);
+      setMessage(assignment.status === "linked"
+        ? `Linked ${assignment.email} to ${editing.programCode}.`
+        : `Added pending observer email ${assignment.email}. Create the Sponsor Observer login from Sponsor Observer Management if needed.`);
+      setObserverEmail("");
+      await load();
+      const refreshed = await listProgramsWithCounts();
+      const refreshedProgram = refreshed.find(program => program.id === editing.id) || null;
+      setEditing(refreshedProgram);
+      if (refreshedProgram) {
+        setObserverEmailsText(joinList(refreshedProgram.sponsorObserverEmails));
+        setDraft(current => ({
+          ...current,
+          sponsorObserverEmails: refreshedProgram.sponsorObserverEmails || [],
+          sponsorObserverUids: refreshedProgram.sponsorObserverUids || [],
+        }));
+      }
+    } catch (assignmentError: any) {
+      setError(assignmentError?.message || "Unable to add observer.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const removeObserver = async (email: string, uid?: string) => {
+    if (!editing) return;
+    setSaving(true);
+    setMessage("");
+    setError("");
+    try {
+      await removeProgramObserver(editing, email, uid, actorUid);
+      setMessage(`Removed ${email} from ${editing.programCode}.`);
+      await load();
+      const refreshed = await listProgramsWithCounts();
+      const refreshedProgram = refreshed.find(program => program.id === editing.id) || null;
+      setEditing(refreshedProgram);
+      if (refreshedProgram) {
+        setObserverEmailsText(joinList(refreshedProgram.sponsorObserverEmails));
+        setDraft(current => ({
+          ...current,
+          sponsorObserverEmails: refreshedProgram.sponsorObserverEmails || [],
+          sponsorObserverUids: refreshedProgram.sponsorObserverUids || [],
+        }));
+      }
+    } catch (assignmentError: any) {
+      setError(assignmentError?.message || "Unable to remove observer.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const sortedPrograms = useMemo(
     () => programs.slice().sort((a, b) => a.programCode.localeCompare(b.programCode)),
     [programs]
@@ -217,6 +277,36 @@ export const ProgramManagementPage: React.FC<Props> = ({ isSuperAdmin }) => {
               <button type="submit" disabled={saving} className="rounded bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-60">{saving ? "Saving..." : "Save Program"}</button>
             </div>
           </form>
+          {editing && (
+            <section className="mt-6 rounded-lg border bg-gray-50 p-4">
+              <h3 className="font-semibold text-gray-900">Assigned Program Observers</h3>
+              <p className="mt-1 text-xs text-gray-500">Existing users are linked with roles.programObserver and this program scope. New emails remain pending until a Sponsor Observer login is created through the existing Sponsor Observer Management flow.</p>
+              <div className="mt-3 flex flex-col gap-2 md:flex-row">
+                <input type="email" value={observerEmail} onChange={event => setObserverEmail(event.target.value)} placeholder="observer@example.com" className="flex-1 rounded border px-3 py-2 text-sm" />
+                <button type="button" onClick={addObserver} disabled={saving || !observerEmail.trim()} className="rounded bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-60">Add Observer</button>
+              </div>
+              <div className="mt-4 overflow-auto rounded border bg-white">
+                <table className="min-w-full text-left text-sm">
+                  <thead className="bg-gray-50 text-xs uppercase text-gray-500"><tr><th className="p-3">Email</th><th className="p-3">UID if available</th><th className="p-3">Status</th><th className="p-3">Actions</th></tr></thead>
+                  <tbody>
+                    {(editing.sponsorObserverEmails || []).map(email => {
+                      const index = (editing.sponsorObserverEmails || []).indexOf(email);
+                      const uid = (editing.sponsorObserverUids || [])[index] || "";
+                      return (
+                        <tr key={email} className="border-t">
+                          <td className="p-3">{email}</td>
+                          <td className="p-3 font-mono text-xs">{uid || "Pending user link"}</td>
+                          <td className="p-3">{uid ? "linked" : "pending"}</td>
+                          <td className="p-3"><button type="button" onClick={() => removeObserver(email, uid)} disabled={saving} className="rounded border px-2 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50">Remove from Program</button></td>
+                        </tr>
+                      );
+                    })}
+                    {(editing.sponsorObserverEmails || []).length === 0 && <tr><td colSpan={4} className="p-4 text-sm text-gray-500">No assigned program observers.</td></tr>}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
         </section>
       )}
 
@@ -263,4 +353,3 @@ export const ProgramManagementPage: React.FC<Props> = ({ isSuperAdmin }) => {
     </div>
   );
 };
-

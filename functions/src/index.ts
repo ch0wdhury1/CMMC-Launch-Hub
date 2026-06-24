@@ -2255,8 +2255,14 @@ app.get("/api/admin/sponsor-observers", requireAuth, async (req: any, res) => {
     if (!(await isSuperAdminUser(req.user.uid))) {
       return res.status(403).json({success: false, errorMessage: "SuperAdmin access required"});
     }
-    const snapshot = await db.collection("users").where("roles.pilotObserver", "==", true).limit(500).get();
-    const observers = snapshot.docs.map(docSnap => {
+    const [pilotSnapshot, programSnapshot] = await Promise.all([
+      db.collection("users").where("roles.pilotObserver", "==", true).limit(500).get(),
+      db.collection("users").where("roles.programObserver", "==", true).limit(500).get(),
+    ]);
+    const observerDocs = new Map<string, FirebaseFirestore.QueryDocumentSnapshot>();
+    pilotSnapshot.docs.forEach(docSnap => observerDocs.set(docSnap.id, docSnap));
+    programSnapshot.docs.forEach(docSnap => observerDocs.set(docSnap.id, docSnap));
+    const observers = Array.from(observerDocs.values()).map(docSnap => {
       const data = docSnap.data();
       return {
         uid: docSnap.id,
@@ -2266,6 +2272,9 @@ app.get("/api/admin/sponsor-observers", requireAuth, async (req: any, res) => {
         status: data.status || "active",
         sponsorProgram: data.sponsorProgram || "",
         sponsorProgramOther: data.sponsorProgramOther || "",
+        observerType: data.observerType || "",
+        programIds: Array.isArray(data.programIds) ? data.programIds.map(String).filter(Boolean) : [],
+        programCodes: Array.isArray(data.programCodes) ? data.programCodes.map(String).filter(Boolean) : [],
         createdAt: data.createdAt || null,
         updatedAt: data.updatedAt || null,
         lastLoginAt: data.lastLoginAt || null,
@@ -2275,6 +2284,177 @@ app.get("/api/admin/sponsor-observers", requireAuth, async (req: any, res) => {
   } catch (error) {
     console.error("Sponsor observers load failed", error);
     return res.status(500).json({success: false, errorMessage: "Unable to load sponsor observers"});
+  }
+});
+
+function safePilotOrgName(org: any, id: string) {
+  return String(
+    org?.name
+    || org?.companyProfile?.companyName
+    || org?.companyProfile?.legalName
+    || org?.legalName
+    || org?.displayName
+    || id
+  );
+}
+
+function isPilotVisibleOrg(org: any, id: string) {
+  const status = String(org?.status || "active").toLowerCase();
+  const name = safePilotOrgName(org, id).toLowerCase();
+  const orgType = String(org?.orgType || org?.type || "").toLowerCase();
+  if (status !== "active") return false;
+  if (org?.isInternal === true || org?.internal === true) return false;
+  if (["internal", "superadmin"].includes(orgType)) return false;
+  if (id.toLowerCase().includes("superadmin") || id.toLowerCase().includes("internal") || id.toLowerCase().includes("cyber_blue_star")) return false;
+  if (name.includes("superadmin") || name.includes("internal") || name.includes("cyber blue star")) return false;
+  return true;
+}
+
+function safeActivitySummary(event: any) {
+  const action = String(event?.action || "activity");
+  if (action.startsWith("evidence.")) return action === "evidence.uploaded" ? "Evidence uploaded" : "Evidence status changed";
+  if (action === "assessment.saved") return "Assessment progress saved";
+  if (action === "report.generated") return "Report generated";
+  return String(event?.summary || action).slice(0, 180);
+}
+
+async function programAssessmentSummary(orgId: string, assessmentId: string) {
+  try {
+    const assessmentRef = db.doc(`orgs/${orgId}/assessments/${assessmentId}`);
+    const [practiceRecords, poamItems, scoreSnapshots] = await Promise.all([
+      assessmentRef.collection("practiceRecords").get(),
+      assessmentRef.collection("poamItems").get(),
+      assessmentRef.collection("scoreSnapshots").orderBy("createdAt", "desc").limit(1).get(),
+    ]);
+    const completed = practiceRecords.docs.filter(item => ["met", "partial", "not_met"].includes(String(item.data()?.status || item.data()?.state || "").toLowerCase())).length;
+    const total = practiceRecords.size;
+    const latestScore = scoreSnapshots.docs[0]?.data() || {};
+    return {
+      practicesCompleted: completed,
+      practicesRemaining: Math.max(0, total - completed),
+      completionPercent: Number(latestScore.completionPercent ?? latestScore.practiceCompletionScore ?? (total ? Math.round((completed / total) * 100) : 0)),
+      sprsScore: Number(latestScore.sprsScore ?? -250),
+      openPoamCount: poamItems.docs.filter(item => String(item.data()?.status || "").toLowerCase() !== "completed").length,
+      domainReadiness: [],
+    };
+  } catch {
+    return {practicesCompleted: 0, practicesRemaining: 0, completionPercent: 0, sprsScore: -250, openPoamCount: 0, domainReadiness: []};
+  }
+}
+
+app.get("/api/pilot/oversight", requireAuth, async (req: any, res) => {
+  try {
+    const userSnap = await db.doc(`users/${req.user.uid}`).get();
+    const user = userSnap.data() || {};
+    if (!userSnap.exists || user.status !== "active") return res.status(403).json({success: false, errorMessage: "Active observer access required"});
+    const roles = user.roles || {};
+    const programIds = Array.isArray(user.programIds) ? user.programIds.map(String).filter(Boolean) : [];
+    const programScoped = roles.programObserver === true && programIds.length > 0;
+    const legacyPilotObserver = roles.pilotObserver === true;
+    if (!programScoped && !legacyPilotObserver) {
+      return res.json({success: true, data: {
+        summary: {activeOrganizations: 0, totalPilotUsers: 0, averageCompletionPercent: 0, averageSprsScore: -250, evidenceUploaded: 0, openPoamItems: 0, reportsGenerated: 0, feedbackItems: 0},
+        organizations: [],
+        recentActivity: [],
+        progressHistory: [{label: "Current", averageCompletionPercent: 0}],
+        hasHistoricalSnapshots: false,
+      }});
+    }
+
+    const [orgSnap, activitySnap] = await Promise.all([
+      db.collection("orgs").get(),
+      db.collection("activityEvents").orderBy("createdAt", "desc").limit(300).get(),
+    ]);
+    const allActivity = activitySnap.docs.map(item => ({id: item.id, ...item.data()}));
+    const reportEvents = allActivity.filter((event: any) => event.action === "report.generated");
+    const evidenceEvents = allActivity.filter((event: any) => event.action === "evidence.uploaded");
+    const reportsByOrg = new Map<string, any[]>();
+    const activityByOrg = new Map<string, any[]>();
+    reportEvents.forEach((event: any) => reportsByOrg.set(event.orgId, [...(reportsByOrg.get(event.orgId) || []), event]));
+    allActivity.forEach((event: any) => activityByOrg.set(event.orgId, [...(activityByOrg.get(event.orgId) || []), event]));
+
+    const orgDocs = orgSnap.docs
+      .map(item => ({id: item.id, ...(item.data() || {})}))
+      .filter((org: any) => isPilotVisibleOrg(org, org.id))
+      .filter((org: any) => programScoped ? programIds.includes(String(org.programId || "")) : true);
+
+    const organizations = await Promise.all(orgDocs.map(async (org: any) => {
+      const assessmentId = String(org.tier || "").toUpperCase() === "COMM_L2" ? "default_l2" : "default_l1";
+      const assessment = await programAssessmentSummary(org.id, assessmentId);
+      const orgReports = reportsByOrg.get(org.id) || [];
+      const orgActivity = activityByOrg.get(org.id) || [];
+      const evidenceCount = Number(org.evidenceCount ?? org.readiness?.evidenceCount ?? evidenceEvents.filter((event: any) => event.orgId === org.id).length);
+      return {
+        id: org.id,
+        companyName: safePilotOrgName(org, org.id),
+        name: org.name || "",
+        town: org.companyProfile?.address?.city || org.companyProfile?.headquarters?.city || org.address?.city || "",
+        state: org.companyProfile?.address?.state || org.companyProfile?.headquarters?.state || org.address?.state || "",
+        programId: String(org.programId || ""),
+        programName: String(org.programName || ""),
+        programCode: String(org.programCode || ""),
+        startingDate: org.subscriptionStartDate || org.createdAt || org.approvedAt || null,
+        tier: String(org.tier || org.subscriptionTier || "Not provided"),
+        status: String(org.status || "active"),
+        completionPercent: assessment.completionPercent,
+        sprsScore: assessment.sprsScore,
+        usersCount: Number(org.activeMemberCount || org.memberCount || 0),
+        evidenceCount,
+        openPoamCount: assessment.openPoamCount,
+        practicesCompleted: assessment.practicesCompleted,
+        practicesRemaining: assessment.practicesRemaining,
+        sspGenerated: orgReports.some((event: any) => /ssp|system security plan/i.test(event.targetLabel || event.summary || "")),
+        poamGenerated: orgReports.some((event: any) => /poa&m|poam/i.test(event.targetLabel || event.summary || "")),
+        policyGenerated: orgReports.some((event: any) => /policy/i.test(event.targetLabel || event.summary || "")),
+        reportsGenerated: orgReports.length,
+        lastActivity: orgActivity[0]?.createdAt || null,
+        primaryContactEmail: String(org.companyProfile?.primaryContactEmail || org.primaryContactEmail || org.ownerEmail || ""),
+        primaryUserId: String(org.ownerUid || org.primaryUserId || ""),
+        overallReadinessPercent: assessment.completionPercent,
+        domainReadiness: assessment.domainReadiness,
+      };
+    }));
+
+    const recentOrgIds = new Set(organizations.map(org => org.id));
+    const recentActivity = allActivity
+      .filter((event: any) => recentOrgIds.has(event.orgId))
+      .slice(0, 20)
+      .map((event: any) => ({
+        id: event.id,
+        orgId: event.orgId,
+        orgName: event.orgName || "",
+        action: event.action || "activity",
+        actorUid: event.actorUid || "",
+        actorEmail: event.actorEmail || "",
+        actorName: event.actorName || "",
+        targetType: event.targetType || "",
+        targetId: event.targetId || "",
+        targetLabel: event.targetType === "evidence" ? "" : (event.targetLabel || ""),
+        summary: safeActivitySummary(event),
+        createdAt: event.createdAt || null,
+      }));
+    const activeOrganizations = organizations.filter(org => String(org.status || "").toLowerCase() === "active");
+    const averageCompletionPercent = activeOrganizations.length ? Math.round(activeOrganizations.reduce((sum, org) => sum + org.completionPercent, 0) / activeOrganizations.length) : 0;
+    const averageSprsScore = activeOrganizations.length ? Math.round(activeOrganizations.reduce((sum, org) => sum + org.sprsScore, 0) / activeOrganizations.length) : -250;
+    return res.json({success: true, data: {
+      summary: {
+        activeOrganizations: activeOrganizations.length,
+        totalPilotUsers: organizations.reduce((sum, org) => sum + org.usersCount, 0),
+        averageCompletionPercent,
+        averageSprsScore,
+        evidenceUploaded: organizations.reduce((sum, org) => sum + org.evidenceCount, 0),
+        openPoamItems: organizations.reduce((sum, org) => sum + org.openPoamCount, 0),
+        reportsGenerated: organizations.reduce((sum, org) => sum + org.reportsGenerated, 0),
+        feedbackItems: 0,
+      },
+      organizations: organizations.sort((a, b) => a.companyName.localeCompare(b.companyName)),
+      recentActivity,
+      progressHistory: [{label: "Current", averageCompletionPercent}],
+      hasHistoricalSnapshots: false,
+    }});
+  } catch (error) {
+    console.error("Pilot oversight scoped load failed", error);
+    return res.status(500).json({success: false, errorMessage: "Unable to load pilot oversight summary"});
   }
 });
 
@@ -2292,11 +2472,29 @@ app.post("/api/admin/sponsor-observer", requireAuth, async (req: any, res) => {
     const sponsorProgramOther = sponsorProgram === "Other" && typeof req.body?.sponsorProgramOther === "string"
       ? req.body.sponsorProgramOther.trim().slice(0, 120)
       : "";
+    const programId = typeof req.body?.programId === "string" ? req.body.programId.trim() : "";
+    const requestedProgramCode = typeof req.body?.programCode === "string" ? req.body.programCode.trim().toUpperCase() : "";
 
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("Valid email is required");
     if (!displayName) throw new Error("Name is required");
-    if (!SPONSOR_PROGRAM_OPTIONS.has(sponsorProgram)) throw new Error("Select a valid sponsor program");
-    if (sponsorProgram === "Other" && !sponsorProgramOther) throw new Error("Sponsor Program Other is required");
+    if (programId && !isSafePathSegment(programId)) throw new Error("Select a valid program");
+
+    let selectedProgramId = "";
+    let selectedProgramCode = "";
+    let selectedSponsorProgram = sponsorProgram;
+    if (programId) {
+      const programSnap = await db.doc(`programs/${programId}`).get();
+      if (!programSnap.exists) throw new Error("Selected program was not found");
+      const program = programSnap.data() || {};
+      if (String(program.status || "").toLowerCase() !== "active") throw new Error("Selected program is not active");
+      selectedProgramId = programSnap.id;
+      selectedProgramCode = String(program.programCode || requestedProgramCode || "").trim().toUpperCase();
+      selectedSponsorProgram = String(program.name || selectedProgramCode || sponsorProgram).trim();
+      if (!selectedProgramCode) throw new Error("Selected program is missing a program code");
+    } else {
+      if (sponsorProgram && !SPONSOR_PROGRAM_OPTIONS.has(sponsorProgram)) throw new Error("Select a valid sponsor program");
+      if (sponsorProgram === "Other" && !sponsorProgramOther) throw new Error("Sponsor Program Other is required");
+    }
 
     let authUser: admin.auth.UserRecord | null = null;
     let loginCreated = false;
@@ -2305,7 +2503,8 @@ app.post("/api/admin/sponsor-observer", requireAuth, async (req: any, res) => {
       authUser = await admin.auth().getUser(uid);
       if (authUser.email && authUser.email.toLowerCase() !== email) throw new Error("Email cannot be changed for an existing Sponsor Observer");
       const existingUserSnap = await db.doc(`users/${uid}`).get();
-      if (existingUserSnap.exists && existingUserSnap.data()?.roles?.pilotObserver !== true) {
+      const existingRoles = existingUserSnap.data()?.roles || {};
+      if (existingUserSnap.exists && existingRoles?.pilotObserver !== true && existingRoles?.programObserver !== true) {
         throw new Error("Only existing Sponsor Observer accounts can be edited here.");
       }
       const authUpdate: admin.auth.UpdateRequest = {displayName, disabled: status !== "active"};
@@ -2331,7 +2530,7 @@ app.post("/api/admin/sponsor-observer", requireAuth, async (req: any, res) => {
         if (temporaryPassword.length < 6) throw new Error("Temporary password must be at least 6 characters");
         const existingUserSnap = await db.doc(`users/${authUser.uid}`).get();
         const existingUser = existingUserSnap.data() || {};
-        const isExistingSponsorObserver = existingUser?.roles?.pilotObserver === true;
+        const isExistingSponsorObserver = existingUser?.roles?.pilotObserver === true || existingUser?.roles?.programObserver === true;
         const hasExistingPlatformRole = existingUser?.roles?.superAdmin === true || typeof existingUser?.roles?.orgRole === "string" || typeof existingUser?.orgId === "string";
         if (existingUserSnap.exists && !isExistingSponsorObserver && hasExistingPlatformRole) {
           throw new Error("Email already belongs to an existing platform user. Use Edit for an existing Sponsor Observer or choose a different email.");
@@ -2349,20 +2548,42 @@ app.post("/api/admin/sponsor-observer", requireAuth, async (req: any, res) => {
     const beforeSnap = await userRef.get();
     const before = beforeSnap.data() || {};
     const now = admin.firestore.FieldValue.serverTimestamp();
+    const beforeProgramIds = Array.isArray(before.programIds) ? before.programIds.map(String).filter(Boolean) : [];
+    const beforeProgramCodes = Array.isArray(before.programCodes) ? before.programCodes.map(String).filter(Boolean) : [];
+    const programIds = selectedProgramId ? Array.from(new Set([...beforeProgramIds, selectedProgramId])) : beforeProgramIds;
+    const programCodes = selectedProgramCode ? Array.from(new Set([...beforeProgramCodes, selectedProgramCode])) : beforeProgramCodes;
     const after = {
       uid: authUser.uid,
       email,
       displayName,
       fullName: displayName,
       status,
-      roles: {...(before.roles || {}), pilotObserver: true, superAdmin: false},
-      sponsorProgram,
+      roles: {
+        ...(before.roles || {}),
+        pilotObserver: true,
+        ...(selectedProgramId ? {programObserver: true} : {}),
+        superAdmin: false,
+      },
+      sponsorProgram: selectedSponsorProgram,
       sponsorProgramOther,
+      ...(programIds.length > 0 ? {programIds} : {}),
+      ...(programCodes.length > 0 ? {programCodes} : {}),
+      ...(selectedProgramId ? {observerType: "program"} : {}),
       updatedAt: now,
       updatedBy: req.user.uid,
       ...(beforeSnap.exists ? {} : {createdAt: now, createdBy: req.user.uid}),
     };
-    await userRef.set(after, {merge: true});
+    const batch = db.batch();
+    batch.set(userRef, after, {merge: true});
+    if (selectedProgramId) {
+      batch.set(db.doc(`programs/${selectedProgramId}`), {
+        sponsorObserverEmails: admin.firestore.FieldValue.arrayUnion(email),
+        sponsorObserverUids: admin.firestore.FieldValue.arrayUnion(authUser.uid),
+        updatedAt: now,
+        updatedBy: req.user.uid,
+      }, {merge: true});
+    }
+    await batch.commit();
     const activityBatch = db.batch();
     addCleanupActivity(activityBatch, {
       action: uid ? "update_sponsor_observer" : "create_sponsor_observer",
@@ -2374,6 +2595,18 @@ app.post("/api/admin/sponsor-observer", requireAuth, async (req: any, res) => {
       after,
       cleanupPhase: "28F-FIX",
     });
+    if (selectedProgramId) {
+      addCleanupActivity(activityBatch, {
+        action: "assign_program_observer",
+        targetType: "user",
+        targetId: authUser.uid,
+        userId: authUser.uid,
+        performedBy: req.user.uid,
+        before: {programIds: beforeProgramIds, programCodes: beforeProgramCodes},
+        after: {programIds, programCodes, programCode: selectedProgramCode},
+        cleanupPhase: "25A.2",
+      });
+    }
     await activityBatch.commit();
     return res.json({
       success: true,

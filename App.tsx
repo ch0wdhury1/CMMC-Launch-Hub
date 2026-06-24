@@ -303,18 +303,19 @@ function AuthorizedAppGate({ authUser, onLogout }: { authUser: User; onLogout: (
           });
           return;
         }
-        if (user.roles?.superAdmin === true || user.roles?.pilotObserver === true) {
+        if (user.roles?.superAdmin === true || user.roles?.pilotObserver === true || user.roles?.programObserver === true) {
           if (!cancelled) setAccess({ status: "authorized" });
+          const observerAccess = user.roles?.pilotObserver === true || user.roles?.programObserver === true;
           void logActivityEvent({
             orgId: typeof user.orgId === "string" && user.orgId.trim() ? user.orgId.trim() : "superadmin",
-            orgName: user.roles?.pilotObserver === true ? "Pilot Oversight" : "SuperAdmin",
+            orgName: observerAccess ? "Pilot Oversight" : "SuperAdmin",
             action: "login.succeeded",
             actorUid: authUser.uid,
             actorEmail: authUser.email || user.email || "",
             actorName: user.displayName || user.fullName || authUser.displayName || "",
             targetType: "auth",
             targetId: authUser.uid,
-            summary: user.roles?.pilotObserver === true ? "Pilot observer login succeeded" : "SuperAdmin login succeeded",
+            summary: observerAccess ? "Sponsor observer login succeeded" : "SuperAdmin login succeeded",
           });
           return;
         }
@@ -396,6 +397,7 @@ function AuthedApp({ onLogout }: { onLogout: () => void }) {
   const profileOrgRole = String(profileRoles?.orgRole || "");
   const profileIsSuperAdmin = profileRoles?.superAdmin === true;
   const profileIsPilotObserver = profileRoles?.pilotObserver === true;
+  const profileIsProgramObserver = profileRoles?.programObserver === true;
 
   useEffect(() => {
     const orgId = profileOrgId; // user doc has top-level orgId
@@ -406,7 +408,7 @@ function AuthedApp({ onLogout }: { onLogout: () => void }) {
     // and has an org role (or is super admin).
     const userStatus = profileUserStatus; // "active" | "pending" | etc
     const isSA = profileIsSuperAdmin;
-    const isObserver = profileIsPilotObserver;
+    const isObserver = profileIsPilotObserver || profileIsProgramObserver;
     const hasOrgRole = !!profileOrgRole;
 
     if (isObserver || !orgId || (!isSA && !hasOrgRole) || (userStatus && userStatus !== "active")) {
@@ -446,7 +448,7 @@ function AuthedApp({ onLogout }: { onLogout: () => void }) {
     return () => {
       cancelled = true;
     };
-  }, [profileIsPilotObserver, profileIsSuperAdmin, profileOrgId, profileOrgRole, profileUserStatus]);
+  }, [profileIsPilotObserver, profileIsProgramObserver, profileIsSuperAdmin, profileOrgId, profileOrgRole, profileUserStatus]);
 
   const ent = profile?.entitlements;
 
@@ -454,6 +456,8 @@ function AuthedApp({ onLogout }: { onLogout: () => void }) {
   const rolesAny: any = (profile as any)?.roles || {};
   const isSuperAdmin = rolesAny?.superAdmin === true;
   const isPilotObserver = rolesAny?.pilotObserver === true;
+  const isProgramObserver = rolesAny?.programObserver === true;
+  const isSponsorObserver = isPilotObserver || isProgramObserver;
   const orgRole = rolesAny?.orgRole;
   const isOrgAdmin = orgRole === "orgAdmin";
 
@@ -793,20 +797,20 @@ const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
   }, [sponsorPathForView]);
 
   useEffect(() => {
-    if (!isPilotObserver || isSuperAdmin) return;
+    if (!isSponsorObserver || isSuperAdmin) return;
     const allowed = ["pilotDashboard", "sponsorParticipants", "sponsorParticipantDetail", "sponsorActivity", "sponsorProfile"].includes(view.type);
     if (!allowed) {
       setSponsorView(sponsorViewFromPath(), true);
     }
-  }, [isPilotObserver, isSuperAdmin, setSponsorView, sponsorViewFromPath, view.type]);
+  }, [isSponsorObserver, isSuperAdmin, setSponsorView, sponsorViewFromPath, view.type]);
 
   useEffect(() => {
-    if (!isPilotObserver || isSuperAdmin) return;
+    if (!isSponsorObserver || isSuperAdmin) return;
     setSponsorView(sponsorViewFromPath(), true);
     const onPopState = () => setView(sponsorViewFromPath());
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
-  }, [isPilotObserver, isSuperAdmin, setSponsorView, sponsorViewFromPath]);
+  }, [isSponsorObserver, isSuperAdmin, setSponsorView, sponsorViewFromPath]);
 
   // Load Level 2 static dataset (from /public)
 
@@ -1118,10 +1122,10 @@ const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
       case "pilotDashboard":
         return (
           <PilotDashboard
-            canView={isSuperAdmin || isPilotObserver}
+            canView={isSuperAdmin || isSponsorObserver}
             viewerLabel={isSuperAdmin ? "SuperAdmin" : "Pilot Observer"}
             sponsorProgram={String((profile as any)?.sponsorProgram === "Other" ? (profile as any)?.sponsorProgramOther || "Other" : (profile as any)?.sponsorProgram || "")}
-            onParticipantClick={isPilotObserver && !isSuperAdmin ? (orgId) => setSponsorView({ type: "sponsorParticipantDetail", orgId }) : undefined}
+            onParticipantClick={isSponsorObserver && !isSuperAdmin ? (orgId) => setSponsorView({ type: "sponsorParticipantDetail", orgId }) : undefined}
           />
         );
       case "sponsorParticipants":
@@ -1471,7 +1475,7 @@ case "domain": {
     { label: "Feedback Review", onClick: () => setView({ type: "feedbackReview" as const }) },
   ] : undefined;
 
-  if (isPilotObserver && !isSuperAdmin) {
+  if (isSponsorObserver && !isSuperAdmin) {
     const sponsorActiveView =
       view.type === "sponsorParticipants" || view.type === "sponsorParticipantDetail" ? "participants" :
       view.type === "sponsorActivity" ? "activity" :

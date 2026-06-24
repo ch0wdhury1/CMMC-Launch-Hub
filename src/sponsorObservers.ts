@@ -19,6 +19,9 @@ export type SponsorObserver = {
   status?: "active" | "inactive" | string;
   sponsorProgram?: string;
   sponsorProgramOther?: string;
+  observerType?: "program" | string;
+  programIds?: string[];
+  programCodes?: string[];
   createdAt?: any;
   updatedAt?: any;
   lastLoginAt?: any;
@@ -32,6 +35,8 @@ export type SponsorObserverInput = {
   status: "active" | "inactive";
   sponsorProgram: string;
   sponsorProgramOther?: string;
+  programId?: string;
+  programCode?: string;
 };
 
 const apiBase = () => String(import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");

@@ -7,7 +7,10 @@ import {
   orderBy,
   query,
   serverTimestamp,
+  arrayRemove,
+  arrayUnion,
   updateDoc,
+  writeBatch,
   where,
 } from "firebase/firestore";
 import { db } from "./firebase";
@@ -174,3 +177,64 @@ export function isProgramObserver(user: any): boolean {
   return user?.roles?.pilotObserver === true || user?.roles?.programObserver === true;
 }
 
+export type ProgramObserverAssignment = {
+  email: string;
+  uid?: string;
+  status: "linked" | "pending";
+};
+
+export async function findUserByEmail(email: string): Promise<any | null> {
+  const cleanEmail = email.trim().toLowerCase();
+  if (!cleanEmail) return null;
+  const snapshot = await getDocs(query(collection(db, "users"), where("email", "==", cleanEmail)));
+  const first = snapshot.docs[0];
+  return first ? { uid: first.id, ...(first.data() as any) } : null;
+}
+
+export async function addProgramObserver(program: Program, email: string, actorUid?: string): Promise<ProgramObserverAssignment> {
+  const cleanEmail = email.trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) throw new Error("Enter a valid observer email.");
+  const existingUser = await findUserByEmail(cleanEmail);
+  const programRef = doc(db, "programs", program.id);
+  const batch = writeBatch(db);
+  batch.update(programRef, {
+    sponsorObserverEmails: arrayUnion(cleanEmail),
+    ...(existingUser?.uid ? { sponsorObserverUids: arrayUnion(existingUser.uid) } : {}),
+    updatedAt: serverTimestamp(),
+    updatedBy: actorUid || "",
+  });
+  if (existingUser?.uid) {
+    batch.set(doc(db, "users", existingUser.uid), {
+      roles: { ...(existingUser.roles || {}), programObserver: true },
+      programIds: arrayUnion(program.id),
+      programCodes: arrayUnion(program.programCode),
+      observerType: "program",
+      status: existingUser.status || "active",
+      updatedAt: serverTimestamp(),
+      updatedBy: actorUid || "",
+    }, { merge: true });
+  }
+  await batch.commit();
+  return { email: cleanEmail, uid: existingUser?.uid, status: existingUser?.uid ? "linked" : "pending" };
+}
+
+export async function removeProgramObserver(program: Program, email: string, uid?: string, actorUid?: string): Promise<void> {
+  const cleanEmail = email.trim().toLowerCase();
+  const programRef = doc(db, "programs", program.id);
+  const batch = writeBatch(db);
+  batch.update(programRef, {
+    sponsorObserverEmails: arrayRemove(cleanEmail),
+    ...(uid ? { sponsorObserverUids: arrayRemove(uid) } : {}),
+    updatedAt: serverTimestamp(),
+    updatedBy: actorUid || "",
+  });
+  if (uid) {
+    batch.set(doc(db, "users", uid), {
+      programIds: arrayRemove(program.id),
+      programCodes: arrayRemove(program.programCode),
+      updatedAt: serverTimestamp(),
+      updatedBy: actorUid || "",
+    }, { merge: true });
+  }
+  await batch.commit();
+}

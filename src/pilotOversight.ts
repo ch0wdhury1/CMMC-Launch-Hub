@@ -17,6 +17,9 @@ export type PilotOrgSummary = {
   companyName: string;
   name?: string;
   companyProfile?: any;
+  programId?: string;
+  programName?: string;
+  programCode?: string;
   town: string;
   state: string;
   startingDate: any;
@@ -104,6 +107,58 @@ const numberValue = (...values: any[]) => {
 };
 
 const statusValue = (value: any) => String(value || "").trim().toLowerCase();
+const apiBase = () => String(import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
+
+export function getObserverProgramScope(profile: any) {
+  const roles = profile?.roles || {};
+  const programIds = Array.isArray(profile?.programIds) ? profile.programIds.map(String).filter(Boolean) : [];
+  const programCodes = Array.isArray(profile?.programCodes) ? profile.programCodes.map(String).filter(Boolean) : [];
+  return {
+    isProgramScoped: roles.programObserver === true && programIds.length > 0,
+    programIds,
+    programCodes,
+    isLegacyPilotObserver: roles.pilotObserver === true,
+  };
+}
+
+const emptyPilotOversightData = (): PilotOversightData => ({
+  summary: {
+    activeOrganizations: 0,
+    totalPilotUsers: 0,
+    averageCompletionPercent: 0,
+    averageSprsScore: -250,
+    evidenceUploaded: 0,
+    openPoamItems: 0,
+    reportsGenerated: 0,
+    feedbackItems: 0,
+  },
+  organizations: [],
+  recentActivity: [],
+  progressHistory: [{ label: "Current", averageCompletionPercent: 0 }],
+  hasHistoricalSnapshots: false,
+});
+
+async function loadCurrentUserProfile() {
+  const uid = auth.currentUser?.uid;
+  if (!uid) return null;
+  const snapshot = await getDoc(doc(db, "users", uid));
+  return snapshot.exists() ? ({ uid, ...(snapshot.data() as any) }) : null;
+}
+
+async function loadScopedPilotOversightData(): Promise<PilotOversightData> {
+  const base = apiBase();
+  if (!base) throw new Error("Missing VITE_API_BASE_URL for program-scoped observer dashboard.");
+  const user = auth.currentUser;
+  if (!user) throw new Error("Authentication required.");
+  const response = await fetch(`${base}/api/pilot/oversight`, {
+    headers: { Authorization: `Bearer ${await user.getIdToken()}` },
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload.success === false) {
+    throw new Error(payload.errorMessage || "Program-scoped oversight data is unavailable.");
+  }
+  return payload.data as PilotOversightData;
+}
 
 const isLocalhost = () => typeof window !== "undefined" && ["localhost", "127.0.0.1"].includes(window.location.hostname);
 
@@ -253,6 +308,11 @@ export function pilotParticipantOrganizations(data: PilotOversightData) {
 }
 
 export async function loadPilotOversightData(): Promise<PilotOversightData> {
+  const currentProfile = await loadCurrentUserProfile().catch(() => null);
+  const scope = getObserverProgramScope(currentProfile);
+  if (scope.isProgramScoped) return loadScopedPilotOversightData();
+  if (currentProfile?.roles?.programObserver === true && !scope.isLegacyPilotObserver) return emptyPilotOversightData();
+
   const [orgSnapshot, activityEvents, feedbackItems, accessRequests] = await Promise.all([
     getDocs(collection(db, "orgs")).catch(error => {
       logPilotReadIssue("orgs", error);
@@ -292,6 +352,9 @@ export async function loadPilotOversightData(): Promise<PilotOversightData> {
       companyName: participantName,
       name: org.name,
       companyProfile: org.companyProfile,
+      programId: String(org.programId || ""),
+      programName: String(org.programName || ""),
+      programCode: String(org.programCode || ""),
       town: town(org),
       state: state(org),
       startingDate: org.subscriptionStartDate || org.createdAt || org.approvedAt,

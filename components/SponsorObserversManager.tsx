@@ -4,9 +4,9 @@ import {
   formatSponsorObserverDate,
   loadSponsorObservers,
   saveSponsorObserver,
-  SPONSOR_PROGRAM_OPTIONS,
   type SponsorObserver,
 } from "../src/sponsorObservers";
+import { getActivePrograms, type Program } from "../src/programService";
 
 type Props = {
   isSuperAdmin: boolean;
@@ -21,6 +21,7 @@ type FormState = {
   status: "active" | "inactive";
   sponsorProgram: string;
   sponsorProgramOther: string;
+  programId: string;
 };
 
 const emptyForm: FormState = {
@@ -30,8 +31,9 @@ const emptyForm: FormState = {
   temporaryPassword: "",
   confirmTemporaryPassword: "",
   status: "active",
-  sponsorProgram: "CT Manufacturing Pilot",
+  sponsorProgram: "",
   sponsorProgramOther: "",
+  programId: "",
 };
 
 export const SponsorObserversManager: React.FC<Props> = ({ isSuperAdmin }) => {
@@ -42,21 +44,53 @@ export const SponsorObserversManager: React.FC<Props> = ({ isSuperAdmin }) => {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [programs, setPrograms] = useState<Program[]>([]);
+  const [programsError, setProgramsError] = useState("");
 
   const isEditing = Boolean(form.uid);
   const visibleObservers = useMemo(
     () => observers.slice().sort((a, b) => String(a.email || "").localeCompare(String(b.email || ""))),
     [observers]
   );
+  const sortedPrograms = useMemo(
+    () => programs.slice().sort((a, b) => a.programCode.localeCompare(b.programCode)),
+    [programs]
+  );
+
+  const programLabel = (program?: Pick<Program, "name" | "programCode"> | null) => {
+    if (!program) return "No program assigned";
+    return `${program.name || "Unnamed Program"} (${program.programCode || "No code"})`;
+  };
+
+  const selectedProgram = useMemo(
+    () => sortedPrograms.find(program => program.id === form.programId) || null,
+    [form.programId, sortedPrograms]
+  );
+
+  const observerProgramLabel = (observer: SponsorObserver) => {
+    const assignedProgram = sortedPrograms.find(program => (observer.programIds || []).includes(program.id));
+    if (assignedProgram) return programLabel(assignedProgram);
+    const programCode = (observer.programCodes || [])[0];
+    if (programCode) return programCode;
+    return "No program assigned";
+  };
 
   const refresh = async () => {
     if (!isSuperAdmin) return;
     setLoading(true);
     setError("");
+    setProgramsError("");
     try {
-      setObservers(await loadSponsorObservers());
+      const [loadedObservers, loadedPrograms] = await Promise.all([
+        loadSponsorObservers(),
+        getActivePrograms(),
+      ]);
+      setObservers(loadedObservers);
+      setPrograms(loadedPrograms);
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Unable to load sponsor observers.");
+      const message = loadError instanceof Error ? loadError.message : "Unable to load sponsor observers.";
+      setError(message);
+      setProgramsError(message);
     } finally {
       setLoading(false);
     }
@@ -79,8 +113,9 @@ export const SponsorObserversManager: React.FC<Props> = ({ isSuperAdmin }) => {
       temporaryPassword: "",
       confirmTemporaryPassword: "",
       status: observer.status === "inactive" ? "inactive" : "active",
-      sponsorProgram: observer.sponsorProgram || "CT Manufacturing Pilot",
+      sponsorProgram: observer.sponsorProgram || "",
       sponsorProgramOther: observer.sponsorProgramOther || "",
+      programId: observer.programIds?.[0] || "",
     });
     setMessage("");
     setError("");
@@ -99,7 +134,7 @@ export const SponsorObserversManager: React.FC<Props> = ({ isSuperAdmin }) => {
       if (form.temporaryPassword.length < 6) return setError("New temporary password must be at least 6 characters.");
       if (form.temporaryPassword !== form.confirmTemporaryPassword) return setError("New temporary passwords do not match.");
     }
-    if (form.sponsorProgram === "Other" && !form.sponsorProgramOther.trim()) return setError("Enter the sponsor program name for Other.");
+    if (form.programId && !selectedProgram) return setError("Select a valid active program.");
     setSaving(true);
     try {
       const result = await saveSponsorObserver({
@@ -108,8 +143,10 @@ export const SponsorObserversManager: React.FC<Props> = ({ isSuperAdmin }) => {
         displayName,
         temporaryPassword: isEditing && !form.temporaryPassword ? undefined : form.temporaryPassword,
         status: form.status,
-        sponsorProgram: form.sponsorProgram,
-        sponsorProgramOther: form.sponsorProgram === "Other" ? form.sponsorProgramOther.trim() : "",
+        sponsorProgram: selectedProgram?.name || form.sponsorProgram,
+        sponsorProgramOther: selectedProgram ? "" : form.sponsorProgramOther.trim(),
+        programId: selectedProgram?.id || "",
+        programCode: selectedProgram?.programCode || "",
       });
       setMessage(result.message);
       setOpen(false);
@@ -135,18 +172,19 @@ export const SponsorObserversManager: React.FC<Props> = ({ isSuperAdmin }) => {
         </button>
       </div>
 
-      {(message || error) && <p className={`m-4 rounded border px-3 py-2 text-sm ${error ? "border-red-200 bg-red-50 text-red-700" : "border-emerald-200 bg-emerald-50 text-emerald-800"}`}>{error || message}</p>}
+      {(message || error || programsError) && <p className={`m-4 rounded border px-3 py-2 text-sm ${(error || programsError) ? "border-red-200 bg-red-50 text-red-700" : "border-emerald-200 bg-emerald-50 text-emerald-800"}`}>{error || programsError || message}</p>}
       {loading ? <p className="p-4 text-sm text-gray-600">Loading sponsor observers...</p> : visibleObservers.length === 0 ? <p className="p-4 text-sm text-gray-600">No Sponsor Observer users yet.</p> :
       <div className="overflow-auto">
         <table className="min-w-full text-sm">
           <thead className="bg-gray-50 text-xs uppercase text-gray-500">
-            <tr><th className="p-3 text-left">Name</th><th className="p-3 text-left">Email</th><th className="p-3 text-left">Sponsor Program</th><th className="p-3 text-left">Status</th><th className="p-3 text-left">Created Date</th><th className="p-3 text-left">Last Login</th><th className="p-3 text-left">Actions</th></tr>
+            <tr><th className="p-3 text-left">Name</th><th className="p-3 text-left">Email</th><th className="p-3 text-left">Assigned Program</th><th className="p-3 text-left">Legacy Sponsor</th><th className="p-3 text-left">Status</th><th className="p-3 text-left">Created Date</th><th className="p-3 text-left">Last Login</th><th className="p-3 text-left">Actions</th></tr>
           </thead>
           <tbody>
             {visibleObservers.map(observer => (
               <tr key={observer.uid} className="border-t">
                 <td className="p-3 font-medium text-gray-900">{observer.displayName || observer.fullName || "Not provided"}</td>
                 <td className="p-3">{observer.email}</td>
+                <td className="p-3">{observerProgramLabel(observer)}</td>
                 <td className="p-3">{observer.sponsorProgram === "Other" ? observer.sponsorProgramOther || "Other" : observer.sponsorProgram || "Not provided"}</td>
                 <td className="p-3 capitalize">{observer.status || "active"}</td>
                 <td className="p-3">{formatSponsorObserverDate(observer.createdAt)}</td>
@@ -189,10 +227,19 @@ export const SponsorObserversManager: React.FC<Props> = ({ isSuperAdmin }) => {
                   <p className="text-xs text-gray-500">Share this temporary password securely with the sponsor observer. They can change it later using password reset.</p>
                 </div>
               )}
-              <label className="block text-sm text-gray-700">Sponsor for this Program<select value={form.sponsorProgram} onChange={event => setForm(current => ({ ...current, sponsorProgram: event.target.value }))} className="mt-1 w-full rounded border bg-white px-3 py-2">{SPONSOR_PROGRAM_OPTIONS.map(option => <option key={option} value={option}>{option}</option>)}</select></label>
-              {form.sponsorProgram === "Other" && <label className="block text-sm text-gray-700">Sponsor Program Other<input value={form.sponsorProgramOther} onChange={event => setForm(current => ({ ...current, sponsorProgramOther: event.target.value }))} className="mt-1 w-full rounded border px-3 py-2" /></label>}
+              <div className="rounded border bg-gray-50 p-3">
+                <label className="block text-sm text-gray-700">Sponsor for this Program
+                  <select value={form.programId} onChange={event => setForm(current => ({ ...current, programId: event.target.value }))} className="mt-1 w-full rounded border bg-white px-3 py-2">
+                    <option value="">No program assigned</option>
+                    {sortedPrograms.map(program => <option key={program.id} value={program.id}>{programLabel(program)}</option>)}
+                  </select>
+                </label>
+                <p className="mt-2 text-xs text-gray-600">Current assigned program: <span className="font-semibold">{programLabel(selectedProgram)}</span></p>
+                {programsError && <p className="mt-2 rounded border border-red-200 bg-red-50 px-2 py-1 text-xs text-red-700">{programsError}</p>}
+                {!programsError && sortedPrograms.length === 0 && <p className="mt-2 text-xs text-amber-700">No active programs are available. Create or reactivate a program before assigning scoped observers.</p>}
+              </div>
               <label className="block text-sm text-gray-700">Status<select value={form.status} onChange={event => setForm(current => ({ ...current, status: event.target.value as FormState["status"] }))} className="mt-1 w-full rounded border bg-white px-3 py-2"><option value="active">active</option><option value="inactive">inactive</option></select></label>
-              <p className="text-xs text-gray-500">Sponsor Observer maps to the internal pilotObserver role. Temporary passwords are used only for Auth account creation and are not stored in Firestore.</p>
+              <p className="text-xs text-gray-500">Sponsor Observer maps to pilotObserver for legacy oversight and programObserver when a program is assigned. Temporary passwords are used only for Auth account creation and are not stored in Firestore.</p>
               <button type="button" onClick={submit} disabled={saving} className="inline-flex w-full items-center justify-center rounded bg-blue-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Save Sponsor Observer</button>
             </div>
           </div>
