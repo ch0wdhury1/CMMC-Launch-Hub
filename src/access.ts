@@ -8,3 +8,7 @@ export function can(ent: Entitlements, key: string) {
 export function isSuperAdmin(roles: Roles) {
   return !!roles && roles.superAdmin === true;
 }
+
+export function isProgramObserver(user: any) {
+  return user?.roles?.pilotObserver === true || user?.roles?.programObserver === true;
+}

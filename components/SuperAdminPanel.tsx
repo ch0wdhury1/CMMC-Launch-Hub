@@ -15,6 +15,7 @@ import {
   Timestamp,
 } from "firebase/firestore";
 import { db } from "../src/firebase";
+import { getActivePrograms, type EnrollmentType, type Program } from "../src/programService";
 import { loadCleanupControlsInventory, runCleanupControlAction, type CleanupOrgSummary } from "../src/cleanupControls";
 import { useUserProfile } from "../src/useUserProfile";
 import { logActivityEvent } from "../src/activityLog";
@@ -43,6 +44,10 @@ type OrgRow = {
   ownerUid?: string;
   activeMemberCount?: number;
   maxUsers?: number;
+  enrollmentType?: EnrollmentType | string;
+  programId?: string | null;
+  programName?: string | null;
+  programCode?: string | null;
 };
 
 type PendingCounts = {
@@ -61,6 +66,8 @@ type OrgAdminDraft = {
   subscriptionStatus: string;
   subscriptionStartDate: string;
   subscriptionEndDate: string;
+  enrollmentType: EnrollmentType;
+  programId: string;
 };
 
 type AccessRequestRow = {
@@ -121,6 +128,7 @@ export const SuperAdminPanel: React.FC = () => {
   const [orgs, setOrgs] = useState<OrgComputed[]>([]);
   const [orgAdminMetadata, setOrgAdminMetadata] = useState<Record<string, CleanupOrgSummary>>({});
   const [orgAdminDrafts, setOrgAdminDrafts] = useState<Record<string, OrgAdminDraft>>({});
+  const [activePrograms, setActivePrograms] = useState<Program[]>([]);
   const [selectedUsersOrg, setSelectedUsersOrg] = useState<OrgComputed | null>(null);
 
   const [pendingRegsLoading, setPendingRegsLoading] = useState(false);
@@ -404,6 +412,15 @@ setSaveMsg(`Cancelled registration: ${req.primaryContactEmail || req.email || re
     }));
   };
 
+  const loadProgramsForOrgAssignment = async () => {
+    if (!isSuperAdmin) return;
+    try {
+      setActivePrograms(await getActivePrograms());
+    } catch (error) {
+      console.warn("active programs load failed:", error);
+    }
+  };
+
   const saveOrgAdminFields = async (org: OrgComputed) => {
     const draft = orgAdminDrafts[org.id];
     if (!draft) return;
@@ -417,8 +434,30 @@ setSaveMsg(`Cancelled registration: ${req.primaryContactEmail || req.email || re
     setActionBusyId(`org-save:${org.id}`);
     setSaveMsg("");
     try {
+      if (draft.enrollmentType === "PROGRAM" && !draft.programId) {
+        setSaveMsg("Save failed: select an active program or choose Commercial enrollment.");
+        return;
+      }
       await runCleanupControlAction({action: "update_org_admin_fields", orgId: org.id, cleanupPhase: "23C-UI", updates: draft});
-      setOrgs(current => current.map(item => item.id === org.id ? {...item, ...draft} : item));
+      const selectedProgram = activePrograms.find(program => program.id === draft.programId) || null;
+      const enrollmentUpdate = draft.enrollmentType === "PROGRAM" && selectedProgram
+        ? {
+            enrollmentType: "PROGRAM",
+            programId: selectedProgram.id,
+            programName: selectedProgram.name,
+            programCode: selectedProgram.programCode,
+          }
+        : {
+            enrollmentType: "COMMERCIAL",
+            programId: null,
+            programName: null,
+            programCode: null,
+          };
+      await updateDoc(doc(db, "orgs", org.id), {
+        ...enrollmentUpdate,
+        updatedAt: serverTimestamp(),
+      });
+      setOrgs(current => current.map(item => item.id === org.id ? {...item, ...draft, ...enrollmentUpdate} : item));
       await refreshOrgAdminMetadata();
       if (draft.tier !== safeStr(org.tier)) {
         void logActivityEvent({
@@ -534,6 +573,7 @@ useEffect(() => {
 
   useEffect(() => {
     refreshOrgAdminMetadata();
+    loadProgramsForOrgAssignment();
   }, [isSuperAdmin]);
 
   // --- Load orgs + per-org computed counts (members + pending request counts) ---
@@ -599,6 +639,8 @@ useEffect(() => {
             subscriptionStatus: safeStr(org.subscriptionStatus || "active"),
             subscriptionStartDate: dateInput(org.subscriptionStartDate),
             subscriptionEndDate: dateInput(org.subscriptionEndDate),
+            enrollmentType: safeStr((org as any).enrollmentType || ((org as any).programId ? "PROGRAM" : "COMMERCIAL")) === "PROGRAM" ? "PROGRAM" : "COMMERCIAL",
+            programId: safeStr((org as any).programId || ""),
           }])));
         }
       } catch (e: any) {
@@ -665,6 +707,32 @@ useEffect(() => {
   const activeOrgs = orgs.filter(org => safeStr((org as any).status || "active") === "active");
   const inactiveOrgs = orgs.filter(org => safeStr((org as any).status) === "inactive");
   const archivedOrgs = orgs.filter(org => safeStr((org as any).status) === "archived");
+  const programLabel = (org: any) => org.programCode || org.programName || "Commercial";
+  const renderEnrollmentControls = (org: OrgComputed) => {
+    const draft = orgAdminDrafts[org.id];
+    const enrollmentType = draft?.enrollmentType || "COMMERCIAL";
+    return (
+      <div className="grid min-w-44 gap-2">
+        <select
+          value={enrollmentType}
+          onChange={event => updateOrgDraft(org.id, "enrollmentType", event.target.value)}
+          className="border rounded px-2 py-1 text-xs"
+        >
+          <option value="COMMERCIAL">Commercial</option>
+          <option value="PROGRAM">Program</option>
+        </select>
+        <select
+          value={draft?.programId || ""}
+          onChange={event => updateOrgDraft(org.id, "programId", event.target.value)}
+          disabled={enrollmentType !== "PROGRAM"}
+          className="border rounded px-2 py-1 text-xs disabled:bg-gray-100 disabled:text-gray-400"
+        >
+          <option value="">None</option>
+          {activePrograms.map(program => <option key={program.id} value={program.id}>{program.programCode} - {program.name}</option>)}
+        </select>
+      </div>
+    );
+  };
 
   const renderOrgTable = (rows: OrgComputed[], emptyMessage: string, showDelete = true) => rows.length === 0 ? (
     <div className="p-4 text-sm text-gray-600">{emptyMessage}</div>
@@ -676,6 +744,8 @@ useEffect(() => {
             <th className="text-left p-3">Org Name</th>
             <th className="text-left p-3">Status</th>
             <th className="text-left p-3">Tier</th>
+            <th className="text-left p-3">Program</th>
+            <th className="text-left p-3">Enrollment</th>
             <th className="text-left p-3"># Users</th>
             <th className="text-left p-3">Primary Contact</th>
             <th className="text-left p-3">Start</th>
@@ -700,6 +770,8 @@ useEffect(() => {
                   <option value="SPONSORED">SPONSORED</option><option value="COMM_L1">COMM_L1</option><option value="COMM_L2">COMM_L2</option>
                 </select>
               </td>
+              <td className="p-3">{programLabel(org)}</td>
+              <td className="p-3">{renderEnrollmentControls(org)}</td>
               <td className="p-3"><button type="button" onClick={() => setSelectedUsersOrg(org)} className="font-medium text-blue-700 hover:underline">{org.memberCount}</button></td>
               <td className="p-3"><div>{org.primaryContactName || "—"}</div><div className="text-xs text-gray-500">{org.primaryContactEmail || ""}</div></td>
               <td className="p-3"><input type="date" value={orgAdminDrafts[org.id]?.subscriptionStartDate || ""} onChange={event => updateOrgDraft(org.id, "subscriptionStartDate", event.target.value)} className="border rounded px-2 py-1 text-xs" /></td>
@@ -890,6 +962,8 @@ useEffect(() => {
                       <th className="text-left p-3">Org Name</th>
                       <th className="text-left p-3">Status</th>
                       <th className="text-left p-3">Tier</th>
+                      <th className="text-left p-3">Program</th>
+                      <th className="text-left p-3">Enrollment</th>
                       <th className="text-left p-3"># Users</th>
                       <th className="text-left p-3">Primary Contact</th>
                       <th className="text-left p-3">Start</th>
@@ -919,6 +993,8 @@ useEffect(() => {
                             <option value="SPONSORED">SPONSORED</option><option value="COMM_L1">COMM_L1</option><option value="COMM_L2">COMM_L2</option>
                           </select>
                         </td>
+                        <td className="p-3">{programLabel(o)}</td>
+                        <td className="p-3">{renderEnrollmentControls(o)}</td>
                         <td className="p-3">
                           <button type="button" onClick={() => setSelectedUsersOrg(o)} className="font-medium text-blue-700 hover:underline">{o.memberCount}</button>
                         </td>

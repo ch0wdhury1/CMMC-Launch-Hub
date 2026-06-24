@@ -50,6 +50,7 @@ import { SponsorParticipantsPage } from "./components/SponsorParticipantsPage";
 import { SponsorParticipantDetailPage } from "./components/SponsorParticipantDetailPage";
 import { SponsorRecentActivityPage } from "./components/SponsorRecentActivityPage";
 import { SponsorProfilePage } from "./components/SponsorProfilePage";
+import { ProgramManagementPage } from "./components/ProgramManagementPage";
 import { ResponsibilityMatrixPage } from "./components/ResponsibilityMatrixPage";
 import { TrainingModule } from "./components/training/TrainingModule";
 import { NewsUpdates } from "./components/NewsUpdates";
@@ -174,6 +175,7 @@ type ViewState =
   | { type: "sponsorActivity" }
   | { type: "sponsorProfile" }
   | { type: "pendingActions" }
+  | { type: "programs" }
   | { type: "dashboard" }
   | { type: "domain"; domainName: string }
   | { type: "practice"; practiceId: string }
@@ -208,6 +210,7 @@ export type ActiveViewInfo =
   | { type: "sponsorActivity"; name: "sponsorActivity" }
   | { type: "sponsorProfile"; name: "sponsorProfile" }
   | { type: "pendingActions"; name: "pendingActions" }
+  | { type: "programs"; name: "programs" }
   | { type: "dashboard"; name: "dashboard" }
   | { type: "domain"; domainName: string; label: string }
   | { type: "practice"; name: string; domainName: string }
@@ -832,6 +835,7 @@ const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
     if (view.type === "sponsorActivity") return { type: "sponsorActivity", name: "sponsorActivity" };
     if (view.type === "sponsorProfile") return { type: "sponsorProfile", name: "sponsorProfile" };
     if (view.type === "pendingActions") return { type: "pendingActions", name: "pendingActions" };
+    if (view.type === "programs") return { type: "programs", name: "programs" };
     if (view.type === "dashboard") return { type: "dashboard", name: "dashboard" };
 
     // if (view.type === "domain") return { type: "domain", name: view.domainName };
@@ -946,6 +950,7 @@ const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
     if (view.type === "sponsorParticipantDetail") return "Sponsor Participant Detail";
     if (view.type === "sponsorActivity") return "Sponsor Recent Activity";
     if (view.type === "sponsorProfile") return "Sponsor Profile";
+    if (view.type === "programs") return "Programs";
     if (view.type === "pendingActions") return "Pending Actions";
     if (view.type === "dashboard") return "Command Dashboard";
     if (view.type === "domain") return getDomainDisplayLabel(view.domainName);
@@ -1141,6 +1146,8 @@ const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
         );
       case "pendingActions":
         return <PendingActionsPage isSuperAdmin={isSuperAdmin} />;
+      case "programs":
+        return <ProgramManagementPage isSuperAdmin={isSuperAdmin} />;
       case "dashboard":
         return (
           <OrganizationDashboard
@@ -1456,6 +1463,7 @@ case "domain": {
     { label: "Main Dashboard", onClick: () => setView({ type: "superAdmin" as const }) },
     { label: "Pilot Dashboard", onClick: () => setView({ type: "pilotDashboard" as const }) },
     { label: "Active Orgs", onClick: () => setView({ type: "superAdmin" as const }) },
+    { label: "PROGRAMS", onClick: () => setView({ type: "programs" as const }) },
     { label: "Sponsor Observers", onClick: () => setView({ type: "sponsorObservers" as const }) },
     { label: "Pending Actions", onClick: () => setView({ type: "pendingActions" as const }) },
     { label: "Activity Center", onClick: () => setView({ type: "activityCenter" as const }) },
@@ -1735,6 +1743,8 @@ function ForgotPasswordScreen() {
 }
 
 function RegistrationScreen() {
+  // TODO Phase 25A.2: add "How are you joining?" with Commercial Subscription
+  // and State / Sponsored Program options, then wire program selection.
   const [companyName, setCompanyName] = useState("");
   const [requestedLevel, setRequestedLevel] = useState<"SPONSORED" | "COMM_L1" | "COMM_L2">("COMM_L1");
   const [address, setAddress] = useState("");

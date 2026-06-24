@@ -288,6 +288,11 @@ function validPilotFeedbackStatusUpdate() {
       allow delete: if false;
     }
 
+    match /programs/{programId} {
+      allow read, create, update: if isSuperAdmin();
+      allow delete: if false;
+    }
+
 
 // --- user profiles ---
 // --- users ---
