@@ -65,14 +65,20 @@ export type RegistrationProgram = {
   id: string;
   name: string;
   programCode: string;
+  programType: ProgramType | string;
   allowL1: boolean;
   allowL2: boolean;
+  status: "active";
   state?: string;
   sponsorName?: string;
 };
 
 const programsRef = () => collection(db, "programs");
 const apiBase = () => String(import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
+const isLocalDevHost = () => {
+  if (typeof window === "undefined") return false;
+  return ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname);
+};
 
 const cleanList = (items?: string[]) => Array.from(new Set(
   (items || [])
@@ -168,11 +174,19 @@ export async function getActivePrograms(): Promise<Program[]> {
 
 export async function loadRegistrationPrograms(): Promise<RegistrationProgram[]> {
   const base = apiBase();
-  if (!base) throw new Error("Sponsored program enrollment is unavailable because the API base URL is not configured.");
-  const response = await fetch(`${base}/api/registration/programs`);
+  if (!base && !isLocalDevHost()) throw new Error("Sponsored program enrollment is unavailable because the registration API URL is not configured.");
+  const url = isLocalDevHost() ? "/api/registration/programs" : `${base}/api/registration/programs`;
+  if (isLocalDevHost()) console.log("[RegistrationPrograms] fetching", url);
+  let response: Response;
+  try {
+    response = await fetch(url, {headers: {Accept: "application/json"}});
+  } catch {
+    throw new Error("Unable to reach the sponsored program registration service.");
+  }
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || payload.success === false) {
-    throw new Error(payload.errorMessage || "Unable to load sponsored programs.");
+    console.warn("[registration-programs] load failed", {url, status: response.status, errorMessage: payload.errorMessage || ""});
+    throw new Error(payload.errorMessage || `Unable to load sponsored programs from the registration service (${response.status}).`);
   }
   return Array.isArray(payload.programs) ? payload.programs : [];
 }

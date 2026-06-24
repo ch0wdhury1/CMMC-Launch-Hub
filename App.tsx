@@ -51,6 +51,7 @@ import { SponsorParticipantDetailPage } from "./components/SponsorParticipantDet
 import { SponsorRecentActivityPage } from "./components/SponsorRecentActivityPage";
 import { SponsorProfilePage } from "./components/SponsorProfilePage";
 import { ProgramManagementPage } from "./components/ProgramManagementPage";
+import { ProgramAnalyticsPage } from "./components/ProgramAnalyticsPage";
 import { ResponsibilityMatrixPage } from "./components/ResponsibilityMatrixPage";
 import { TrainingModule } from "./components/training/TrainingModule";
 import { NewsUpdates } from "./components/NewsUpdates";
@@ -173,6 +174,7 @@ type ViewState =
   | { type: "sponsorObservers" }
   | { type: "sponsorParticipants" }
   | { type: "sponsorParticipantDetail"; orgId: string }
+  | { type: "programAnalytics" }
   | { type: "sponsorActivity" }
   | { type: "sponsorProfile" }
   | { type: "pendingActions" }
@@ -208,6 +210,7 @@ export type ActiveViewInfo =
   | { type: "sponsorObservers"; name: "sponsorObservers" }
   | { type: "sponsorParticipants"; name: "sponsorParticipants" }
   | { type: "sponsorParticipantDetail"; name: "sponsorParticipantDetail" }
+  | { type: "programAnalytics"; name: "programAnalytics" }
   | { type: "sponsorActivity"; name: "sponsorActivity" }
   | { type: "sponsorProfile"; name: "sponsorProfile" }
   | { type: "pendingActions"; name: "pendingActions" }
@@ -775,6 +778,7 @@ const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
     const detailMatch = path.match(/^\/sponsor\/participants\/([^/?#]+)/);
     if (detailMatch?.[1]) return { type: "sponsorParticipantDetail", orgId: decodeURIComponent(detailMatch[1]) };
     if (path === "/sponsor/participants") return { type: "sponsorParticipants" };
+    if (path === "/sponsor/program-analytics") return { type: "programAnalytics" };
     if (path === "/sponsor/activity") return { type: "sponsorActivity" };
     if (path === "/sponsor/profile") return { type: "sponsorProfile" };
     return { type: "pilotDashboard" };
@@ -783,6 +787,7 @@ const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
   const sponsorPathForView = useCallback((nextView: ViewState) => {
     if (nextView.type === "sponsorParticipants") return "/sponsor/participants";
     if (nextView.type === "sponsorParticipantDetail") return `/sponsor/participants/${encodeURIComponent(nextView.orgId)}`;
+    if (nextView.type === "programAnalytics") return "/sponsor/program-analytics";
     if (nextView.type === "sponsorActivity") return "/sponsor/activity";
     if (nextView.type === "sponsorProfile") return "/sponsor/profile";
     return "/sponsor";
@@ -799,7 +804,7 @@ const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
 
   useEffect(() => {
     if (!isSponsorObserver || isSuperAdmin) return;
-    const allowed = ["pilotDashboard", "sponsorParticipants", "sponsorParticipantDetail", "sponsorActivity", "sponsorProfile"].includes(view.type);
+    const allowed = ["pilotDashboard", "sponsorParticipants", "sponsorParticipantDetail", "programAnalytics", "sponsorActivity", "sponsorProfile"].includes(view.type);
     if (!allowed) {
       setSponsorView(sponsorViewFromPath(), true);
     }
@@ -837,6 +842,7 @@ const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
     if (view.type === "sponsorObservers") return { type: "sponsorObservers", name: "sponsorObservers" };
     if (view.type === "sponsorParticipants") return { type: "sponsorParticipants", name: "sponsorParticipants" };
     if (view.type === "sponsorParticipantDetail") return { type: "sponsorParticipantDetail", name: "sponsorParticipantDetail" };
+    if (view.type === "programAnalytics") return { type: "programAnalytics", name: "programAnalytics" };
     if (view.type === "sponsorActivity") return { type: "sponsorActivity", name: "sponsorActivity" };
     if (view.type === "sponsorProfile") return { type: "sponsorProfile", name: "sponsorProfile" };
     if (view.type === "pendingActions") return { type: "pendingActions", name: "pendingActions" };
@@ -953,6 +959,7 @@ const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
     if (view.type === "sponsorObservers") return "Sponsor Observers";
     if (view.type === "sponsorParticipants") return "Sponsor Participants";
     if (view.type === "sponsorParticipantDetail") return "Sponsor Participant Detail";
+    if (view.type === "programAnalytics") return "Program Analytics";
     if (view.type === "sponsorActivity") return "Sponsor Recent Activity";
     if (view.type === "sponsorProfile") return "Sponsor Profile";
     if (view.type === "programs") return "Programs";
@@ -1133,6 +1140,8 @@ const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
         return <SponsorParticipantsPage onParticipantClick={(orgId) => setSponsorView({ type: "sponsorParticipantDetail", orgId })} />;
       case "sponsorParticipantDetail":
         return <SponsorParticipantDetailPage orgId={view.orgId} onBack={() => setSponsorView({ type: "sponsorParticipants" })} />;
+      case "programAnalytics":
+        return <ProgramAnalyticsPage isSuperAdmin={isSuperAdmin} />;
       case "sponsorActivity":
         return <SponsorRecentActivityPage />;
       case "sponsorProfile":
@@ -1469,6 +1478,7 @@ case "domain": {
     { label: "Pilot Dashboard", onClick: () => setView({ type: "pilotDashboard" as const }) },
     { label: "Active Orgs", onClick: () => setView({ type: "superAdmin" as const }) },
     { label: "PROGRAMS", onClick: () => setView({ type: "programs" as const }) },
+    { label: "Program Analytics", onClick: () => setView({ type: "programAnalytics" as const }) },
     { label: "Sponsor Observers", onClick: () => setView({ type: "sponsorObservers" as const }) },
     { label: "Pending Actions", onClick: () => setView({ type: "pendingActions" as const }) },
     { label: "Activity Center", onClick: () => setView({ type: "activityCenter" as const }) },
@@ -1479,6 +1489,7 @@ case "domain": {
   if (isSponsorObserver && !isSuperAdmin) {
     const sponsorActiveView =
       view.type === "sponsorParticipants" || view.type === "sponsorParticipantDetail" ? "participants" :
+      view.type === "programAnalytics" ? "analytics" :
       view.type === "sponsorActivity" ? "activity" :
       view.type === "sponsorProfile" ? "profile" :
       "dashboard";
@@ -1488,6 +1499,7 @@ case "domain": {
         onLogout={onLogout}
         onNavigate={(nextView) => {
           if (nextView === "participants") setSponsorView({ type: "sponsorParticipants" });
+          else if (nextView === "analytics") setSponsorView({ type: "programAnalytics" });
           else if (nextView === "activity") setSponsorView({ type: "sponsorActivity" });
           else if (nextView === "profile") setSponsorView({ type: "sponsorProfile" });
           else setSponsorView({ type: "pilotDashboard" });
@@ -1773,7 +1785,7 @@ function RegistrationScreen() {
         if (!cancelled) setPrograms(items);
       })
       .catch(error => {
-        if (!cancelled) setProgramsError(error instanceof Error ? error.message : "Unable to load sponsored programs.");
+        if (!cancelled) setProgramsError(error instanceof Error ? error.message : "Unable to load sponsored programs from the registration service.");
       })
       .finally(() => {
         if (!cancelled) setProgramsLoading(false);
@@ -1791,6 +1803,7 @@ function RegistrationScreen() {
   const requestedTier: "SPONSORED" | "COMM_L1" | "COMM_L2" = enrollmentType === "PROGRAM"
     ? requestedCmmcLevel === "L2" ? "COMM_L2" : "SPONSORED"
     : requestedCmmcLevel === "L2" ? "COMM_L2" : "COMM_L1";
+  const registrationProgram = enrollmentType === "PROGRAM" ? activeProgram : null;
 
   useEffect(() => {
     if (enrollmentType !== "PROGRAM") return;
@@ -1819,22 +1832,21 @@ function RegistrationScreen() {
     }
     setSubmitting(true);
     try {
-      const credential = await createUserWithEmailAndPassword(auth, cleanEmail, password);
-      await setDoc(doc(db, "users", credential.user.uid), {
-        uid: credential.user.uid,
-        email: cleanEmail,
-        displayName: userFullName.trim(),
-        status: "pending",
-        requestedLevel: requestedTier,
-        requestedTier,
-        requestedCmmcLevel,
-        enrollmentType,
-        requestedProgramId: activeProgram?.id || null,
-        requestedProgramName: activeProgram?.name || null,
-        requestedProgramCode: activeProgram?.programCode || null,
-        registrationSource: "self_registration",
-        createdAt: serverTimestamp(),
-      });
+      let credential: { user: User };
+      try {
+        credential = await createUserWithEmailAndPassword(auth, cleanEmail, password);
+      } catch (authError: any) {
+        if (String(authError?.code || "").includes("email-already-in-use")) {
+          credential = await signInWithEmailAndPassword(auth, cleanEmail, password);
+          const existingUser = await getDoc(doc(db, "users", credential.user.uid));
+          const existingData = existingUser.data() as any;
+          if (existingData?.status === "active" || existingData?.orgId) {
+            throw new Error("An active account already exists for this email. Please log in instead.");
+          }
+        } else {
+          throw authError;
+        }
+      }
       await addDoc(collection(db, "accessRequests"), {
         type: "orgRegistration",
         uid: credential.user.uid,
@@ -1844,9 +1856,12 @@ function RegistrationScreen() {
         requestedLevel: requestedTier,
         requestedTier,
         requestedCmmcLevel,
-        requestedProgramId: activeProgram?.id || null,
-        requestedProgramName: activeProgram?.name || null,
-        requestedProgramCode: activeProgram?.programCode || null,
+        requestedProgramId: registrationProgram?.id || null,
+        requestedProgramName: registrationProgram?.name || null,
+        requestedProgramCode: registrationProgram?.programCode || null,
+        programId: registrationProgram?.id || null,
+        programName: registrationProgram?.name || null,
+        programCode: registrationProgram?.programCode || null,
         paymentStatus: enrollmentType === "COMMERCIAL" ? "not_started" : "not_required",
         address: address.trim(),
         phone: phone.trim(),
@@ -1863,6 +1878,19 @@ function RegistrationScreen() {
         requestedAt: serverTimestamp(),
         createdAt: serverTimestamp(),
       });
+      const pendingUserRef = doc(db, "users", credential.user.uid);
+      const pendingUserSnap = await getDoc(pendingUserRef);
+      if (!pendingUserSnap.exists()) {
+        await setDoc(pendingUserRef, {
+          uid: credential.user.uid,
+          email: cleanEmail,
+          displayName: userFullName.trim(),
+          status: "pending",
+          requestedLevel: requestedTier,
+          registrationSource: "self_registration",
+          createdAt: serverTimestamp(),
+        });
+      }
       await signOut(auth);
       publicNavigate("/registration-submitted");
     } catch (error: any) {

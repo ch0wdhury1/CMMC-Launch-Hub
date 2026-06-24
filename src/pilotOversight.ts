@@ -416,12 +416,10 @@ export async function loadPilotParticipantDetail(orgId: string): Promise<{
   organization: PilotOrgSummary | null;
   activity: ActivityEvent[];
 }> {
-  const [data, allActivity] = await Promise.all([
-    loadPilotOversightData(),
-    loadActivityEvents({ isSuperAdmin: true }).catch(() => []),
-  ]);
+  const data = await loadPilotOversightData();
   const organization = data.organizations.find(org => org.id === orgId) || null;
-  const activity = allActivity
+  if (!organization) return { organization: null, activity: [] };
+  const activity = data.recentActivity
     .filter(event => event.orgId === orgId)
     .sort((a, b) => toTime(b.createdAt) - toTime(a.createdAt));
   return { organization, activity };

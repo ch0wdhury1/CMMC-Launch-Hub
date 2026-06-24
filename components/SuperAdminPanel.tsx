@@ -218,11 +218,11 @@ const getOrgDefaultsForTier = (tier: string) => {
     if (!ownerUid) throw new Error("Request missing requestedByUid");
 
     const orgName = safeStr((req as any).orgName).trim() || "New Organization";
-    const requestedTier = safeStr((req as any).requestedTier).trim() || "COMM_L1";
-    const enrollmentType = safeStr((req as any).enrollmentType).toUpperCase() === "PROGRAM" ? "PROGRAM" : "COMMERCIAL";
-    const requestedProgramId = enrollmentType === "PROGRAM" ? safeStr((req as any).requestedProgramId).trim() : "";
-    const requestedProgramName = enrollmentType === "PROGRAM" ? safeStr((req as any).requestedProgramName).trim() : "";
-    const requestedProgramCode = enrollmentType === "PROGRAM" ? safeStr((req as any).requestedProgramCode).trim() : "";
+    let requestedTier = safeStr((req as any).requestedTier).trim() || "COMM_L1";
+    let enrollmentType = safeStr((req as any).enrollmentType).toUpperCase() === "PROGRAM" ? "PROGRAM" : "COMMERCIAL";
+    let requestedProgramId = enrollmentType === "PROGRAM" ? safeStr((req as any).requestedProgramId || (req as any).programId).trim() : "";
+    let requestedProgramName = enrollmentType === "PROGRAM" ? safeStr((req as any).requestedProgramName || (req as any).programName).trim() : "";
+    let requestedProgramCode = enrollmentType === "PROGRAM" ? safeStr((req as any).requestedProgramCode || (req as any).programCode).trim() : "";
 
     // Deterministic orgId to ensure idempotency across retries
     const deterministicOrgId =
@@ -232,12 +232,6 @@ const getOrgDefaultsForTier = (tier: string) => {
     const now = new Date();
     const start = Timestamp.fromDate(now);
     const end = Timestamp.fromDate(addDays(now, 365));
-
-    const isSponsored =
-      String(requestedTier || "").toUpperCase() === "SPONSORED" ||
-      String(requestedTier || "").toUpperCase() === "CT_SPONSORED";
-
-    const { maxUsers, billingCycle } = getOrgDefaultsForTier(requestedTier);
 
     const primaryEmail = safeStr((req as any).primaryContactEmail || (req as any).email)
       .trim()
@@ -255,6 +249,15 @@ const getOrgDefaultsForTier = (tier: string) => {
 
       // Idempotency: do nothing if not pending
       if (reqData?.status !== "pending") throw new Error(`Request already ${String(reqData?.status || "processed")}`);
+      requestedTier = safeStr(reqData?.requestedTier || reqData?.tier || requestedTier).trim() || "COMM_L1";
+      enrollmentType = safeStr(reqData?.enrollmentType).toUpperCase() === "PROGRAM" ? "PROGRAM" : "COMMERCIAL";
+      requestedProgramId = enrollmentType === "PROGRAM" ? safeStr(reqData?.requestedProgramId || reqData?.programId).trim() : "";
+      requestedProgramName = enrollmentType === "PROGRAM" ? safeStr(reqData?.requestedProgramName || reqData?.programName).trim() : "";
+      requestedProgramCode = enrollmentType === "PROGRAM" ? safeStr(reqData?.requestedProgramCode || reqData?.programCode).trim() : "";
+      const isSponsored =
+        String(requestedTier || "").toUpperCase() === "SPONSORED" ||
+        String(requestedTier || "").toUpperCase() === "CT_SPONSORED";
+      const { maxUsers, billingCycle } = getOrgDefaultsForTier(requestedTier);
 
       const orgId = safeStr(reqData?.orgId).trim() || deterministicOrgId;
       approvedOrgId = orgId;

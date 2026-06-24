@@ -130,7 +130,7 @@ const SPONSOR_PROGRAM_OPTIONS = new Set([
   "Other",
 ]);
 
-app.get("/api/registration/programs", async (_req: any, res) => {
+const listRegistrationPrograms = async (_req: any, res: any) => {
   try {
     const snapshot = await db.collection("programs")
       .where("status", "==", "active")
@@ -143,10 +143,12 @@ app.get("/api/registration/programs", async (_req: any, res) => {
           id: docSnap.id,
           name: String(data.name || ""),
           programCode: String(data.programCode || ""),
-          allowL1: data.allowL1 !== false,
-          allowL2: data.allowL2 === true,
+          programType: String(data.programType || ""),
           state: String(data.state || ""),
           sponsorName: String(data.sponsorName || ""),
+          allowL1: data.allowL1 !== false,
+          allowL2: data.allowL2 === true,
+          status: "active",
         };
       })
       .filter(program => program.name && program.programCode)
@@ -156,7 +158,11 @@ app.get("/api/registration/programs", async (_req: any, res) => {
     console.error("Registration programs load failed", error);
     return res.status(500).json({success: false, errorMessage: "Unable to load sponsored programs"});
   }
-});
+};
+
+app.get("/api/registration/programs", listRegistrationPrograms);
+app.get("/registration/programs", listRegistrationPrograms);
+app.get("/api/api/registration/programs", listRegistrationPrograms);
 
 const EVIDENCE_VALIDATION_STATUSES = new Set([
   "supportive",
@@ -2378,7 +2384,7 @@ app.get("/api/pilot/oversight", requireAuth, async (req: any, res) => {
     const roles = user.roles || {};
     const programIds = Array.isArray(user.programIds) ? user.programIds.map(String).filter(Boolean) : [];
     const programScoped = roles.programObserver === true && programIds.length > 0;
-    const legacyPilotObserver = roles.pilotObserver === true;
+    const legacyPilotObserver = roles.pilotObserver === true && !programScoped;
     if (!programScoped && !legacyPilotObserver) {
       return res.json({success: true, data: {
         summary: {activeOrganizations: 0, totalPilotUsers: 0, averageCompletionPercent: 0, averageSprsScore: -250, evidenceUploaded: 0, openPoamItems: 0, reportsGenerated: 0, feedbackItems: 0},
@@ -2401,10 +2407,15 @@ app.get("/api/pilot/oversight", requireAuth, async (req: any, res) => {
     reportEvents.forEach((event: any) => reportsByOrg.set(event.orgId, [...(reportsByOrg.get(event.orgId) || []), event]));
     allActivity.forEach((event: any) => activityByOrg.set(event.orgId, [...(activityByOrg.get(event.orgId) || []), event]));
 
+    const allowedProgramIds = new Set(programIds);
     const orgDocs = orgSnap.docs
       .map(item => ({id: item.id, ...(item.data() || {})}))
       .filter((org: any) => isPilotVisibleOrg(org, org.id))
-      .filter((org: any) => programScoped ? programIds.includes(String(org.programId || "")) : true);
+      .filter((org: any) => {
+        if (!programScoped) return true;
+        const orgProgramId = String(org.programId || "").trim();
+        return orgProgramId !== "" && allowedProgramIds.has(orgProgramId);
+      });
 
     const organizations = await Promise.all(orgDocs.map(async (org: any) => {
       const assessmentId = String(org.tier || "").toUpperCase() === "COMM_L2" ? "default_l2" : "default_l1";
@@ -2485,6 +2496,239 @@ app.get("/api/pilot/oversight", requireAuth, async (req: any, res) => {
     return res.status(500).json({success: false, errorMessage: "Unable to load pilot oversight summary"});
   }
 });
+
+const emptyProgramAnalyticsData = (input: {
+  programs: any[];
+  selectedProgram: any | null;
+  isSuperAdmin: boolean;
+  isProgramObserver: boolean;
+  isLegacyPilotObserver: boolean;
+}) => ({
+  programs: input.programs,
+  selectedProgram: input.selectedProgram,
+  scope: {
+    isSuperAdmin: input.isSuperAdmin,
+    isProgramObserver: input.isProgramObserver,
+    isLegacyPilotObserver: input.isLegacyPilotObserver,
+  },
+  summary: {
+    totalOrganizations: 0,
+    activeOrganizations: 0,
+    totalUsers: 0,
+    averageCompletionPercent: 0,
+    averageSprsScore: -250,
+    evidenceUploaded: 0,
+    sspGeneratedCount: 0,
+    poamGeneratedCount: 0,
+    openPoamItems: 0,
+    lastActivityDate: null,
+    completedPractices: 0,
+    remainingPractices: 0,
+    averageReadinessPercent: 0,
+    l1Organizations: 0,
+    l2Organizations: 0,
+  },
+  organizations: [],
+  recentActivity: [],
+  charts: {
+    completionDistribution: [
+      {label: "0-24%", count: 0},
+      {label: "25-49%", count: 0},
+      {label: "50-74%", count: 0},
+      {label: "75-100%", count: 0},
+    ],
+    tierSplit: {l1: 0, l2: 0},
+    reportsSummary: {ssp: 0, poam: 0, other: 0},
+  },
+});
+
+const programAnalyticsHandler = async (req: any, res: any) => {
+  try {
+    const userSnap = await db.doc(`users/${req.user.uid}`).get();
+    const user = userSnap.data() || {};
+    if (!userSnap.exists || user.status !== "active") {
+      return res.status(403).json({success: false, errorMessage: "Active program analytics access required"});
+    }
+    const roles = user.roles || {};
+    const isSuperAdmin = await isSuperAdminUser(req.user.uid);
+    const assignedProgramIds = Array.isArray(user.programIds) ? user.programIds.map(String).filter(Boolean) : [];
+    const assignedProgramCodes = Array.isArray(user.programCodes) ? user.programCodes.map((item: any) => String(item || "").trim().toUpperCase()).filter(Boolean) : [];
+    const programScopedObserver = roles.programObserver === true && assignedProgramIds.length > 0;
+    const programCodeScopedObserver = roles.programObserver === true && !programScopedObserver && assignedProgramCodes.length > 0;
+    const legacyPilotObserver = roles.pilotObserver === true && !programScopedObserver && !programCodeScopedObserver;
+    if (!isSuperAdmin && !programScopedObserver && !programCodeScopedObserver && !legacyPilotObserver) {
+      return res.status(403).json({success: false, errorMessage: "Program Analytics is limited to SuperAdmin and Sponsor Observers"});
+    }
+
+    const requestedProgramId = typeof req.query?.programId === "string" ? req.query.programId.trim() : "";
+    const requestedProgramCode = requestedProgramId.toUpperCase();
+
+    const [programSnap, orgSnap, activitySnap] = await Promise.all([
+      db.collection("programs").where("status", "==", "active").limit(500).get(),
+      db.collection("orgs").get(),
+      db.collection("activityEvents").orderBy("createdAt", "desc").limit(500).get(),
+    ]);
+    const allPrograms = programSnap.docs.map(docSnap => {
+      const data = docSnap.data() || {};
+      return {
+        id: docSnap.id,
+        name: String(data.name || ""),
+        programCode: String(data.programCode || ""),
+        programType: String(data.programType || ""),
+        state: String(data.state || ""),
+        sponsorName: String(data.sponsorName || ""),
+        status: "active",
+      };
+    }).filter(program => program.name && program.programCode);
+
+    const visiblePrograms = isSuperAdmin
+      ? allPrograms
+      : programScopedObserver
+        ? allPrograms.filter(program => assignedProgramIds.includes(program.id) || assignedProgramCodes.includes(program.programCode.toUpperCase()))
+        : programCodeScopedObserver
+          ? allPrograms.filter(program => assignedProgramCodes.includes(program.programCode.toUpperCase()))
+        : allPrograms;
+    const selectedProgram = requestedProgramId
+      ? visiblePrograms.find(program => program.id === requestedProgramId || program.programCode.toUpperCase() === requestedProgramCode)
+      : visiblePrograms[0];
+    if ((programScopedObserver || programCodeScopedObserver) && requestedProgramId && !selectedProgram) {
+      return res.status(403).json({success: false, errorMessage: "Requested program is outside observer scope"});
+    }
+    if (!selectedProgram) {
+      return res.json({success: true, data: emptyProgramAnalyticsData({
+        programs: visiblePrograms,
+        selectedProgram: null,
+        isSuperAdmin,
+        isProgramObserver: programScopedObserver || programCodeScopedObserver,
+        isLegacyPilotObserver: legacyPilotObserver,
+      })});
+    }
+
+    const selectedProgramId = selectedProgram.id;
+    const selectedProgramCode = selectedProgram.programCode.toUpperCase();
+    const allActivity = activitySnap.docs.map(item => ({id: item.id, ...item.data()}));
+    const reportEvents = allActivity.filter((event: any) => event.action === "report.generated");
+    const evidenceEvents = allActivity.filter((event: any) => event.action === "evidence.uploaded");
+    const reportsByOrg = new Map<string, any[]>();
+    const activityByOrg = new Map<string, any[]>();
+    reportEvents.forEach((event: any) => reportsByOrg.set(event.orgId, [...(reportsByOrg.get(event.orgId) || []), event]));
+    allActivity.forEach((event: any) => activityByOrg.set(event.orgId, [...(activityByOrg.get(event.orgId) || []), event]));
+
+    const orgDocs = orgSnap.docs
+      .map(item => ({id: item.id, ...(item.data() || {})}))
+      .filter((org: any) => isPilotVisibleOrg(org, org.id))
+      .filter((org: any) => {
+        const orgProgramId = String(org.programId || "").trim();
+        const orgProgramCode = String(org.programCode || "").trim().toUpperCase();
+        return orgProgramId === selectedProgramId || orgProgramCode === selectedProgramCode;
+      });
+
+    const organizations = await Promise.all(orgDocs.map(async (org: any) => {
+      const assessmentId = String(org.tier || "").toUpperCase() === "COMM_L2" ? "default_l2" : "default_l1";
+      const assessment = await programAssessmentSummary(org.id, assessmentId);
+      const orgReports = reportsByOrg.get(org.id) || [];
+      const orgActivity = activityByOrg.get(org.id) || [];
+      const evidenceCount = Number(org.evidenceCount ?? org.readiness?.evidenceCount ?? evidenceEvents.filter((event: any) => event.orgId === org.id).length);
+      const sspGenerated = orgReports.some((event: any) => /ssp|system security plan/i.test(event.targetLabel || event.summary || ""));
+      const poamGenerated = orgReports.some((event: any) => /poa&m|poam/i.test(event.targetLabel || event.summary || ""));
+      const lastActivity = orgActivity[0]?.createdAt || null;
+      const daysSinceActivity = lastActivity
+        ? Math.floor((Date.now() - (lastActivity.toDate ? lastActivity.toDate().getTime() : lastActivity._seconds ? lastActivity._seconds * 1000 : new Date(lastActivity).getTime())) / 86400000)
+        : 999;
+      const attentionFlag = daysSinceActivity >= 14
+        ? "Needs Attention"
+        : assessment.completionPercent < 25
+          ? "Low Progress"
+          : orgReports.length === 0
+            ? "Reports Missing"
+            : "On Track";
+      return {
+        id: org.id,
+        companyName: safePilotOrgName(org, org.id),
+        tier: String(org.tier || org.subscriptionTier || "Not provided"),
+        status: String(org.status || "active"),
+        usersCount: Number(org.activeMemberCount || org.memberCount || 0),
+        completionPercent: assessment.completionPercent,
+        sprsScore: assessment.sprsScore,
+        evidenceCount,
+        sspGenerated,
+        poamGenerated,
+        reportsGenerated: orgReports.length,
+        openPoamCount: assessment.openPoamCount,
+        practicesCompleted: assessment.practicesCompleted,
+        practicesRemaining: assessment.practicesRemaining,
+        lastActivity,
+        attentionFlag,
+      };
+    }));
+
+    const activeOrganizations = organizations.filter(org => String(org.status || "").toLowerCase() === "active");
+    const averageCompletionPercent = activeOrganizations.length ? Math.round(activeOrganizations.reduce((sum, org) => sum + org.completionPercent, 0) / activeOrganizations.length) : 0;
+    const averageSprsScore = activeOrganizations.length ? Math.round(activeOrganizations.reduce((sum, org) => sum + org.sprsScore, 0) / activeOrganizations.length) : -250;
+    const recentOrgIds = new Set(organizations.map(org => org.id));
+    const recentActivity = allActivity
+      .filter((event: any) => recentOrgIds.has(event.orgId))
+      .slice(0, 10)
+      .map((event: any) => ({
+        id: event.id,
+        orgId: event.orgId,
+        orgName: event.orgName || "",
+        action: event.action || "activity",
+        actorName: event.actorName || "",
+        actorEmail: event.actorEmail || "",
+        targetType: event.targetType || "",
+        targetLabel: event.targetType === "evidence" ? "" : (event.targetLabel || ""),
+        summary: safeActivitySummary(event),
+        createdAt: event.createdAt || null,
+      }));
+    const reportsSummary = {
+      ssp: organizations.filter(org => org.sspGenerated).length,
+      poam: organizations.filter(org => org.poamGenerated).length,
+      other: organizations.reduce((sum, org) => sum + Math.max(0, org.reportsGenerated - Number(org.sspGenerated) - Number(org.poamGenerated)), 0),
+    };
+    return res.json({success: true, data: {
+      programs: visiblePrograms,
+      selectedProgram,
+      scope: {isSuperAdmin, isProgramObserver: programScopedObserver || programCodeScopedObserver, isLegacyPilotObserver: legacyPilotObserver},
+      summary: {
+        totalOrganizations: organizations.length,
+        activeOrganizations: activeOrganizations.length,
+        totalUsers: organizations.reduce((sum, org) => sum + org.usersCount, 0),
+        averageCompletionPercent,
+        averageSprsScore,
+        evidenceUploaded: organizations.reduce((sum, org) => sum + org.evidenceCount, 0),
+        sspGeneratedCount: reportsSummary.ssp,
+        poamGeneratedCount: reportsSummary.poam,
+        openPoamItems: organizations.reduce((sum, org) => sum + org.openPoamCount, 0),
+        lastActivityDate: recentActivity[0]?.createdAt || null,
+        completedPractices: organizations.reduce((sum, org) => sum + org.practicesCompleted, 0),
+        remainingPractices: organizations.reduce((sum, org) => sum + org.practicesRemaining, 0),
+        averageReadinessPercent: averageCompletionPercent,
+        l1Organizations: organizations.filter(org => String(org.tier).toUpperCase() !== "COMM_L2").length,
+        l2Organizations: organizations.filter(org => String(org.tier).toUpperCase() === "COMM_L2").length,
+      },
+      organizations: organizations.sort((a, b) => a.companyName.localeCompare(b.companyName)),
+      recentActivity,
+      charts: {
+        completionDistribution: [
+          {label: "0-24%", count: organizations.filter(org => org.completionPercent < 25).length},
+          {label: "25-49%", count: organizations.filter(org => org.completionPercent >= 25 && org.completionPercent < 50).length},
+          {label: "50-74%", count: organizations.filter(org => org.completionPercent >= 50 && org.completionPercent < 75).length},
+          {label: "75-100%", count: organizations.filter(org => org.completionPercent >= 75).length},
+        ],
+        tierSplit: {l1: organizations.filter(org => String(org.tier).toUpperCase() !== "COMM_L2").length, l2: organizations.filter(org => String(org.tier).toUpperCase() === "COMM_L2").length},
+        reportsSummary,
+      },
+    }});
+  } catch (error) {
+    console.error("Program analytics load failed", error);
+    return res.status(500).json({success: false, errorMessage: "Unable to load program analytics"});
+  }
+};
+
+app.get("/api/program/analytics", requireAuth, programAnalyticsHandler);
+app.get("/program/analytics", requireAuth, programAnalyticsHandler);
+app.get("/api/api/program/analytics", requireAuth, programAnalyticsHandler);
 
 app.post("/api/admin/sponsor-observer", requireAuth, async (req: any, res) => {
   try {

@@ -12,7 +12,7 @@ server: {
     '/api': {
       target: 'https://us-central1-cmmc-launch-hub.cloudfunctions.net',
       changeOrigin: true,
-      rewrite: (path) => path.replace(/^\/api/, '/api/api'),
+      rewrite: (path) => path.startsWith('/api/api') ? path : path.replace(/^\/api/, '/api/api'),
     },
   },
 },

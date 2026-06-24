@@ -131,17 +131,15 @@ export const PendingActionsPage: React.FC<Props> = ({ isSuperAdmin }) => {
       if (!ownerUid) throw new Error("Request missing requestedByUid");
 
       const orgName = safeStr(registration.orgName || registration.companyName).trim() || "New Organization";
-      const requestedTier = safeStr(registration.requestedTier || registration.tier).trim() || "COMM_L1";
-      const enrollmentType = safeStr(registration.enrollmentType).toUpperCase() === "PROGRAM" ? "PROGRAM" : "COMMERCIAL";
-      const requestedProgramId = enrollmentType === "PROGRAM" ? safeStr(registration.requestedProgramId).trim() : "";
-      const requestedProgramName = enrollmentType === "PROGRAM" ? safeStr(registration.requestedProgramName).trim() : "";
-      const requestedProgramCode = enrollmentType === "PROGRAM" ? safeStr(registration.requestedProgramCode).trim() : "";
+      let requestedTier = safeStr(registration.requestedTier || registration.tier).trim() || "COMM_L1";
+      let enrollmentType = safeStr(registration.enrollmentType).toUpperCase() === "PROGRAM" ? "PROGRAM" : "COMMERCIAL";
+      let requestedProgramId = enrollmentType === "PROGRAM" ? safeStr(registration.requestedProgramId || registration.programId).trim() : "";
+      let requestedProgramName = enrollmentType === "PROGRAM" ? safeStr(registration.requestedProgramName || registration.programName).trim() : "";
+      let requestedProgramCode = enrollmentType === "PROGRAM" ? safeStr(registration.requestedProgramCode || registration.programCode).trim() : "";
       const deterministicOrgId = safeStr(registration.orgId).trim() || `org_${slugify(orgName) || "new"}_${registration.id.slice(0, 6)}`;
       const now = new Date();
       const start = Timestamp.fromDate(now);
       const end = Timestamp.fromDate(addDays(now, 365));
-      const isSponsored = ["SPONSORED", "CT_SPONSORED"].includes(String(requestedTier).toUpperCase());
-      const { maxUsers, billingCycle } = getOrgDefaultsForTier(requestedTier);
       const primaryEmail = safeStr(registration.primaryContactEmail || registration.email).trim().toLowerCase();
       const primaryName = safeStr(registration.primaryContactName || registration.fullName).trim();
       const primaryPhone = safeStr(registration.primaryContactPhone || registration.phone).trim();
@@ -155,6 +153,13 @@ export const PendingActionsPage: React.FC<Props> = ({ isSuperAdmin }) => {
         const reqData: any = reqSnap.data();
         if (reqData?.type !== "orgRegistration") throw new Error("Not an orgRegistration request");
         if (reqData?.status !== "pending") throw new Error(`Request already ${String(reqData?.status || "processed")}`);
+        requestedTier = safeStr(reqData?.requestedTier || reqData?.tier || requestedTier).trim() || "COMM_L1";
+        enrollmentType = safeStr(reqData?.enrollmentType).toUpperCase() === "PROGRAM" ? "PROGRAM" : "COMMERCIAL";
+        requestedProgramId = enrollmentType === "PROGRAM" ? safeStr(reqData?.requestedProgramId || reqData?.programId).trim() : "";
+        requestedProgramName = enrollmentType === "PROGRAM" ? safeStr(reqData?.requestedProgramName || reqData?.programName).trim() : "";
+        requestedProgramCode = enrollmentType === "PROGRAM" ? safeStr(reqData?.requestedProgramCode || reqData?.programCode).trim() : "";
+        const isSponsored = ["SPONSORED", "CT_SPONSORED"].includes(String(requestedTier).toUpperCase());
+        const { maxUsers, billingCycle } = getOrgDefaultsForTier(requestedTier);
 
         const orgId = safeStr(reqData?.orgId).trim() || deterministicOrgId;
         approvedOrgId = orgId;

@@ -1,8 +1,8 @@
 import React from "react";
-import { Activity, Building2, LayoutDashboard, LogOut, UserCircle } from "lucide-react";
+import { Activity, BarChart3, Building2, LayoutDashboard, LogOut, UserCircle } from "lucide-react";
 import { APP_VERSION } from "../src/appVersion";
 
-type SponsorView = "dashboard" | "participants" | "activity" | "profile";
+type SponsorView = "dashboard" | "participants" | "analytics" | "activity" | "profile";
 
 type Props = {
   activeView: SponsorView;
@@ -14,6 +14,7 @@ type Props = {
 const navItems: Array<{ view: SponsorView; label: string; icon: React.ComponentType<{ className?: string }> }> = [
   { view: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { view: "participants", label: "Participants", icon: Building2 },
+  { view: "analytics", label: "Program Analytics", icon: BarChart3 },
   { view: "activity", label: "Recent Activity", icon: Activity },
   { view: "profile", label: "My Profile", icon: UserCircle },
 ];
@@ -55,4 +56,3 @@ export const SponsorLayout: React.FC<Props> = ({ activeView, children, onNavigat
     <footer className="border-t bg-white px-6 py-3 text-xs text-gray-500">Sponsor Observer read-only oversight. Evidence files, raw notes, and remediation details are not exposed.</footer>
   </div>
 );
-
