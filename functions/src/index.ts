@@ -130,6 +130,34 @@ const SPONSOR_PROGRAM_OPTIONS = new Set([
   "Other",
 ]);
 
+app.get("/api/registration/programs", async (_req: any, res) => {
+  try {
+    const snapshot = await db.collection("programs")
+      .where("status", "==", "active")
+      .limit(100)
+      .get();
+    const programs = snapshot.docs
+      .map(docSnap => {
+        const data = docSnap.data() || {};
+        return {
+          id: docSnap.id,
+          name: String(data.name || ""),
+          programCode: String(data.programCode || ""),
+          allowL1: data.allowL1 !== false,
+          allowL2: data.allowL2 === true,
+          state: String(data.state || ""),
+          sponsorName: String(data.sponsorName || ""),
+        };
+      })
+      .filter(program => program.name && program.programCode)
+      .sort((a, b) => a.programCode.localeCompare(b.programCode));
+    return res.json({success: true, programs});
+  } catch (error) {
+    console.error("Registration programs load failed", error);
+    return res.status(500).json({success: false, errorMessage: "Unable to load sponsored programs"});
+  }
+});
+
 const EVIDENCE_VALIDATION_STATUSES = new Set([
   "supportive",
   "partial",

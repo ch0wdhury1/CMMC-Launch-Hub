@@ -67,6 +67,7 @@ import { SPRS_CONTROLS } from "./data/sprsControls";
 import { subscribeActiveOrgMembers, type ActiveOrgMember } from "./src/responsibilityAssignments";
 import { logActivityEvent } from "./src/activityLog";
 import { createTierUpgradeRequest } from "./src/orgUpgradeRequests";
+import { loadRegistrationPrograms, type RegistrationProgram } from "./src/programService";
 
 import { Home, ChevronRight, Key, ShieldAlert, Database, Loader2 } from "lucide-react";
 
@@ -1747,10 +1748,13 @@ function ForgotPasswordScreen() {
 }
 
 function RegistrationScreen() {
-  // TODO Phase 25A.2: add "How are you joining?" with Commercial Subscription
-  // and State / Sponsored Program options, then wire program selection.
   const [companyName, setCompanyName] = useState("");
-  const [requestedLevel, setRequestedLevel] = useState<"SPONSORED" | "COMM_L1" | "COMM_L2">("COMM_L1");
+  const [enrollmentType, setEnrollmentType] = useState<"COMMERCIAL" | "PROGRAM">("COMMERCIAL");
+  const [requestedCmmcLevel, setRequestedCmmcLevel] = useState<"L1" | "L2">("L1");
+  const [selectedProgramId, setSelectedProgramId] = useState("");
+  const [programs, setPrograms] = useState<RegistrationProgram[]>([]);
+  const [programsLoading, setProgramsLoading] = useState(false);
+  const [programsError, setProgramsError] = useState("");
   const [address, setAddress] = useState("");
   const [phone, setPhone] = useState("");
   const [website, setWebsite] = useState("");
@@ -1760,12 +1764,51 @@ function RegistrationScreen() {
   const [msg, setMsg] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
+  useEffect(() => {
+    let cancelled = false;
+    setProgramsLoading(true);
+    setProgramsError("");
+    loadRegistrationPrograms()
+      .then(items => {
+        if (!cancelled) setPrograms(items);
+      })
+      .catch(error => {
+        if (!cancelled) setProgramsError(error instanceof Error ? error.message : "Unable to load sponsored programs.");
+      })
+      .finally(() => {
+        if (!cancelled) setProgramsLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  const activeProgram = programs.find(program => program.id === selectedProgramId) || null;
+  const programLevelOptions = activeProgram
+    ? [
+        ...(activeProgram.allowL1 ? [{value: "L1" as const, label: "CMMC Level 1"}] : []),
+        ...(activeProgram.allowL2 ? [{value: "L2" as const, label: "CMMC Level 2"}] : []),
+      ]
+    : [];
+  const requestedTier: "SPONSORED" | "COMM_L1" | "COMM_L2" = enrollmentType === "PROGRAM"
+    ? requestedCmmcLevel === "L2" ? "COMM_L2" : "SPONSORED"
+    : requestedCmmcLevel === "L2" ? "COMM_L2" : "COMM_L1";
+
+  useEffect(() => {
+    if (enrollmentType !== "PROGRAM") return;
+    if (!activeProgram) return;
+    if (requestedCmmcLevel === "L1" && !activeProgram.allowL1 && activeProgram.allowL2) setRequestedCmmcLevel("L2");
+    if (requestedCmmcLevel === "L2" && !activeProgram.allowL2 && activeProgram.allowL1) setRequestedCmmcLevel("L1");
+  }, [activeProgram, enrollmentType, requestedCmmcLevel]);
+
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     setMsg("");
     const cleanEmail = email.trim().toLowerCase();
     const required = [companyName, address, phone, website, userFullName, cleanEmail, password];
     if (required.some(value => !value.trim())) return setMsg("Please complete all required fields.");
+    if (!enrollmentType) return setMsg("Please choose how you are joining.");
+    if (!requestedCmmcLevel) return setMsg("Please choose a requested CMMC level.");
+    if (enrollmentType === "PROGRAM" && !activeProgram) return setMsg("Please select an active sponsored program.");
+    if (enrollmentType === "PROGRAM" && programLevelOptions.length === 0) return setMsg("The selected program does not currently allow CMMC Level 1 or Level 2 registration.");
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) return setMsg("Please enter a valid email address.");
     if (password.length < 6) return setMsg("Password must be at least 6 characters.");
     try {
@@ -1782,7 +1825,13 @@ function RegistrationScreen() {
         email: cleanEmail,
         displayName: userFullName.trim(),
         status: "pending",
-        requestedLevel,
+        requestedLevel: requestedTier,
+        requestedTier,
+        requestedCmmcLevel,
+        enrollmentType,
+        requestedProgramId: activeProgram?.id || null,
+        requestedProgramName: activeProgram?.name || null,
+        requestedProgramCode: activeProgram?.programCode || null,
         registrationSource: "self_registration",
         createdAt: serverTimestamp(),
       });
@@ -1791,8 +1840,14 @@ function RegistrationScreen() {
         uid: credential.user.uid,
         companyName: companyName.trim(),
         orgName: companyName.trim(),
-        requestedLevel,
-        requestedTier: requestedLevel,
+        enrollmentType,
+        requestedLevel: requestedTier,
+        requestedTier,
+        requestedCmmcLevel,
+        requestedProgramId: activeProgram?.id || null,
+        requestedProgramName: activeProgram?.name || null,
+        requestedProgramCode: activeProgram?.programCode || null,
+        paymentStatus: enrollmentType === "COMMERCIAL" ? "not_started" : "not_required",
         address: address.trim(),
         phone: phone.trim(),
         website: website.trim(),
@@ -1827,10 +1882,56 @@ function RegistrationScreen() {
           <div className="space-y-3">
             <h2 className="border-b pb-2 text-sm font-bold uppercase text-gray-700">Company Information</h2>
             <input required placeholder="Company Name" value={companyName} onChange={event => setCompanyName(event.target.value)} className="w-full rounded border border-gray-300 px-3 py-2" />
-            <select required value={requestedLevel} onChange={event => setRequestedLevel(event.target.value as typeof requestedLevel)} className="w-full rounded border border-gray-300 px-3 py-2"><option value="COMM_L1">CMMC Level 1</option><option value="COMM_L2">CMMC Level 2</option><option value="SPONSORED">SPONSORED</option></select>
             <input required placeholder="Address" value={address} onChange={event => setAddress(event.target.value)} className="w-full rounded border border-gray-300 px-3 py-2" />
             <input required placeholder="Phone" value={phone} onChange={event => setPhone(event.target.value)} className="w-full rounded border border-gray-300 px-3 py-2" />
             <input required placeholder="Website (https://example.com)" value={website} onChange={event => setWebsite(event.target.value)} className="w-full rounded border border-gray-300 px-3 py-2" />
+          </div>
+          <div className="space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
+            <h2 className="border-b pb-2 text-sm font-bold uppercase text-gray-700">How are you joining?</h2>
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className={`rounded border p-3 text-sm ${enrollmentType === "COMMERCIAL" ? "border-blue-500 bg-white ring-1 ring-blue-500" : "bg-white"}`}>
+                <input type="radio" name="enrollmentType" value="COMMERCIAL" checked={enrollmentType === "COMMERCIAL"} onChange={() => { setEnrollmentType("COMMERCIAL"); setRequestedCmmcLevel("L1"); }} className="mr-2" />
+                <span className="font-semibold text-gray-900">Commercial Subscription</span>
+                <span className="mt-1 block text-xs text-gray-600">Paid CMMC Level 1 or Level 2 request.</span>
+              </label>
+              <label className={`rounded border p-3 text-sm ${enrollmentType === "PROGRAM" ? "border-blue-500 bg-white ring-1 ring-blue-500" : "bg-white"}`}>
+                <input type="radio" name="enrollmentType" value="PROGRAM" checked={enrollmentType === "PROGRAM"} onChange={() => setEnrollmentType("PROGRAM")} className="mr-2" />
+                <span className="font-semibold text-gray-900">State / Sponsored Program</span>
+                <span className="mt-1 block text-xs text-gray-600">Request enrollment through an active sponsor program.</span>
+              </label>
+            </div>
+
+            {enrollmentType === "COMMERCIAL" ? (
+              <div className="space-y-3">
+                <label className="block text-sm font-medium text-gray-700">Requested CMMC Level
+                  <select required value={requestedCmmcLevel} onChange={event => setRequestedCmmcLevel(event.target.value as "L1" | "L2")} className="mt-1 w-full rounded border border-gray-300 bg-white px-3 py-2">
+                    <option value="L1">CMMC Level 1</option>
+                    <option value="L2">CMMC Level 2</option>
+                  </select>
+                </label>
+                <p className="rounded border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-800">Your commercial subscription request will be reviewed. Payment activation will be handled after approval during this pilot phase.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {programsLoading ? <p className="text-sm text-gray-600">Loading sponsored programs...</p> : null}
+                {programsError ? <p className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{programsError}</p> : null}
+                {!programsLoading && !programsError && programs.length === 0 ? <p className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">No sponsored programs are currently available.</p> : null}
+                <label className="block text-sm font-medium text-gray-700">Sponsored Program
+                  <select required value={selectedProgramId} onChange={event => setSelectedProgramId(event.target.value)} className="mt-1 w-full rounded border border-gray-300 bg-white px-3 py-2">
+                    <option value="">Select a sponsored program</option>
+                    {programs.map(program => <option key={program.id} value={program.id}>{program.name} ({program.programCode})</option>)}
+                  </select>
+                </label>
+                {activeProgram ? (
+                  <label className="block text-sm font-medium text-gray-700">Requested CMMC Level
+                    <select required value={requestedCmmcLevel} onChange={event => setRequestedCmmcLevel(event.target.value as "L1" | "L2")} className="mt-1 w-full rounded border border-gray-300 bg-white px-3 py-2">
+                      {programLevelOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                    </select>
+                  </label>
+                ) : null}
+              </div>
+            )}
+            <p className="text-xs text-gray-600">Request will be submitted as tier <span className="font-semibold">{requestedTier}</span>.</p>
           </div>
           <div className="space-y-3">
             <h2 className="border-b pb-2 text-sm font-bold uppercase text-gray-700">User Information</h2>

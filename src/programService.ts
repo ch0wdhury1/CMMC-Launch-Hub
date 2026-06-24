@@ -61,7 +61,18 @@ export type ProgramWithCounts = Program & {
   observerCount: number;
 };
 
+export type RegistrationProgram = {
+  id: string;
+  name: string;
+  programCode: string;
+  allowL1: boolean;
+  allowL2: boolean;
+  state?: string;
+  sponsorName?: string;
+};
+
 const programsRef = () => collection(db, "programs");
+const apiBase = () => String(import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
 
 const cleanList = (items?: string[]) => Array.from(new Set(
   (items || [])
@@ -153,6 +164,17 @@ export async function listPrograms(): Promise<Program[]> {
 export async function getActivePrograms(): Promise<Program[]> {
   const programs = await listPrograms();
   return programs.filter(program => program.status === "active");
+}
+
+export async function loadRegistrationPrograms(): Promise<RegistrationProgram[]> {
+  const base = apiBase();
+  if (!base) throw new Error("Sponsored program enrollment is unavailable because the API base URL is not configured.");
+  const response = await fetch(`${base}/api/registration/programs`);
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload.success === false) {
+    throw new Error(payload.errorMessage || "Unable to load sponsored programs.");
+  }
+  return Array.isArray(payload.programs) ? payload.programs : [];
 }
 
 export async function getProgramParticipantCount(programId: string): Promise<number> {

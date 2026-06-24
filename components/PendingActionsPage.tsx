@@ -29,6 +29,14 @@ type RegistrationRow = {
 
 const safeStr = (value: any) => (typeof value === "string" ? value : value == null ? "" : String(value));
 
+const enrollmentLabel = (value: any) => String(value || "").toUpperCase() === "PROGRAM" ? "State / Sponsored Program" : "Commercial / Paid";
+const programLabel = (row: any) => {
+  const name = safeStr(row.requestedProgramName || row.programName).trim();
+  const code = safeStr(row.requestedProgramCode || row.programCode).trim();
+  if (!name && !code) return "-";
+  return code ? `${name || "Program"} (${code})` : name;
+};
+
 const slugify = (name: string) =>
   name
     .toLowerCase()
@@ -124,6 +132,10 @@ export const PendingActionsPage: React.FC<Props> = ({ isSuperAdmin }) => {
 
       const orgName = safeStr(registration.orgName || registration.companyName).trim() || "New Organization";
       const requestedTier = safeStr(registration.requestedTier || registration.tier).trim() || "COMM_L1";
+      const enrollmentType = safeStr(registration.enrollmentType).toUpperCase() === "PROGRAM" ? "PROGRAM" : "COMMERCIAL";
+      const requestedProgramId = enrollmentType === "PROGRAM" ? safeStr(registration.requestedProgramId).trim() : "";
+      const requestedProgramName = enrollmentType === "PROGRAM" ? safeStr(registration.requestedProgramName).trim() : "";
+      const requestedProgramCode = enrollmentType === "PROGRAM" ? safeStr(registration.requestedProgramCode).trim() : "";
       const deterministicOrgId = safeStr(registration.orgId).trim() || `org_${slugify(orgName) || "new"}_${registration.id.slice(0, 6)}`;
       const now = new Date();
       const start = Timestamp.fromDate(now);
@@ -180,6 +192,10 @@ export const PendingActionsPage: React.FC<Props> = ({ isSuperAdmin }) => {
             secondaryContactEmail: "",
             secondaryContactPhone: "",
             logoUrl: "",
+            enrollmentType,
+            programId: enrollmentType === "PROGRAM" ? requestedProgramId : null,
+            programName: enrollmentType === "PROGRAM" ? requestedProgramName : null,
+            programCode: enrollmentType === "PROGRAM" ? requestedProgramCode : null,
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
           }), { merge: true });
@@ -192,6 +208,10 @@ export const PendingActionsPage: React.FC<Props> = ({ isSuperAdmin }) => {
             primaryContactEmail: orgSnap.data()?.primaryContactEmail || primaryEmail,
             primaryContactName: orgSnap.data()?.primaryContactName || primaryName,
             primaryContactPhone: orgSnap.data()?.primaryContactPhone || primaryPhone,
+            enrollmentType,
+            programId: enrollmentType === "PROGRAM" ? requestedProgramId : null,
+            programName: enrollmentType === "PROGRAM" ? requestedProgramName : null,
+            programCode: enrollmentType === "PROGRAM" ? requestedProgramCode : null,
           }), { merge: true });
         }
 
@@ -239,6 +259,10 @@ export const PendingActionsPage: React.FC<Props> = ({ isSuperAdmin }) => {
         tx.update(reqRef, {
           status: "approved",
           orgId,
+          enrollmentType,
+          programId: enrollmentType === "PROGRAM" ? requestedProgramId : null,
+          programName: enrollmentType === "PROGRAM" ? requestedProgramName : null,
+          programCode: enrollmentType === "PROGRAM" ? requestedProgramCode : null,
           approvedAt: serverTimestamp(),
           approvedByUid: actorUid || null,
           updatedAt: serverTimestamp(),
@@ -255,7 +279,7 @@ export const PendingActionsPage: React.FC<Props> = ({ isSuperAdmin }) => {
         targetId: registration.id,
         targetLabel: primaryEmail || orgName,
         summary: `Registration approved for ${orgName}`,
-        metadata: { requestedTier, ownerUid, primaryEmail },
+        metadata: { requestedTier, ownerUid, primaryEmail, enrollmentType, programId: requestedProgramId, programCode: requestedProgramCode },
       });
 
       setMessage(`Approved registration for ${primaryEmail || orgName}.`);
@@ -327,8 +351,8 @@ export const PendingActionsPage: React.FC<Props> = ({ isSuperAdmin }) => {
         {loading ? <p className="p-4 text-sm text-gray-600">Loading pending registrations...</p> : error ? <p className="p-4 text-sm text-red-700">{error}</p> : registrations.length === 0 ? <p className="p-4 text-sm text-gray-600">No pending registrations.</p> :
         <div className="overflow-auto">
           <table className="min-w-full text-left text-sm">
-            <thead className="bg-gray-50 text-xs uppercase text-gray-500"><tr><th className="p-3">Organization</th><th className="p-3">User</th><th className="p-3">Requested Tier</th><th className="p-3">Created</th><th className="p-3">Status</th><th className="p-3">Actions</th></tr></thead>
-            <tbody>{registrations.map(registration => <tr key={registration.id} className="border-t"><td className="p-3">{registration.orgName || registration.companyName || registration.id}</td><td className="p-3"><div>{registration.fullName || registration.primaryContactName || "Not provided"}</div><div className="text-xs text-gray-500">{registration.email || registration.primaryContactEmail || ""}</div></td><td className="p-3">{registration.requestedTier || registration.tier || "Not provided"}</td><td className="p-3">{fmtDate(registration.createdAt)}</td><td className="p-3">{registration.status || "pending"}</td><td className="p-3"><div className="flex gap-2"><button type="button" onClick={() => approveRegistration(registration)} disabled={busyId === registration.id} className="rounded bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-60">{busyId === registration.id ? "Working..." : "Approve"}</button><button type="button" onClick={() => cancelRegistration(registration)} disabled={busyId === registration.id} className="rounded bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-rose-700 disabled:opacity-60">{busyId === registration.id ? "Working..." : "Cancel"}</button></div></td></tr>)}</tbody>
+            <thead className="bg-gray-50 text-xs uppercase text-gray-500"><tr><th className="p-3">Organization</th><th className="p-3">User</th><th className="p-3">Enrollment Type</th><th className="p-3">Program</th><th className="p-3">Requested Level</th><th className="p-3">Requested Tier</th><th className="p-3">Created</th><th className="p-3">Status</th><th className="p-3">Actions</th></tr></thead>
+            <tbody>{registrations.map(registration => <tr key={registration.id} className="border-t"><td className="p-3">{registration.orgName || registration.companyName || registration.id}</td><td className="p-3"><div>{registration.fullName || registration.primaryContactName || "Not provided"}</div><div className="text-xs text-gray-500">{registration.email || registration.primaryContactEmail || ""}</div></td><td className="p-3">{enrollmentLabel(registration.enrollmentType)}</td><td className="p-3">{programLabel(registration)}</td><td className="p-3">{registration.requestedCmmcLevel || "Not provided"}</td><td className="p-3">{registration.requestedTier || registration.tier || "Not provided"}</td><td className="p-3">{fmtDate(registration.createdAt)}</td><td className="p-3">{registration.status || "pending"}</td><td className="p-3"><div className="flex gap-2"><button type="button" onClick={() => approveRegistration(registration)} disabled={busyId === registration.id} className="rounded bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-60">{busyId === registration.id ? "Working..." : "Approve"}</button><button type="button" onClick={() => cancelRegistration(registration)} disabled={busyId === registration.id} className="rounded bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-rose-700 disabled:opacity-60">{busyId === registration.id ? "Working..." : "Cancel"}</button></div></td></tr>)}</tbody>
           </table>
         </div>}
       </section>

@@ -78,8 +78,15 @@ type AccessRequestRow = {
   createdAt?: any;
   email?: string;
   fullName?: string;
+  orgName?: string;
+  primaryContactEmail?: string;
   requestedRole?: string;
   requestedTier?: string;
+  requestedCmmcLevel?: string;
+  enrollmentType?: EnrollmentType | string;
+  requestedProgramId?: string | null;
+  requestedProgramName?: string | null;
+  requestedProgramCode?: string | null;
   requestedByUid?: string;
 };
 
@@ -143,6 +150,13 @@ export const SuperAdminPanel: React.FC = () => {
 
   // --- helpers ---
   const safeStr = (v: any) => (typeof v === "string" ? v : v == null ? "" : String(v));
+  const enrollmentLabel = (value: any) => String(value || "").toUpperCase() === "PROGRAM" ? "State / Sponsored Program" : "Commercial / Paid";
+  const pendingProgramLabel = (row: any) => {
+    const name = safeStr(row.requestedProgramName || row.programName).trim();
+    const code = safeStr(row.requestedProgramCode || row.programCode).trim();
+    if (!name && !code) return "—";
+    return code ? `${name || "Program"} (${code})` : name;
+  };
   const slugify = (name: string) =>
     name
       .toLowerCase()
@@ -205,6 +219,10 @@ const getOrgDefaultsForTier = (tier: string) => {
 
     const orgName = safeStr((req as any).orgName).trim() || "New Organization";
     const requestedTier = safeStr((req as any).requestedTier).trim() || "COMM_L1";
+    const enrollmentType = safeStr((req as any).enrollmentType).toUpperCase() === "PROGRAM" ? "PROGRAM" : "COMMERCIAL";
+    const requestedProgramId = enrollmentType === "PROGRAM" ? safeStr((req as any).requestedProgramId).trim() : "";
+    const requestedProgramName = enrollmentType === "PROGRAM" ? safeStr((req as any).requestedProgramName).trim() : "";
+    const requestedProgramCode = enrollmentType === "PROGRAM" ? safeStr((req as any).requestedProgramCode).trim() : "";
 
     // Deterministic orgId to ensure idempotency across retries
     const deterministicOrgId =
@@ -282,6 +300,10 @@ const getOrgDefaultsForTier = (tier: string) => {
             secondaryContactEmail: "",
             secondaryContactPhone: "",
             logoUrl: "",
+            enrollmentType,
+            programId: enrollmentType === "PROGRAM" ? requestedProgramId : null,
+            programName: enrollmentType === "PROGRAM" ? requestedProgramName : null,
+            programCode: enrollmentType === "PROGRAM" ? requestedProgramCode : null,
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
           }),
@@ -299,6 +321,10 @@ const getOrgDefaultsForTier = (tier: string) => {
             primaryContactEmail: orgSnap.data()?.primaryContactEmail || primaryEmail,
             primaryContactName: orgSnap.data()?.primaryContactName || primaryName,
             primaryContactPhone: orgSnap.data()?.primaryContactPhone || primaryPhone,
+            enrollmentType,
+            programId: enrollmentType === "PROGRAM" ? requestedProgramId : null,
+            programName: enrollmentType === "PROGRAM" ? requestedProgramName : null,
+            programCode: enrollmentType === "PROGRAM" ? requestedProgramCode : null,
           }),
           { merge: true }
         );
@@ -329,6 +355,10 @@ const getOrgDefaultsForTier = (tier: string) => {
       tx.update(reqRef, {
         status: "approved",
         orgId,
+        enrollmentType,
+        programId: enrollmentType === "PROGRAM" ? requestedProgramId : null,
+        programName: enrollmentType === "PROGRAM" ? requestedProgramName : null,
+        programCode: enrollmentType === "PROGRAM" ? requestedProgramCode : null,
         approvedAt: serverTimestamp(),
         approvedByUid: (profile as any)?.uid || null,
         updatedAt: serverTimestamp(),
@@ -345,7 +375,7 @@ const getOrgDefaultsForTier = (tier: string) => {
       targetId: req.id,
       targetLabel: primaryEmail || orgName,
       summary: `Registration approved for ${orgName}`,
-      metadata: {requestedTier, ownerUid, primaryEmail},
+      metadata: {requestedTier, ownerUid, primaryEmail, enrollmentType, programId: requestedProgramId, programCode: requestedProgramCode},
     });
 
 
@@ -897,6 +927,9 @@ useEffect(() => {
                     <tr>
                       <th className="text-left p-3">Name</th>
                       <th className="text-left p-3">Email</th>
+                      <th className="text-left p-3">Enrollment Type</th>
+                      <th className="text-left p-3">Program</th>
+                      <th className="text-left p-3">Requested Level</th>
                       <th className="text-left p-3">Requested Tier</th>
                       <th className="text-left p-3">Created</th>
                       <th className="text-left p-3">Request ID</th>
@@ -908,6 +941,9 @@ useEffect(() => {
                       <tr key={r.id} className="border-t">
                         <td className="p-3">{r.fullName || "—"}</td>
                         <td className="p-3">{r.email || "—"}</td>
+                        <td className="p-3">{enrollmentLabel((r as any).enrollmentType)}</td>
+                        <td className="p-3">{pendingProgramLabel(r)}</td>
+                        <td className="p-3">{(r as any)?.requestedCmmcLevel || "-"}</td>
                         <td className="p-3">{(r as any)?.tier || (r as any)?.requestedTier || "—"}</td>
                         <td className="p-3">{fmtDate(r.createdAt)}</td>
                         <td className="p-3 font-mono text-xs text-gray-500">{r.id}</td>
