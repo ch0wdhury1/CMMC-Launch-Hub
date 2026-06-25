@@ -40,7 +40,17 @@ import { ActivityCenter } from "./components/ActivityCenter";
 import { SystemHealthDashboard } from "./components/SystemHealthDashboard";
 import { FeedbackButton } from "./components/FeedbackButton";
 import { PilotParticipantBanner } from "./components/PilotParticipantBanner";
-import { SupportPage } from "./components/SupportPage";
+import {
+  HelpCenterPage,
+  HelpFaqPage,
+  HelpGettingStartedPage,
+  HelpSupportPage,
+  HelpUserGuidePage,
+  HelpVideosPage,
+  HelpWhatsNewPage,
+  helpTitle,
+  type HelpSection,
+} from "./components/HelpCenter";
 import { SuperAdminFeedbackReview } from "./components/SuperAdminFeedbackReview";
 import { PilotDashboard } from "./components/PilotDashboard";
 import { PendingActionsPage } from "./components/PendingActionsPage";
@@ -78,6 +88,17 @@ import { Home, ChevronRight, Key, ShieldAlert, Database, Loader2 } from "lucide-
 const PASSWORD_RESET_SUCCESS_MESSAGE = "If an account exists for this email, a password reset link has been sent.";
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const QUICK_START_GUIDE_URL = "/user-guides/CMMC_Launch_Hub_Quick_Start_Guide_v1.0.pdf";
+
+const helpPathForSection = (section: HelpSection) => {
+  if (section === "home") return "/help";
+  if (section === "getting-started") return "/help/getting-started";
+  if (section === "user-guide") return "/help/user-guide";
+  if (section === "videos") return "/help/videos";
+  if (section === "faqs") return "/help/faqs";
+  if (section === "support") return "/help/support";
+  if (section === "whats-new") return "/help/whats-new";
+  return "/help";
+};
 
 const friendlyLoginError = (error: any): string => {
   const code = String(error?.code || error?.message || "").toLowerCase();
@@ -204,6 +225,7 @@ type ViewState =
   | { type: "activityCenter" }
   | { type: "systemHealth" }
   | { type: "feedbackReview" }
+  | { type: "help"; section: HelpSection }
   | { type: "support" }
   | { type: "responsibilityMatrix" }
   | { type: "training" }
@@ -243,6 +265,7 @@ export type ActiveViewInfo =
   | { type: "activityCenter"; name: "activityCenter" }
   | { type: "systemHealth"; name: "systemHealth" }
   | { type: "feedbackReview"; name: "feedbackReview" }
+  | { type: "help"; name: "help" }
   | { type: "support"; name: "support" }
   | { type: "responsibilityMatrix"; name: "responsibilityMatrix" }
   | { type: "training"; name: "training" }
@@ -801,6 +824,7 @@ const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
     if (nextView.type === "marketplace") return "/sponsor/marketplace";
     if (nextView.type === "sponsorActivity") return "/sponsor/activity";
     if (nextView.type === "sponsorProfile") return "/sponsor/profile";
+    if (nextView.type === "help") return helpPathForSection(nextView.section);
     return "/sponsor";
   }, []);
 
@@ -836,9 +860,30 @@ const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
     }
   }, [superAdminPathForView]);
 
+  const helpViewFromPath = useCallback((): ViewState | null => {
+    const path = window.location.pathname;
+    if (path === "/help") return { type: "help", section: "home" };
+    if (path === "/help/getting-started") return { type: "help", section: "getting-started" };
+    if (path === "/help/user-guide") return { type: "help", section: "user-guide" };
+    if (path === "/help/videos") return { type: "help", section: "videos" };
+    if (path === "/help/faqs") return { type: "help", section: "faqs" };
+    if (path === "/help/support") return { type: "help", section: "support" };
+    if (path === "/help/whats-new") return { type: "help", section: "whats-new" };
+    return null;
+  }, []);
+
+  const setHelpView = useCallback((section: HelpSection = "home", replace = false) => {
+    setView({ type: "help", section });
+    const nextPath = helpPathForSection(section);
+    if (window.location.pathname !== nextPath) {
+      const method = replace ? "replaceState" : "pushState";
+      window.history[method](null, "", nextPath);
+    }
+  }, []);
+
   useEffect(() => {
     if (!isSponsorObserver || isSuperAdmin) return;
-    const allowed = ["pilotDashboard", "sponsorParticipants", "sponsorParticipantDetail", "programAnalytics", "marketplace", "sponsorActivity", "sponsorProfile"].includes(view.type);
+    const allowed = ["pilotDashboard", "sponsorParticipants", "sponsorParticipantDetail", "programAnalytics", "marketplace", "sponsorActivity", "sponsorProfile", "help"].includes(view.type);
     if (!allowed) {
       setSponsorView(sponsorViewFromPath(), true);
     }
@@ -862,6 +907,16 @@ const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
     window.addEventListener("popstate", syncSuperAdminRoute);
     return () => window.removeEventListener("popstate", syncSuperAdminRoute);
   }, [isSuperAdmin, superAdminViewFromPath]);
+
+  useEffect(() => {
+    const syncHelpRoute = () => {
+      const nextView = helpViewFromPath();
+      if (nextView) setView(nextView);
+    };
+    syncHelpRoute();
+    window.addEventListener("popstate", syncHelpRoute);
+    return () => window.removeEventListener("popstate", syncHelpRoute);
+  }, [helpViewFromPath]);
 
   // Load Level 2 static dataset (from /public)
 
@@ -930,6 +985,7 @@ const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
     if (view.type === "activityCenter") return { type: "activityCenter", name: "activityCenter" };
     if (view.type === "systemHealth") return { type: "systemHealth", name: "systemHealth" };
     if (view.type === "feedbackReview") return { type: "feedbackReview", name: "feedbackReview" };
+    if (view.type === "help") return { type: "help", name: "help" };
     if (view.type === "support") return { type: "support", name: "support" };
     if (view.type === "training") return { type: "training", name: "training" };
     if (view.type === "newsUpdates") return { type: "newsUpdates", name: "newsUpdates" };
@@ -1040,7 +1096,8 @@ const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
     if (view.type === "activityCenter") return "Activity Center";
     if (view.type === "systemHealth") return "System Health";
     if (view.type === "feedbackReview") return "Feedback Review";
-    if (view.type === "support") return "Pilot Support";
+    if (view.type === "help") return helpTitle(view.section);
+    if (view.type === "support") return "Support";
     if (view.type === "training") return "Training Modules";
     if (view.type === "newsUpdates") return "News Updates";
     return "CMMC Launch Hub";
@@ -1110,6 +1167,7 @@ const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
           "activityCenter",
           "systemHealth",
           "feedbackReview",
+          "help",
           "support",
           "training",
           "newsUpdates",
@@ -1238,7 +1296,7 @@ const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
             onResponsibilityMatrixClick={() => setView({ type: "responsibilityMatrix" })}
             onInvitationsClick={() => setView({ type: "orgInvitations" })}
             onQuickStartGuideClick={openQuickStartGuide}
-            onSupportClick={() => setView({ type: "support" })}
+            onSupportClick={() => setHelpView("support")}
             onSendFeedbackClick={openFeedbackModal}
           />
         );
@@ -1495,8 +1553,17 @@ case "domain": {
       case "feedbackReview":
         return <SuperAdminFeedbackReview isSuperAdmin={isSuperAdmin} />;
 
+      case "help":
+        if (view.section === "getting-started") return <HelpGettingStartedPage />;
+        if (view.section === "user-guide") return <HelpUserGuidePage isSuperAdmin={isSuperAdmin} isSponsorObserver={isSponsorObserver} />;
+        if (view.section === "videos") return <HelpVideosPage />;
+        if (view.section === "faqs") return <HelpFaqPage />;
+        if (view.section === "support") return <HelpSupportPage />;
+        if (view.section === "whats-new") return <HelpWhatsNewPage />;
+        return <HelpCenterPage isSuperAdmin={isSuperAdmin} isSponsorObserver={isSponsorObserver} onNavigate={setHelpView} />;
+
       case "support":
-        return <SupportPage />;
+        return <HelpSupportPage />;
 
       case "training":
         return <TrainingModule />;
@@ -1541,6 +1608,7 @@ case "domain": {
     { label: "Pending Actions", onClick: () => setView({ type: "pendingActions" as const }) },
     { label: "Activity Center", onClick: () => setView({ type: "activityCenter" as const }) },
     { label: "System Health", onClick: () => setView({ type: "systemHealth" as const }) },
+    { label: "Help Center", onClick: () => setHelpView("home") },
     { label: "Feedback Review", onClick: () => setView({ type: "feedbackReview" as const }) },
   ] : undefined;
 
@@ -1549,6 +1617,7 @@ case "domain": {
       view.type === "sponsorParticipants" || view.type === "sponsorParticipantDetail" ? "participants" :
       view.type === "programAnalytics" ? "analytics" :
       view.type === "marketplace" ? "marketplace" :
+      view.type === "help" ? "help" :
       view.type === "sponsorActivity" ? "activity" :
       view.type === "sponsorProfile" ? "profile" :
       "dashboard";
@@ -1560,6 +1629,7 @@ case "domain": {
           if (nextView === "participants") setSponsorView({ type: "sponsorParticipants" });
           else if (nextView === "analytics") setSponsorView({ type: "programAnalytics" });
           else if (nextView === "marketplace") setSponsorView({ type: "marketplace" });
+          else if (nextView === "help") setHelpView("home");
           else if (nextView === "activity") setSponsorView({ type: "sponsorActivity" });
           else if (nextView === "profile") setSponsorView({ type: "sponsorProfile" });
           else setSponsorView({ type: "pilotDashboard" });
@@ -1610,7 +1680,7 @@ onDiagnosticsClick={isSuperAdmin ? () => setIsDiagnosticsOpen(true) : undefined}
           canViewSystemHealth={isSuperAdmin}
           onFeedbackReviewClick={() => setView({ type: "feedbackReview" })}
           canViewFeedbackReview={isSuperAdmin}
-          onSupportClick={() => setView({ type: "support" })}
+          onHelpCenterClick={() => setHelpView("home")}
           onQuickStartGuideClick={openQuickStartGuide}
           onSendFeedbackClick={openFeedbackModal}
           onSecurityAnalyzerClick={() => setView({ type: "readinessAnalyzer" })}
@@ -1633,7 +1703,7 @@ onDiagnosticsClick={isSuperAdmin ? () => setIsDiagnosticsOpen(true) : undefined}
             {!isSuperAdmin && currentOrgId && (
               <PilotParticipantBanner
                 orgName={organizationDisplayName}
-                onSupportClick={() => setView({ type: "support" })}
+                onSupportClick={() => setHelpView("support")}
               />
             )}
 

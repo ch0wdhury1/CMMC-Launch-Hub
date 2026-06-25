@@ -23,7 +23,7 @@ export const PilotParticipantBanner: React.FC<Props> = ({ orgName, onSupportClic
         onClick={onSupportClick}
         className="self-start rounded-md border border-blue-300 bg-white px-3 py-2 text-xs font-semibold text-blue-800 hover:bg-blue-100 md:self-center"
       >
-        Pilot Support
+        Support
       </button>
     </div>
   </section>

@@ -253,7 +253,7 @@ export const OrganizationDashboard: React.FC<Props> = ({
         <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(260px,360px)]">
           <div>
             <h3 className="text-lg font-bold text-blue-950">New to CMMC Launch Hub?</h3>
-            <p className="mt-1 text-sm text-blue-900">Start with the pilot quick guide, contact support, or send feedback without leaving your dashboard.</p>
+            <p className="mt-1 text-sm text-blue-900">Start with the quick guide, open Help Center support, or send feedback without leaving your dashboard.</p>
             <div className="mt-3 rounded-md border border-blue-200 bg-white p-3">
               <div className="text-sm font-bold text-blue-950">Welcome Audio Tour</div>
               <p className="mt-1 text-xs text-blue-800">Start here if this is your first time using CMMC Launch Hub.</p>
@@ -275,7 +275,7 @@ export const OrganizationDashboard: React.FC<Props> = ({
             <BookOpen className="mr-2 h-4 w-4" /> Open Quick Start Guide
           </button>
           <button type="button" onClick={onSupportClick} className="inline-flex items-center rounded-md border border-blue-300 bg-white px-3 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-100">
-            <HelpCircle className="mr-2 h-4 w-4" /> Pilot Support
+            <HelpCircle className="mr-2 h-4 w-4" /> Support
           </button>
           <button type="button" onClick={onSendFeedbackClick} className="inline-flex items-center rounded-md border border-blue-300 bg-white px-3 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-100">
             <MessageSquare className="mr-2 h-4 w-4" /> Send Feedback

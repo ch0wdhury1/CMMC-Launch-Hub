@@ -1,8 +1,8 @@
 import React from "react";
-import { Activity, BarChart3, Building2, LayoutDashboard, LogOut, Store, UserCircle } from "lucide-react";
+import { Activity, BarChart3, Building2, CircleHelp, LayoutDashboard, LogOut, Store, UserCircle } from "lucide-react";
 import { APP_VERSION } from "../src/appVersion";
 
-type SponsorView = "dashboard" | "participants" | "analytics" | "marketplace" | "activity" | "profile";
+type SponsorView = "dashboard" | "participants" | "analytics" | "marketplace" | "activity" | "profile" | "help";
 
 type Props = {
   activeView: SponsorView;
@@ -16,6 +16,7 @@ const navItems: Array<{ view: SponsorView; label: string; icon: React.ComponentT
   { view: "participants", label: "Participants", icon: Building2 },
   { view: "analytics", label: "Program Analytics", icon: BarChart3 },
   { view: "marketplace", label: "Marketplace", icon: Store },
+  { view: "help", label: "Help Center", icon: CircleHelp },
   { view: "activity", label: "Recent Activity", icon: Activity },
   { view: "profile", label: "My Profile", icon: UserCircle },
 ];

@@ -51,7 +51,7 @@ type Props = {
   canViewSystemHealth: boolean;
   onFeedbackReviewClick: () => void;
   canViewFeedbackReview: boolean;
-  onSupportClick: () => void;
+  onHelpCenterClick: () => void;
   onQuickStartGuideClick: () => void;
   onSendFeedbackClick: () => void;
   onSecurityAnalyzerClick: () => void;
@@ -122,7 +122,7 @@ export function Sidebar(props: Props) {
     canViewSystemHealth,
     onFeedbackReviewClick,
     canViewFeedbackReview,
-    onSupportClick,
+    onHelpCenterClick,
     onQuickStartGuideClick,
     onSendFeedbackClick,
     onSecurityAnalyzerClick,
@@ -513,14 +513,6 @@ useEffect(() => {
               <span className="ml-7">Evidence Library</span>
             </button>
 
-            <button
-              className={navClass(activeViewInfo?.type === "support")}
-              onClick={onSupportClick}
-            >
-              <HelpCircle className="ml-7 mr-2 h-4 w-4 text-gray-300" />
-              <span>Pilot Support</span>
-            </button>
-
             {canManageInvitations && (
               <button
                 className={navClass(activeViewInfo?.type === "orgInvitations")}
@@ -636,11 +628,11 @@ useEffect(() => {
           </button>
           <button
             type="button"
-            onClick={onSupportClick}
-            className="flex items-center rounded px-2 py-1.5 text-left text-gray-200 hover:bg-gray-700/60"
+            onClick={onHelpCenterClick}
+            className={`flex items-center rounded px-2 py-1.5 text-left hover:bg-gray-700/60 ${activeViewInfo?.type === "help" ? "bg-blue-600/20 text-white ring-1 ring-blue-500/40" : "text-gray-200"}`}
           >
             <HelpCircle className="mr-2 h-3.5 w-3.5 text-blue-300" />
-            Support
+            Help Center
           </button>
           <button
             type="button"
