@@ -53,6 +53,8 @@ import { SponsorProfilePage } from "./components/SponsorProfilePage";
 import { ProgramManagementPage } from "./components/ProgramManagementPage";
 import { ProgramAnalyticsPage } from "./components/ProgramAnalyticsPage";
 import { MarketplacePage } from "./components/MarketplacePage";
+import { SuperAdminActiveOrgsPage } from "./components/SuperAdminActiveOrgsPage";
+import { SuperAdminOrgDetailPage } from "./components/SuperAdminOrgDetailPage";
 import { ResponsibilityMatrixPage } from "./components/ResponsibilityMatrixPage";
 import { TrainingModule } from "./components/training/TrainingModule";
 import { NewsUpdates } from "./components/NewsUpdates";
@@ -171,6 +173,8 @@ async function bootstrapUser() {
 type ViewState =
   | { type: "admin" }
   | { type: "superAdmin" }
+  | { type: "superAdminActiveOrgs" }
+  | { type: "superAdminOrgDetail"; orgId: string }
   | { type: "pilotDashboard" }
   | { type: "sponsorObservers" }
   | { type: "sponsorParticipants" }
@@ -208,6 +212,8 @@ type ViewState =
 export type ActiveViewInfo =
   | { type: "admin"; name: "admin" }
   | { type: "superAdmin"; name: "superAdmin" }
+  | { type: "superAdminActiveOrgs"; name: "superAdminActiveOrgs" }
+  | { type: "superAdminOrgDetail"; name: "superAdminOrgDetail" }
   | { type: "pilotDashboard"; name: "pilotDashboard" }
   | { type: "sponsorObservers"; name: "sponsorObservers" }
   | { type: "sponsorParticipants"; name: "sponsorParticipants" }
@@ -807,6 +813,29 @@ const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
     }
   }, [sponsorPathForView]);
 
+  const superAdminViewFromPath = useCallback((): ViewState | null => {
+    const path = window.location.pathname;
+    const detailMatch = path.match(/^\/superadmin\/orgs\/([^/?#]+)/);
+    if (detailMatch?.[1]) return { type: "superAdminOrgDetail", orgId: decodeURIComponent(detailMatch[1]) };
+    if (path === "/superadmin/active-orgs") return { type: "superAdminActiveOrgs" };
+    return null;
+  }, []);
+
+  const superAdminPathForView = useCallback((nextView: ViewState) => {
+    if (nextView.type === "superAdminActiveOrgs") return "/superadmin/active-orgs";
+    if (nextView.type === "superAdminOrgDetail") return `/superadmin/orgs/${encodeURIComponent(nextView.orgId)}`;
+    return "";
+  }, []);
+
+  const setSuperAdminView = useCallback((nextView: ViewState, replace = false) => {
+    setView(nextView);
+    const nextPath = superAdminPathForView(nextView);
+    if (nextPath && window.location.pathname !== nextPath) {
+      const method = replace ? "replaceState" : "pushState";
+      window.history[method](null, "", nextPath);
+    }
+  }, [superAdminPathForView]);
+
   useEffect(() => {
     if (!isSponsorObserver || isSuperAdmin) return;
     const allowed = ["pilotDashboard", "sponsorParticipants", "sponsorParticipantDetail", "programAnalytics", "marketplace", "sponsorActivity", "sponsorProfile"].includes(view.type);
@@ -822,6 +851,17 @@ const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
   }, [isSponsorObserver, isSuperAdmin, setSponsorView, sponsorViewFromPath]);
+
+  useEffect(() => {
+    if (!isSuperAdmin) return;
+    const syncSuperAdminRoute = () => {
+      const nextView = superAdminViewFromPath();
+      if (nextView) setView(nextView);
+    };
+    syncSuperAdminRoute();
+    window.addEventListener("popstate", syncSuperAdminRoute);
+    return () => window.removeEventListener("popstate", syncSuperAdminRoute);
+  }, [isSuperAdmin, superAdminViewFromPath]);
 
   // Load Level 2 static dataset (from /public)
 
@@ -843,6 +883,8 @@ const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
   const activeViewInfo = useMemo((): ActiveViewInfo => {
     if (view.type === "admin") return { type: "admin", name: "admin" };
     if (view.type === "superAdmin") return { type: "superAdmin", name: "superAdmin" };
+    if (view.type === "superAdminActiveOrgs") return { type: "superAdminActiveOrgs", name: "superAdminActiveOrgs" };
+    if (view.type === "superAdminOrgDetail") return { type: "superAdminOrgDetail", name: "superAdminOrgDetail" };
     if (view.type === "pilotDashboard") return { type: "pilotDashboard", name: "pilotDashboard" };
     if (view.type === "sponsorObservers") return { type: "sponsorObservers", name: "sponsorObservers" };
     if (view.type === "sponsorParticipants") return { type: "sponsorParticipants", name: "sponsorParticipants" };
@@ -961,6 +1003,8 @@ const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
   const pageTitle = useMemo(() => {
     if (view.type === "admin") return "Admin Panel";
     if (view.type === "superAdmin") return "Super Admin";
+    if (view.type === "superAdminActiveOrgs") return "Active Organizations";
+    if (view.type === "superAdminOrgDetail") return "Organization Detail";
     if (view.type === "pilotDashboard") return "CMMC Pilot Dashboard";
     if (view.type === "sponsorObservers") return "Sponsor Observers";
     if (view.type === "sponsorParticipants") return "Sponsor Participants";
@@ -1203,6 +1247,10 @@ const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
 
       case "superAdmin":
   return <SuperAdminPanel />;
+      case "superAdminActiveOrgs":
+        return <SuperAdminActiveOrgsPage onDetails={(orgId) => setSuperAdminView({ type: "superAdminOrgDetail", orgId })} />;
+      case "superAdminOrgDetail":
+        return <SuperAdminOrgDetailPage orgId={view.orgId} onBack={() => setSuperAdminView({ type: "superAdminActiveOrgs" })} />;
 
 
 case "domain": {
@@ -1485,7 +1533,7 @@ case "domain": {
   const superAdminMenuItems = isSuperAdmin ? [
     { label: "Main Dashboard", onClick: () => setView({ type: "superAdmin" as const }) },
     { label: "Pilot Dashboard", onClick: () => setView({ type: "pilotDashboard" as const }) },
-    { label: "Active Orgs", onClick: () => setView({ type: "superAdmin" as const }) },
+    { label: "Active Orgs", onClick: () => setSuperAdminView({ type: "superAdminActiveOrgs" as const }) },
     { label: "PROGRAMS", onClick: () => setView({ type: "programs" as const }) },
     { label: "Program Analytics", onClick: () => setView({ type: "programAnalytics" as const }) },
     { label: "Marketplace", onClick: () => setView({ type: "marketplace" as const }) },

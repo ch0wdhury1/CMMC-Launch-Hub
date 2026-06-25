@@ -2690,8 +2690,10 @@ const programAnalyticsHandler = async (req: any, res: any) => {
       poam: organizations.filter(org => org.poamGenerated).length,
       other: organizations.reduce((sum, org) => sum + Math.max(0, org.reportsGenerated - Number(org.sspGenerated) - Number(org.poamGenerated)), 0),
     };
+    const engagementStatus = (value: any) => String(value || "").trim().toLowerCase();
+    const vendorCategory = (value: any) => String(value || "").trim().toUpperCase();
     const allEngagements = organizations.flatMap((org: any) => (org.marketplaceEngagements || []).map((engagement: any) => ({...engagement, orgId: org.id})));
-    const activeEngagements = allEngagements.filter((engagement: any) => String(engagement.status || "").toLowerCase() === "active");
+    const activeEngagements = allEngagements.filter((engagement: any) => engagementStatus(engagement.status) === "active");
     const topVendorMap = new Map<string, any>();
     allEngagements.forEach((engagement: any) => {
       const key = String(engagement.vendorId || engagement.vendorName || "");
@@ -2704,7 +2706,7 @@ const programAnalyticsHandler = async (req: any, res: any) => {
         activeEngagements: 0,
       };
       current.orgIds.add(engagement.orgId);
-      if (String(engagement.status || "").toLowerCase() === "active") current.activeEngagements += 1;
+      if (engagementStatus(engagement.status) === "active") current.activeEngagements += 1;
       topVendorMap.set(key, current);
     });
     const topMarketplaceVendors = Array.from(topVendorMap.values())
@@ -2740,9 +2742,9 @@ const programAnalyticsHandler = async (req: any, res: any) => {
         organizationsUsingVendors: new Set(allEngagements.map((engagement: any) => engagement.orgId)).size,
         totalVendorEngagements: allEngagements.length,
         activeVendorEngagements: activeEngagements.length,
-        softwareVendorsUsed: new Set(allEngagements.filter((engagement: any) => engagement.vendorCategory === "SOFTWARE").map((engagement: any) => engagement.vendorId || engagement.vendorName)).size,
-        consultingProvidersUsed: new Set(allEngagements.filter((engagement: any) => engagement.vendorCategory === "CONSULTING").map((engagement: any) => engagement.vendorId || engagement.vendorName)).size,
-        trainingProvidersUsed: new Set(allEngagements.filter((engagement: any) => engagement.vendorCategory === "TRAINING").map((engagement: any) => engagement.vendorId || engagement.vendorName)).size,
+        softwareVendorsUsed: new Set(allEngagements.filter((engagement: any) => vendorCategory(engagement.vendorCategory) === "SOFTWARE").map((engagement: any) => engagement.vendorId || engagement.vendorName)).size,
+        consultingProvidersUsed: new Set(allEngagements.filter((engagement: any) => vendorCategory(engagement.vendorCategory) === "CONSULTING").map((engagement: any) => engagement.vendorId || engagement.vendorName)).size,
+        trainingProvidersUsed: new Set(allEngagements.filter((engagement: any) => vendorCategory(engagement.vendorCategory) === "TRAINING").map((engagement: any) => engagement.vendorId || engagement.vendorName)).size,
       },
       organizations: organizations.sort((a, b) => a.companyName.localeCompare(b.companyName)),
       recentActivity,
@@ -3210,6 +3212,123 @@ app.get("/api/api/admin/marketplace/vendors", requireAuth, listAdminMarketplaceV
 app.post("/api/admin/marketplace/vendor", requireAuth, saveMarketplaceVendor);
 app.post("/admin/marketplace/vendor", requireAuth, saveMarketplaceVendor);
 app.post("/api/api/admin/marketplace/vendor", requireAuth, saveMarketplaceVendor);
+
+async function superAdminOrgSummary(org: any, allActivity: any[] = []) {
+  const orgId = String(org.id || "");
+  const assessmentId = String(org.tier || "").toUpperCase() === "COMM_L2" ? "default_l2" : "default_l1";
+  const [assessment, marketplaceEngagements, membersSnap] = await Promise.all([
+    programAssessmentSummary(orgId, assessmentId),
+    loadOrgMarketplaceEngagements(orgId),
+    db.collection(`orgs/${orgId}/members`).limit(500).get().catch(() => null),
+  ]);
+  const orgActivity = allActivity.filter((event: any) => event.orgId === orgId);
+  const orgReports = orgActivity.filter((event: any) => event.action === "report.generated");
+  const evidenceEvents = orgActivity.filter((event: any) => event.action === "evidence.uploaded");
+  return {
+    id: orgId,
+    companyName: safePilotOrgName(org, orgId),
+    location: [
+      org.companyProfile?.address?.city || org.companyProfile?.headquarters?.city || org.address?.city || "",
+      org.companyProfile?.address?.state || org.companyProfile?.headquarters?.state || org.address?.state || "",
+    ].filter(Boolean).join(", "),
+    primaryEmail: String(org.companyProfile?.primaryContactEmail || org.primaryContactEmail || org.ownerEmail || ""),
+    tier: String(org.tier || org.subscriptionTier || "Not provided"),
+    enrollmentType: String(org.enrollmentType || "COMMERCIAL"),
+    programName: String(org.programName || ""),
+    programCode: String(org.programCode || ""),
+    status: String(org.status || "active"),
+    createdAt: org.createdAt || null,
+    approvedAt: org.approvedAt || null,
+    lastActivity: orgActivity[0]?.createdAt || null,
+    usersCount: Number(org.activeMemberCount || org.memberCount || membersSnap?.size || 0),
+    practicesCompleted: assessment.practicesCompleted,
+    practicesRemaining: assessment.practicesRemaining,
+    totalPractices: assessment.practicesCompleted + assessment.practicesRemaining,
+    completionPercent: assessment.completionPercent,
+    domainReadiness: assessment.domainReadiness,
+    sprsScore: assessment.sprsScore,
+    evidenceCount: Number(org.evidenceCount ?? org.readiness?.evidenceCount ?? evidenceEvents.length),
+    sspGenerated: orgReports.some((event: any) => /ssp|system security plan/i.test(event.targetLabel || event.summary || "")),
+    poamGenerated: orgReports.some((event: any) => /poa&m|poam/i.test(event.targetLabel || event.summary || "")),
+    reportsGenerated: orgReports.length,
+    marketplaceEngagements,
+  };
+}
+
+const listSuperAdminActiveOrgs = async (req: any, res: any) => {
+  try {
+    if (!(await isSuperAdminUser(req.user.uid))) return res.status(403).json({success: false, errorMessage: "SuperAdmin access required"});
+    const [orgSnap, activitySnap] = await Promise.all([
+      db.collection("orgs").get(),
+      db.collection("activityEvents").orderBy("createdAt", "desc").limit(1000).get(),
+    ]);
+    const allActivity = activitySnap.docs.map(item => ({id: item.id, ...item.data()}));
+    const orgDocs = orgSnap.docs
+      .map(item => ({id: item.id, ...(item.data() || {})}))
+      .filter((org: any) => String(org.status || "active").toLowerCase() === "active")
+      .filter((org: any) => isPilotVisibleOrg(org, org.id));
+    const orgs = await Promise.all(orgDocs.map(org => superAdminOrgSummary(org, allActivity)));
+    return res.json({success: true, orgs: orgs.sort((a, b) => a.companyName.localeCompare(b.companyName))});
+  } catch (error) {
+    console.error("SuperAdmin active orgs load failed", error);
+    return res.status(500).json({success: false, errorMessage: "Unable to load active organizations"});
+  }
+};
+
+const getSuperAdminOrgDetail = async (req: any, res: any) => {
+  try {
+    if (!(await isSuperAdminUser(req.user.uid))) return res.status(403).json({success: false, errorMessage: "SuperAdmin access required"});
+    const orgId = String(req.params.orgId || "").trim();
+    if (!orgId || !isSafePathSegment(orgId)) throw new Error("Valid org id is required");
+    const orgSnap = await db.doc(`orgs/${orgId}`).get();
+    if (!orgSnap.exists) return res.status(404).json({success: false, errorMessage: "Organization not found"});
+    const [activitySnap, memberSnap] = await Promise.all([
+      db.collection("activityEvents").where("orgId", "==", orgId).limit(100).get(),
+      db.collection(`orgs/${orgId}/members`).limit(500).get().catch(() => null),
+    ]);
+    const activity = activitySnap.docs
+      .map(item => ({id: item.id, ...item.data()}))
+      .sort((a: any, b: any) => {
+        const aTime = a.createdAt?._seconds || 0;
+        const bTime = b.createdAt?._seconds || 0;
+        return bTime - aTime;
+      });
+    const org = await superAdminOrgSummary({id: orgSnap.id, ...(orgSnap.data() || {})}, activity);
+    const users = (memberSnap?.docs || []).map(member => {
+      const data = member.data() || {};
+      return {
+        uid: member.id,
+        name: String(data.displayName || data.fullName || data.name || ""),
+        email: String(data.email || ""),
+        role: String(data.role || data.orgRole || ""),
+        status: String(data.status || "active"),
+        joinedAt: data.joinedAt || data.createdAt || data.acceptedAt || null,
+      };
+    }).sort((a, b) => a.email.localeCompare(b.email));
+    const recentActivity = activity.slice(0, 10).map((event: any) => ({
+      id: event.id,
+      action: event.action || "activity",
+      actorName: event.actorName || "",
+      actorEmail: event.actorEmail || "",
+      targetType: event.targetType || "",
+      targetLabel: event.targetType === "evidence" ? "" : (event.targetLabel || ""),
+      summary: safeActivitySummary(event),
+      createdAt: event.createdAt || null,
+    }));
+    return res.json({success: true, org, users, recentActivity});
+  } catch (error) {
+    console.error("SuperAdmin org detail load failed", error);
+    return res.status(400).json({success: false, errorMessage: error instanceof Error ? error.message : "Unable to load organization detail"});
+  }
+};
+
+app.get("/api/admin/active-orgs", requireAuth, listSuperAdminActiveOrgs);
+app.get("/admin/active-orgs", requireAuth, listSuperAdminActiveOrgs);
+app.get("/api/api/admin/active-orgs", requireAuth, listSuperAdminActiveOrgs);
+app.get("/api/admin/org/:orgId/detail", requireAuth, getSuperAdminOrgDetail);
+app.get("/admin/org/:orgId/detail", requireAuth, getSuperAdminOrgDetail);
+app.get("/api/api/admin/org/:orgId/detail", requireAuth, getSuperAdminOrgDetail);
+
 app.get("/api/marketplace/vendor/:vendorId/reviews", requireAuth, listMarketplaceReviews);
 app.get("/marketplace/vendor/:vendorId/reviews", requireAuth, listMarketplaceReviews);
 app.get("/api/api/marketplace/vendor/:vendorId/reviews", requireAuth, listMarketplaceReviews);
