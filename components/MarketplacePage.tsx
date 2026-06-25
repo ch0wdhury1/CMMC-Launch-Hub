@@ -1,15 +1,22 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Briefcase, ExternalLink, MapPin, Search, Star, Store } from "lucide-react";
 import {
+  loadAdminMarketplaceReviews,
   loadAdminMarketplaceVendors,
+  loadMarketplaceReviews,
   loadMarketplaceVendors,
   MARKETPLACE_CATEGORIES,
+  moderateMarketplaceReview,
   saveMarketplaceVendor,
+  submitMarketplaceReview,
+  type MarketplaceReview,
+  type MarketplaceReviewInput,
   type MarketplaceVendor,
 } from "../src/marketplace";
 
 type Props = {
   isSuperAdmin?: boolean;
+  canSubmitReviews?: boolean;
 };
 
 const emptyVendor: MarketplaceVendor = {
@@ -40,11 +47,19 @@ const listText = (items?: string[]) => (items || []).filter(Boolean).join(", ");
 const parseList = (value: string) => value.split(",").map(item => item.trim()).filter(Boolean);
 
 const badgeClass = "inline-flex rounded-full border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700";
+const ratingText = (rating?: number, count?: number) => rating && count ? `${rating.toFixed(1)} (${count})` : "No reviews";
+const formatDate = (value: any) => {
+  if (!value) return "Not provided";
+  const date = value?.toDate ? value.toDate() : value?._seconds ? new Date(value._seconds * 1000) : new Date(value);
+  return Number.isNaN(date.getTime()) ? "Not provided" : date.toLocaleDateString();
+};
 
-export const MarketplacePage: React.FC<Props> = ({ isSuperAdmin = false }) => {
+export const MarketplacePage: React.FC<Props> = ({ isSuperAdmin = false, canSubmitReviews = false }) => {
   const [vendors, setVendors] = useState<MarketplaceVendor[]>([]);
+  const [adminReviews, setAdminReviews] = useState<MarketplaceReview[]>([]);
   const [selectedVendor, setSelectedVendor] = useState<MarketplaceVendor | null>(null);
   const [editingVendor, setEditingVendor] = useState<MarketplaceVendor | null>(null);
+  const [reviewingVendor, setReviewingVendor] = useState<MarketplaceVendor | null>(null);
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("");
   const [role, setRole] = useState("");
@@ -61,7 +76,9 @@ export const MarketplacePage: React.FC<Props> = ({ isSuperAdmin = false }) => {
     setLoading(true);
     setError("");
     try {
-      setVendors(isSuperAdmin ? await loadAdminMarketplaceVendors() : await loadMarketplaceVendors());
+      const nextVendors = isSuperAdmin ? await loadAdminMarketplaceVendors() : await loadMarketplaceVendors();
+      setVendors(nextVendors);
+      if (isSuperAdmin) setAdminReviews(await loadAdminMarketplaceReviews());
     } catch (loadError) {
       console.error("[marketplace] load failed", loadError);
       setError(loadError instanceof Error ? loadError.message : "Marketplace is unavailable.");
@@ -202,6 +219,7 @@ export const MarketplacePage: React.FC<Props> = ({ isSuperAdmin = false }) => {
                     {vendor.featured ? <Star className="mt-1 h-4 w-4 fill-amber-400 text-amber-400" /> : null}
                   </div>
                   <p className="mt-1 text-xs font-semibold uppercase text-blue-700">{vendor.primaryCategory}</p>
+                  <p className="mt-2 text-sm font-semibold text-amber-700">★ {ratingText(vendor.averageRating, vendor.reviewCount)}</p>
                   <p className="mt-2 line-clamp-3 text-sm text-gray-600">{vendor.description}</p>
                 </div>
               </div>
@@ -214,6 +232,7 @@ export const MarketplacePage: React.FC<Props> = ({ isSuperAdmin = false }) => {
               {isSuperAdmin ? <p className="mt-1 text-xs font-semibold uppercase text-gray-500">Status: {vendor.status}</p> : null}
               <div className="mt-4 flex gap-2">
                 <button type="button" onClick={() => setSelectedVendor(vendor)} className="rounded border border-blue-200 px-3 py-1.5 text-sm font-semibold text-blue-700 hover:bg-blue-50">View Details</button>
+                {canSubmitReviews && vendor.status === "active" ? <button type="button" onClick={() => setReviewingVendor(vendor)} className="rounded border border-amber-200 px-3 py-1.5 text-sm font-semibold text-amber-700 hover:bg-amber-50">Submit Review</button> : null}
                 {isSuperAdmin ? <button type="button" onClick={() => setEditingVendor({ ...vendor })} className="rounded border px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-50">Edit</button> : null}
               </div>
             </article>
@@ -223,7 +242,46 @@ export const MarketplacePage: React.FC<Props> = ({ isSuperAdmin = false }) => {
       )}
 
       {selectedVendor ? (
-        <VendorDetail vendor={selectedVendor} onClose={() => setSelectedVendor(null)} />
+        <VendorDetail
+          vendor={selectedVendor}
+          canSubmitReview={canSubmitReviews && selectedVendor.status === "active"}
+          onSubmitReview={() => setReviewingVendor(selectedVendor)}
+          onClose={() => setSelectedVendor(null)}
+        />
+      ) : null}
+
+      {isSuperAdmin ? (
+        <MarketplaceReviewModeration
+          reviews={adminReviews}
+          onModerate={async (reviewId, status) => {
+            setSaving(true);
+            setError("");
+            setMessage("");
+            try {
+              await moderateMarketplaceReview(reviewId, status);
+              setMessage(`Review ${status}.`);
+              await reload();
+            } catch (moderationError) {
+              setError(moderationError instanceof Error ? moderationError.message : "Unable to moderate review.");
+            } finally {
+              setSaving(false);
+            }
+          }}
+          busy={saving}
+        />
+      ) : null}
+
+      {reviewingVendor ? (
+        <ReviewForm
+          vendor={reviewingVendor}
+          onCancel={() => setReviewingVendor(null)}
+          onSubmitted={async () => {
+            setReviewingVendor(null);
+            setMessage("Review submitted for SuperAdmin moderation.");
+            await reload();
+          }}
+          onError={setError}
+        />
       ) : null}
 
       {editingVendor ? (
@@ -247,35 +305,167 @@ const DetailRow = ({ label, value }: { label: string; value: React.ReactNode }) 
   </div>
 );
 
-const VendorDetail = ({ vendor, onClose }: { vendor: MarketplaceVendor; onClose: () => void }) => (
-  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-    <section className="max-h-[90vh] w-full max-w-4xl overflow-auto rounded-lg bg-white shadow-xl">
-      <div className="flex items-start justify-between border-b p-5">
-        <div>
-          <p className="text-xs font-semibold uppercase text-blue-700">Vendor Profile</p>
-          <h2 className="mt-1 text-2xl font-bold text-gray-900">{vendor.companyName}</h2>
-          {vendor.featured ? <span className="mt-2 inline-flex rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700">Featured</span> : null}
+const VendorDetail = ({ vendor, canSubmitReview, onSubmitReview, onClose }: { vendor: MarketplaceVendor; canSubmitReview: boolean; onSubmitReview: () => void; onClose: () => void }) => {
+  const [reviews, setReviews] = useState<MarketplaceReview[]>([]);
+  const [loadingReviews, setLoadingReviews] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoadingReviews(true);
+      try {
+        const loaded = vendor.id ? await loadMarketplaceReviews(vendor.id) : [];
+        if (!cancelled) setReviews(loaded);
+      } catch (error) {
+        console.error("[marketplace-reviews] load failed", error);
+        if (!cancelled) setReviews([]);
+      } finally {
+        if (!cancelled) setLoadingReviews(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [vendor.id]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <section className="max-h-[90vh] w-full max-w-4xl overflow-auto rounded-lg bg-white shadow-xl">
+        <div className="flex items-start justify-between border-b p-5">
+          <div>
+            <p className="text-xs font-semibold uppercase text-blue-700">Vendor Profile</p>
+            <h2 className="mt-1 text-2xl font-bold text-gray-900">{vendor.companyName}</h2>
+            <p className="mt-2 text-sm font-semibold text-amber-700">★ {ratingText(vendor.averageRating, vendor.reviewCount)}</p>
+            {vendor.featured ? <span className="mt-2 inline-flex rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700">Featured</span> : null}
+          </div>
+          <div className="flex gap-2">
+            {canSubmitReview ? <button type="button" onClick={onSubmitReview} className="rounded border border-amber-200 px-3 py-1 text-sm font-semibold text-amber-700 hover:bg-amber-50">Submit Review</button> : null}
+            <button type="button" onClick={onClose} className="rounded border px-3 py-1 text-sm font-semibold text-gray-700 hover:bg-gray-50">Close</button>
+          </div>
         </div>
-        <button type="button" onClick={onClose} className="rounded border px-3 py-1 text-sm font-semibold text-gray-700 hover:bg-gray-50">Close</button>
-      </div>
-      <div className="grid gap-5 p-5 md:grid-cols-2">
-        <DetailRow label="Description" value={<p>{vendor.description}</p>} />
-        <DetailRow label="Primary Category" value={vendor.primaryCategory} />
-        <DetailRow label="Subcategories" value={listText(vendor.subcategories)} />
-        <DetailRow label="CyberAB Roles" value={listText(vendor.cyberAbRoles)} />
-        <DetailRow label="Website" value={vendor.website ? <a className="inline-flex items-center text-blue-700 hover:underline" href={vendor.website} target="_blank" rel="noreferrer">{vendor.website}<ExternalLink className="ml-1 h-3 w-3" /></a> : "Not provided"} />
-        <DetailRow label="Email" value={vendor.email} />
-        <DetailRow label="Phone" value={vendor.phone} />
-        <DetailRow label="Address" value={[vendor.address, vendor.city, vendor.state, vendor.country].filter(Boolean).join(", ")} />
-        <DetailRow label="Service Area" value={listText(vendor.serviceArea)} />
-        <DetailRow label="Remote Available" value={vendor.remoteAvailable ? "Yes" : "No"} />
-        <DetailRow label="Languages" value={listText(vendor.languages)} />
-        <DetailRow label="Years in Business" value={vendor.yearsInBusiness} />
-        <DetailRow label="Industries Served" value={listText(vendor.industriesServed)} />
-        <DetailRow label="Programs Supported" value={listText(vendor.programsSupported)} />
-      </div>
-    </section>
-  </div>
+        <div className="grid gap-5 p-5 md:grid-cols-2">
+          <DetailRow label="Description" value={<p>{vendor.description}</p>} />
+          <DetailRow label="Primary Category" value={vendor.primaryCategory} />
+          <DetailRow label="Subcategories" value={listText(vendor.subcategories)} />
+          <DetailRow label="CyberAB Roles" value={listText(vendor.cyberAbRoles)} />
+          <DetailRow label="Website" value={vendor.website ? <a className="inline-flex items-center text-blue-700 hover:underline" href={vendor.website} target="_blank" rel="noreferrer">{vendor.website}<ExternalLink className="ml-1 h-3 w-3" /></a> : "Not provided"} />
+          <DetailRow label="Email" value={vendor.email} />
+          <DetailRow label="Phone" value={vendor.phone} />
+          <DetailRow label="Address" value={[vendor.address, vendor.city, vendor.state, vendor.country].filter(Boolean).join(", ")} />
+          <DetailRow label="Service Area" value={listText(vendor.serviceArea)} />
+          <DetailRow label="Remote Available" value={vendor.remoteAvailable ? "Yes" : "No"} />
+          <DetailRow label="Languages" value={listText(vendor.languages)} />
+          <DetailRow label="Years in Business" value={vendor.yearsInBusiness} />
+          <DetailRow label="Industries Served" value={listText(vendor.industriesServed)} />
+          <DetailRow label="Programs Supported" value={listText(vendor.programsSupported)} />
+        </div>
+        <div className="border-t p-5">
+          <h3 className="text-lg font-bold text-gray-900">Participant Reviews</h3>
+          {loadingReviews ? <p className="mt-3 text-sm text-gray-500">Loading reviews...</p> : null}
+          {!loadingReviews && !reviews.length ? <p className="mt-3 text-sm text-gray-500">No approved reviews yet.</p> : null}
+          <div className="mt-3 space-y-3">
+            {reviews.map(review => (
+              <div key={review.id} className="rounded border bg-gray-50 p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-semibold text-amber-700">★ {review.overallRating}/5</span>
+                  <span className="text-xs text-gray-500">{formatDate(review.createdAt)}</span>
+                </div>
+                <p className="mt-1 text-sm font-semibold text-gray-900">{review.orgName || "Participant organization"}</p>
+                <p className="mt-2 text-sm text-gray-700">{review.comment}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+};
+
+const RatingSelect = ({ label, value, onChange, required = false }: { label: string; value: number | ""; onChange: (value: number | "") => void; required?: boolean }) => (
+  <label>
+    <span className="text-xs font-semibold uppercase text-gray-500">{label}</span>
+    <select value={value} required={required} onChange={event => onChange(event.target.value ? Number(event.target.value) : "")} className="mt-1 w-full rounded border px-3 py-2 text-sm">
+      <option value="">{required ? "Select rating" : "Optional"}</option>
+      {[1, 2, 3, 4, 5].map(item => <option key={item} value={item}>{item}</option>)}
+    </select>
+  </label>
+);
+
+const ReviewForm = ({ vendor, onCancel, onSubmitted, onError }: { vendor: MarketplaceVendor; onCancel: () => void; onSubmitted: () => void; onError: (message: string) => void }) => {
+  const [draft, setDraft] = useState<MarketplaceReviewInput>({ overallRating: "" as any, communicationRating: "", responsivenessRating: "", cmmcExpertiseRating: "", valueRating: "", comment: "" });
+  const [saving, setSaving] = useState(false);
+  const submit = async () => {
+    if (!vendor.id) return;
+    setSaving(true);
+    try {
+      await submitMarketplaceReview(vendor.id, draft);
+      onSubmitted();
+    } catch (error) {
+      onError(error instanceof Error ? error.message : "Unable to submit review.");
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
+      <section className="w-full max-w-2xl rounded-lg bg-white shadow-xl">
+        <div className="border-b p-5">
+          <p className="text-xs font-semibold uppercase text-blue-700">Pending moderation</p>
+          <h2 className="text-2xl font-bold text-gray-900">Review {vendor.companyName}</h2>
+        </div>
+        <div className="grid gap-4 p-5 md:grid-cols-2">
+          <RatingSelect label="Overall Rating" required value={draft.overallRating as any} onChange={value => setDraft(current => ({ ...current, overallRating: value as any }))} />
+          <RatingSelect label="Communication" value={draft.communicationRating || ""} onChange={value => setDraft(current => ({ ...current, communicationRating: value }))} />
+          <RatingSelect label="Responsiveness" value={draft.responsivenessRating || ""} onChange={value => setDraft(current => ({ ...current, responsivenessRating: value }))} />
+          <RatingSelect label="CMMC Expertise" value={draft.cmmcExpertiseRating || ""} onChange={value => setDraft(current => ({ ...current, cmmcExpertiseRating: value }))} />
+          <RatingSelect label="Value" value={draft.valueRating || ""} onChange={value => setDraft(current => ({ ...current, valueRating: value }))} />
+          <label className="md:col-span-2">
+            <span className="text-xs font-semibold uppercase text-gray-500">Comment</span>
+            <textarea value={draft.comment} onChange={event => setDraft(current => ({ ...current, comment: event.target.value }))} className="mt-1 h-28 w-full rounded border px-3 py-2 text-sm" />
+          </label>
+        </div>
+        <div className="flex justify-end gap-2 border-t p-5">
+          <button type="button" onClick={onCancel} className="rounded border px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">Cancel</button>
+          <button type="button" onClick={submit} disabled={saving || !draft.overallRating || !draft.comment.trim()} className="rounded bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-50">Submit Review</button>
+        </div>
+      </section>
+    </div>
+  );
+};
+
+const statusClass = (status: string) => status === "approved" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : status === "rejected" ? "bg-rose-50 text-rose-700 border-rose-200" : "bg-amber-50 text-amber-700 border-amber-200";
+
+const MarketplaceReviewModeration = ({ reviews, onModerate, busy }: { reviews: MarketplaceReview[]; onModerate: (reviewId: string, status: "approved" | "rejected") => void; busy: boolean }) => (
+  <section className="rounded-lg border bg-white shadow-sm">
+    <div className="border-b p-4">
+      <h2 className="text-lg font-bold text-gray-900">Marketplace Reviews</h2>
+      <p className="mt-1 text-sm text-gray-600">SuperAdmin moderation queue. Reviewer email is shown only here for operational moderation.</p>
+    </div>
+    <div className="overflow-auto">
+      <table className="min-w-full text-left text-sm">
+        <thead className="bg-gray-50 text-xs uppercase text-gray-500">
+          <tr><th className="p-3">Vendor</th><th className="p-3">Reviewer Org</th><th className="p-3">Rating</th><th className="p-3">Comment Preview</th><th className="p-3">Status</th><th className="p-3">Date</th><th className="p-3">Actions</th></tr>
+        </thead>
+        <tbody>
+          {reviews.map(review => (
+            <tr key={review.id} className="border-t">
+              <td className="p-3 font-semibold text-gray-900">{review.vendorName}</td>
+              <td className="p-3">{review.orgName || review.orgId}</td>
+              <td className="p-3">{review.overallRating}/5</td>
+              <td className="max-w-md p-3">{review.comment.slice(0, 180)}{review.comment.length > 180 ? "..." : ""}</td>
+              <td className="p-3"><span className={`inline-flex rounded-full border px-2 py-1 text-xs font-semibold ${statusClass(review.status)}`}>{review.status}</span></td>
+              <td className="p-3">{formatDate(review.createdAt)}</td>
+              <td className="p-3">
+                <div className="flex gap-2">
+                  <button type="button" disabled={busy || review.status === "approved"} onClick={() => onModerate(review.id, "approved")} className="rounded border border-emerald-200 px-2 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-40">Approve</button>
+                  <button type="button" disabled={busy || review.status === "rejected"} onClick={() => onModerate(review.id, "rejected")} className="rounded border border-rose-200 px-2 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-40">Reject</button>
+                </div>
+              </td>
+            </tr>
+          ))}
+          {!reviews.length ? <tr><td colSpan={7} className="p-5 text-sm text-gray-500">No marketplace reviews yet.</td></tr> : null}
+        </tbody>
+      </table>
+    </div>
+  </section>
 );
 
 type EditorProps = {

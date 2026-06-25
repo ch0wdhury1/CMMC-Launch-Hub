@@ -1150,7 +1150,7 @@ const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
       case "programAnalytics":
         return <ProgramAnalyticsPage isSuperAdmin={isSuperAdmin} />;
       case "marketplace":
-        return <MarketplacePage isSuperAdmin={isSuperAdmin} />;
+        return <MarketplacePage isSuperAdmin={isSuperAdmin} canSubmitReviews={!isSuperAdmin && !isSponsorObserver && !!currentOrgId} />;
       case "sponsorActivity":
         return <SponsorRecentActivityPage />;
       case "sponsorProfile":

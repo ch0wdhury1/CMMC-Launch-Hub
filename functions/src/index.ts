@@ -2771,9 +2771,70 @@ function sanitizeMarketplaceVendor(docSnap: FirebaseFirestore.QueryDocumentSnaps
     programIds: cleanMarketplaceList(data.programIds),
     status: String(data.status || "active"),
     featured: data.featured === true,
+    averageRating: Number(data.averageRating || 0),
+    reviewCount: Number(data.reviewCount || 0),
     createdAt: data.createdAt || null,
     updatedAt: data.updatedAt || null,
   };
+}
+
+function sanitizeMarketplaceReview(docSnap: FirebaseFirestore.QueryDocumentSnapshot | FirebaseFirestore.DocumentSnapshot, includePrivate = false) {
+  const data = docSnap.data() || {};
+  const base: any = {
+    id: docSnap.id,
+    vendorId: String(data.vendorId || ""),
+    vendorName: String(data.vendorName || ""),
+    orgName: String(data.orgName || ""),
+    reviewerName: String(data.reviewerName || ""),
+    overallRating: Number(data.overallRating || 0),
+    communicationRating: data.communicationRating ? Number(data.communicationRating) : null,
+    responsivenessRating: data.responsivenessRating ? Number(data.responsivenessRating) : null,
+    cmmcExpertiseRating: data.cmmcExpertiseRating ? Number(data.cmmcExpertiseRating) : null,
+    valueRating: data.valueRating ? Number(data.valueRating) : null,
+    comment: String(data.comment || ""),
+    status: String(data.status || "pending"),
+    createdAt: data.createdAt || null,
+    updatedAt: data.updatedAt || null,
+    moderatedAt: data.moderatedAt || null,
+  };
+  if (includePrivate) {
+    base.orgId = String(data.orgId || "");
+    base.reviewerUid = String(data.reviewerUid || "");
+    base.reviewerEmail = String(data.reviewerEmail || "");
+    base.moderatedBy = String(data.moderatedBy || "");
+  }
+  return base;
+}
+
+async function marketplaceReviewStats(vendorIds: string[]) {
+  const stats = new Map<string, {averageRating: number; reviewCount: number}>();
+  if (vendorIds.length === 0) return stats;
+  const snapshot = await db.collection("marketplaceVendorReviews")
+    .where("status", "==", "approved")
+    .limit(1000)
+    .get();
+  const grouped = new Map<string, number[]>();
+  snapshot.docs.forEach(docSnap => {
+    const data = docSnap.data() || {};
+    const vendorId = String(data.vendorId || "");
+    if (!vendorIds.includes(vendorId)) return;
+    const rating = Number(data.overallRating || 0);
+    if (rating < 1 || rating > 5) return;
+    grouped.set(vendorId, [...(grouped.get(vendorId) || []), rating]);
+  });
+  grouped.forEach((ratings, vendorId) => {
+    const averageRating = ratings.length ? Math.round((ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length) * 10) / 10 : 0;
+    stats.set(vendorId, {averageRating, reviewCount: ratings.length});
+  });
+  return stats;
+}
+
+function attachMarketplaceReviewStats(vendors: any[], stats: Map<string, {averageRating: number; reviewCount: number}>) {
+  return vendors.map(vendor => ({
+    ...vendor,
+    averageRating: stats.get(vendor.id)?.averageRating || 0,
+    reviewCount: stats.get(vendor.id)?.reviewCount || 0,
+  }));
 }
 
 function normalizeMarketplaceVendorInput(input: any) {
@@ -2814,7 +2875,9 @@ const listMarketplaceVendors = async (req: any, res: any) => {
       .where("status", "==", "active")
       .limit(500)
       .get();
-    const vendors = snapshot.docs.map(sanitizeMarketplaceVendor)
+    const rawVendors = snapshot.docs.map(sanitizeMarketplaceVendor);
+    const stats = await marketplaceReviewStats(rawVendors.map(vendor => vendor.id));
+    const vendors = attachMarketplaceReviewStats(rawVendors, stats)
       .sort((a, b) => Number(b.featured) - Number(a.featured) || a.companyName.localeCompare(b.companyName));
     return res.json({success: true, vendors});
   } catch (error) {
@@ -2829,12 +2892,162 @@ const listAdminMarketplaceVendors = async (req: any, res: any) => {
       return res.status(403).json({success: false, errorMessage: "SuperAdmin access required"});
     }
     const snapshot = await db.collection("marketplaceVendors").limit(500).get();
-    const vendors = snapshot.docs.map(sanitizeMarketplaceVendor)
+    const rawVendors = snapshot.docs.map(sanitizeMarketplaceVendor);
+    const stats = await marketplaceReviewStats(rawVendors.map(vendor => vendor.id));
+    const vendors = attachMarketplaceReviewStats(rawVendors, stats)
       .sort((a, b) => a.companyName.localeCompare(b.companyName));
     return res.json({success: true, vendors});
   } catch (error) {
     console.error("Admin marketplace vendors load failed", error);
     return res.status(500).json({success: false, errorMessage: "Unable to load marketplace management data"});
+  }
+};
+
+async function requireMarketplaceReviewer(uid: string) {
+  const userSnap = await db.doc(`users/${uid}`).get();
+  const user = userSnap.data() || {};
+  const roles = user.roles || {};
+  const orgId = String(user.orgId || "");
+  if (!userSnap.exists || user.status !== "active" || !orgId) {
+    return {allowed: false, errorMessage: "Active organization user access required", user: null, org: null, orgId: ""};
+  }
+  if (roles.pilotObserver === true || roles.programObserver === true || roles.superAdmin === true) {
+    return {allowed: false, errorMessage: "Sponsor Observers and SuperAdmins do not submit marketplace reviews", user, org: null, orgId};
+  }
+  const orgSnap = await db.doc(`orgs/${orgId}`).get();
+  if (!orgSnap.exists || String(orgSnap.data()?.status || "active").toLowerCase() !== "active") {
+    return {allowed: false, errorMessage: "Active organization is required", user, org: null, orgId};
+  }
+  return {allowed: true, user, org: orgSnap.data() || {}, orgId};
+}
+
+function normalizedRating(value: any, required = false) {
+  if (value === null || value === undefined || value === "") return required ? NaN : null;
+  const rating = Number(value);
+  if (!Number.isFinite(rating) || rating < 1 || rating > 5) return NaN;
+  return Math.round(rating);
+}
+
+const listMarketplaceReviews = async (req: any, res: any) => {
+  try {
+    if (!(await requireActiveMarketplaceUser(req.user.uid))) {
+      return res.status(403).json({success: false, errorMessage: "Active user access required"});
+    }
+    const vendorId = String(req.params.vendorId || req.query?.vendorId || "").trim();
+    if (!vendorId || !isSafePathSegment(vendorId)) throw new Error("Valid vendor id is required");
+    const snapshot = await db.collection("marketplaceVendorReviews")
+      .where("vendorId", "==", vendorId)
+      .where("status", "==", "approved")
+      .limit(100)
+      .get();
+    const reviews = snapshot.docs.map(docSnap => sanitizeMarketplaceReview(docSnap, false))
+      .sort((a, b) => {
+        const aTime = a.createdAt?._seconds || 0;
+        const bTime = b.createdAt?._seconds || 0;
+        return bTime - aTime;
+      });
+    return res.json({success: true, reviews});
+  } catch (error) {
+    console.error("Marketplace reviews load failed", error);
+    return res.status(400).json({success: false, errorMessage: error instanceof Error ? error.message : "Unable to load marketplace reviews"});
+  }
+};
+
+const submitMarketplaceReview = async (req: any, res: any) => {
+  try {
+    const vendorId = String(req.params.vendorId || req.body?.vendorId || "").trim();
+    if (!vendorId || !isSafePathSegment(vendorId)) throw new Error("Valid vendor id is required");
+    const reviewer = await requireMarketplaceReviewer(req.user.uid);
+    if (!reviewer.allowed) return res.status(403).json({success: false, errorMessage: reviewer.errorMessage});
+    const vendorSnap = await db.doc(`marketplaceVendors/${vendorId}`).get();
+    if (!vendorSnap.exists || String(vendorSnap.data()?.status || "").toLowerCase() !== "active") {
+      throw new Error("Active vendor not found");
+    }
+    const existing = await db.collection("marketplaceVendorReviews")
+      .where("vendorId", "==", vendorId)
+      .where("orgId", "==", reviewer.orgId)
+      .limit(1)
+      .get();
+    if (!existing.empty) throw new Error("Your organization has already submitted a review for this vendor");
+    const overallRating = normalizedRating(req.body?.overallRating, true);
+    const communicationRating = normalizedRating(req.body?.communicationRating);
+    const responsivenessRating = normalizedRating(req.body?.responsivenessRating);
+    const cmmcExpertiseRating = normalizedRating(req.body?.cmmcExpertiseRating);
+    const valueRating = normalizedRating(req.body?.valueRating);
+    if (!Number.isFinite(overallRating)) throw new Error("Overall Rating must be between 1 and 5");
+    if ([communicationRating, responsivenessRating, cmmcExpertiseRating, valueRating].some(rating => Number.isNaN(rating))) {
+      throw new Error("Optional ratings must be between 1 and 5");
+    }
+    const comment = String(req.body?.comment || "").trim().slice(0, 2000);
+    if (!comment) throw new Error("Comment is required");
+    const orgName = safePilotOrgName(reviewer.org, reviewer.orgId);
+    const user = reviewer.user || {};
+    const now = admin.firestore.FieldValue.serverTimestamp();
+    const ref = db.collection("marketplaceVendorReviews").doc();
+    await ref.set({
+      vendorId,
+      vendorName: String(vendorSnap.data()?.companyName || ""),
+      orgId: reviewer.orgId,
+      orgName,
+      reviewerUid: req.user.uid,
+      reviewerName: String(user.displayName || user.fullName || user.email || "Marketplace participant"),
+      reviewerEmail: String(user.email || ""),
+      overallRating,
+      ...(communicationRating ? {communicationRating} : {}),
+      ...(responsivenessRating ? {responsivenessRating} : {}),
+      ...(cmmcExpertiseRating ? {cmmcExpertiseRating} : {}),
+      ...(valueRating ? {valueRating} : {}),
+      comment,
+      status: "pending",
+      createdAt: now,
+      updatedAt: now,
+    });
+    const savedSnap = await ref.get();
+    return res.json({success: true, review: sanitizeMarketplaceReview(savedSnap, false)});
+  } catch (error) {
+    console.error("Marketplace review submit failed", error);
+    return res.status(400).json({success: false, errorMessage: error instanceof Error ? error.message : "Unable to submit review"});
+  }
+};
+
+const listAdminMarketplaceReviews = async (req: any, res: any) => {
+  try {
+    if (!(await isSuperAdminUser(req.user.uid))) {
+      return res.status(403).json({success: false, errorMessage: "SuperAdmin access required"});
+    }
+    const snapshot = await db.collection("marketplaceVendorReviews").limit(500).get();
+    const reviews = snapshot.docs.map(docSnap => sanitizeMarketplaceReview(docSnap, true))
+      .sort((a, b) => {
+        const aTime = a.createdAt?._seconds || 0;
+        const bTime = b.createdAt?._seconds || 0;
+        return bTime - aTime;
+      });
+    return res.json({success: true, reviews});
+  } catch (error) {
+    console.error("Admin marketplace reviews load failed", error);
+    return res.status(500).json({success: false, errorMessage: "Unable to load marketplace reviews"});
+  }
+};
+
+const moderateMarketplaceReview = async (req: any, res: any) => {
+  try {
+    if (!(await isSuperAdminUser(req.user.uid))) {
+      return res.status(403).json({success: false, errorMessage: "SuperAdmin access required"});
+    }
+    const reviewId = String(req.body?.reviewId || "").trim();
+    const status = String(req.body?.status || "").trim().toLowerCase();
+    if (!reviewId || !isSafePathSegment(reviewId)) throw new Error("Valid review id is required");
+    if (!["approved", "rejected"].includes(status)) throw new Error("Status must be approved or rejected");
+    const ref = db.doc(`marketplaceVendorReviews/${reviewId}`);
+    const snap = await ref.get();
+    if (!snap.exists) throw new Error("Review not found");
+    const now = admin.firestore.FieldValue.serverTimestamp();
+    await ref.set({status, moderatedAt: now, moderatedBy: req.user.uid, updatedAt: now}, {merge: true});
+    const savedSnap = await ref.get();
+    return res.json({success: true, review: sanitizeMarketplaceReview(savedSnap, true)});
+  } catch (error) {
+    console.error("Marketplace review moderation failed", error);
+    return res.status(400).json({success: false, errorMessage: error instanceof Error ? error.message : "Unable to moderate review"});
   }
 };
 
@@ -2875,6 +3088,18 @@ app.get("/api/api/admin/marketplace/vendors", requireAuth, listAdminMarketplaceV
 app.post("/api/admin/marketplace/vendor", requireAuth, saveMarketplaceVendor);
 app.post("/admin/marketplace/vendor", requireAuth, saveMarketplaceVendor);
 app.post("/api/api/admin/marketplace/vendor", requireAuth, saveMarketplaceVendor);
+app.get("/api/marketplace/vendor/:vendorId/reviews", requireAuth, listMarketplaceReviews);
+app.get("/marketplace/vendor/:vendorId/reviews", requireAuth, listMarketplaceReviews);
+app.get("/api/api/marketplace/vendor/:vendorId/reviews", requireAuth, listMarketplaceReviews);
+app.post("/api/marketplace/vendor/:vendorId/review", requireAuth, submitMarketplaceReview);
+app.post("/marketplace/vendor/:vendorId/review", requireAuth, submitMarketplaceReview);
+app.post("/api/api/marketplace/vendor/:vendorId/review", requireAuth, submitMarketplaceReview);
+app.get("/api/admin/marketplace/reviews", requireAuth, listAdminMarketplaceReviews);
+app.get("/admin/marketplace/reviews", requireAuth, listAdminMarketplaceReviews);
+app.get("/api/api/admin/marketplace/reviews", requireAuth, listAdminMarketplaceReviews);
+app.post("/api/admin/marketplace/review/moderate", requireAuth, moderateMarketplaceReview);
+app.post("/admin/marketplace/review/moderate", requireAuth, moderateMarketplaceReview);
+app.post("/api/api/admin/marketplace/review/moderate", requireAuth, moderateMarketplaceReview);
 
 app.post("/api/admin/sponsor-observer", requireAuth, async (req: any, res) => {
   try {
