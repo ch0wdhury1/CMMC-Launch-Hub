@@ -10,6 +10,7 @@ import {
   HelpCircle,
   Lock,
   MessageSquare,
+  Store,
   ChevronDown,
   ChevronRight,
 } from "lucide-react";
@@ -57,6 +58,7 @@ type Props = {
   onReadinessReportsClick: () => void;
   onSystemSecurityPlanClick: () => void;
   onPoamClick: () => void;
+  onMarketplaceClick: () => void;
   onResponsibilityMatrixClick: () => void;
   onTrainingClick: () => void;
   onNewsUpdatesClick: () => void;
@@ -127,6 +129,7 @@ export function Sidebar(props: Props) {
     onReadinessReportsClick,
     onSystemSecurityPlanClick,
     onPoamClick,
+    onMarketplaceClick,
     onResponsibilityMatrixClick,
     onTrainingClick,
     onNewsUpdatesClick,
@@ -606,6 +609,14 @@ useEffect(() => {
             >
               <span className="ml-7">POA&amp;M</span>
               {!access.reporting.poam && <Lock className="h-3 w-3 ml-auto text-gray-400" />}
+            </button>
+
+            <button
+              className={navClass(activeViewInfo?.type === "marketplace")}
+              onClick={onMarketplaceClick}
+            >
+              <Store className="ml-7 mr-2 h-4 w-4 text-gray-300" />
+              <span>Marketplace</span>
             </button>
           </div>
         )}

@@ -2730,6 +2730,152 @@ app.get("/api/program/analytics", requireAuth, programAnalyticsHandler);
 app.get("/program/analytics", requireAuth, programAnalyticsHandler);
 app.get("/api/api/program/analytics", requireAuth, programAnalyticsHandler);
 
+const MARKETPLACE_CATEGORIES = new Set(["CONSULTING", "SOFTWARE", "HARDWARE", "TRAINING", "ASSESSMENT", "OTHER"]);
+const MARKETPLACE_STATUSES = new Set(["active", "inactive", "archived"]);
+
+async function requireActiveMarketplaceUser(uid: string) {
+  const userSnap = await db.doc(`users/${uid}`).get();
+  const user = userSnap.data() || {};
+  return userSnap.exists && user.status === "active";
+}
+
+function cleanMarketplaceList(value: any) {
+  if (Array.isArray(value)) return value.map(item => String(item || "").trim()).filter(Boolean).slice(0, 50);
+  if (typeof value === "string") return value.split(",").map(item => item.trim()).filter(Boolean).slice(0, 50);
+  return [];
+}
+
+function sanitizeMarketplaceVendor(docSnap: FirebaseFirestore.QueryDocumentSnapshot | FirebaseFirestore.DocumentSnapshot) {
+  const data = docSnap.data() || {};
+  return {
+    id: docSnap.id,
+    companyName: String(data.companyName || ""),
+    logoUrl: String(data.logoUrl || ""),
+    description: String(data.description || ""),
+    primaryCategory: String(data.primaryCategory || "OTHER"),
+    subcategories: cleanMarketplaceList(data.subcategories),
+    cyberAbRoles: cleanMarketplaceList(data.cyberAbRoles),
+    website: String(data.website || ""),
+    email: String(data.email || ""),
+    phone: String(data.phone || ""),
+    address: String(data.address || ""),
+    city: String(data.city || ""),
+    state: String(data.state || ""),
+    country: String(data.country || ""),
+    serviceArea: cleanMarketplaceList(data.serviceArea),
+    remoteAvailable: data.remoteAvailable === true,
+    languages: cleanMarketplaceList(data.languages),
+    yearsInBusiness: String(data.yearsInBusiness || ""),
+    industriesServed: cleanMarketplaceList(data.industriesServed),
+    programsSupported: cleanMarketplaceList(data.programsSupported),
+    programIds: cleanMarketplaceList(data.programIds),
+    status: String(data.status || "active"),
+    featured: data.featured === true,
+    createdAt: data.createdAt || null,
+    updatedAt: data.updatedAt || null,
+  };
+}
+
+function normalizeMarketplaceVendorInput(input: any) {
+  const primaryCategory = String(input?.primaryCategory || "OTHER").trim().toUpperCase();
+  const status = String(input?.status || "active").trim().toLowerCase();
+  return {
+    companyName: String(input?.companyName || "").trim().slice(0, 180),
+    logoUrl: String(input?.logoUrl || "").trim().slice(0, 500),
+    description: String(input?.description || "").trim().slice(0, 2000),
+    primaryCategory: MARKETPLACE_CATEGORIES.has(primaryCategory) ? primaryCategory : "OTHER",
+    subcategories: cleanMarketplaceList(input?.subcategories),
+    cyberAbRoles: cleanMarketplaceList(input?.cyberAbRoles),
+    website: String(input?.website || "").trim().slice(0, 500),
+    email: String(input?.email || "").trim().slice(0, 240),
+    phone: String(input?.phone || "").trim().slice(0, 80),
+    address: String(input?.address || "").trim().slice(0, 300),
+    city: String(input?.city || "").trim().slice(0, 120),
+    state: String(input?.state || "").trim().slice(0, 80),
+    country: String(input?.country || "").trim().slice(0, 120),
+    serviceArea: cleanMarketplaceList(input?.serviceArea),
+    remoteAvailable: input?.remoteAvailable === true,
+    languages: cleanMarketplaceList(input?.languages),
+    yearsInBusiness: String(input?.yearsInBusiness || "").trim().slice(0, 80),
+    industriesServed: cleanMarketplaceList(input?.industriesServed),
+    programsSupported: cleanMarketplaceList(input?.programsSupported),
+    programIds: cleanMarketplaceList(input?.programIds),
+    status: MARKETPLACE_STATUSES.has(status) ? status : "active",
+    featured: input?.featured === true,
+  };
+}
+
+const listMarketplaceVendors = async (req: any, res: any) => {
+  try {
+    if (!(await requireActiveMarketplaceUser(req.user.uid))) {
+      return res.status(403).json({success: false, errorMessage: "Active user access required"});
+    }
+    const snapshot = await db.collection("marketplaceVendors")
+      .where("status", "==", "active")
+      .limit(500)
+      .get();
+    const vendors = snapshot.docs.map(sanitizeMarketplaceVendor)
+      .sort((a, b) => Number(b.featured) - Number(a.featured) || a.companyName.localeCompare(b.companyName));
+    return res.json({success: true, vendors});
+  } catch (error) {
+    console.error("Marketplace vendors load failed", error);
+    return res.status(500).json({success: false, errorMessage: "Unable to load marketplace vendors"});
+  }
+};
+
+const listAdminMarketplaceVendors = async (req: any, res: any) => {
+  try {
+    if (!(await isSuperAdminUser(req.user.uid))) {
+      return res.status(403).json({success: false, errorMessage: "SuperAdmin access required"});
+    }
+    const snapshot = await db.collection("marketplaceVendors").limit(500).get();
+    const vendors = snapshot.docs.map(sanitizeMarketplaceVendor)
+      .sort((a, b) => a.companyName.localeCompare(b.companyName));
+    return res.json({success: true, vendors});
+  } catch (error) {
+    console.error("Admin marketplace vendors load failed", error);
+    return res.status(500).json({success: false, errorMessage: "Unable to load marketplace management data"});
+  }
+};
+
+const saveMarketplaceVendor = async (req: any, res: any) => {
+  try {
+    if (!(await isSuperAdminUser(req.user.uid))) {
+      return res.status(403).json({success: false, errorMessage: "SuperAdmin access required"});
+    }
+    const vendorId = typeof req.body?.id === "string" ? req.body.id.trim() : "";
+    if (vendorId && !isSafePathSegment(vendorId)) throw new Error("Invalid vendor id");
+    const clean = normalizeMarketplaceVendorInput(req.body || {});
+    if (!clean.companyName) throw new Error("Company Name is required");
+    if (!clean.description) throw new Error("Description is required");
+    if (!clean.primaryCategory) throw new Error("Primary Category is required");
+    const now = admin.firestore.FieldValue.serverTimestamp();
+    const ref = vendorId ? db.doc(`marketplaceVendors/${vendorId}`) : db.collection("marketplaceVendors").doc();
+    const existingSnap = await ref.get();
+    await ref.set({
+      ...clean,
+      ...(existingSnap.exists ? {} : {createdAt: now, createdBy: req.user.uid}),
+      updatedAt: now,
+      updatedBy: req.user.uid,
+    }, {merge: true});
+    const savedSnap = await ref.get();
+    return res.json({success: true, vendor: sanitizeMarketplaceVendor(savedSnap)});
+  } catch (error) {
+    console.error("Marketplace vendor save failed", error);
+    return res.status(400).json({success: false, errorMessage: error instanceof Error ? error.message : "Unable to save marketplace vendor"});
+  }
+};
+
+app.get("/api/marketplace/vendors", requireAuth, listMarketplaceVendors);
+app.get("/marketplace/vendors", requireAuth, listMarketplaceVendors);
+app.get("/api/api/marketplace/vendors", requireAuth, listMarketplaceVendors);
+app.get("/api/admin/marketplace/vendors", requireAuth, listAdminMarketplaceVendors);
+app.get("/admin/marketplace/vendors", requireAuth, listAdminMarketplaceVendors);
+app.get("/api/api/admin/marketplace/vendors", requireAuth, listAdminMarketplaceVendors);
+app.post("/api/admin/marketplace/vendor", requireAuth, saveMarketplaceVendor);
+app.post("/admin/marketplace/vendor", requireAuth, saveMarketplaceVendor);
+app.post("/api/api/admin/marketplace/vendor", requireAuth, saveMarketplaceVendor);
+
 app.post("/api/admin/sponsor-observer", requireAuth, async (req: any, res) => {
   try {
     if (!(await isSuperAdminUser(req.user.uid))) {

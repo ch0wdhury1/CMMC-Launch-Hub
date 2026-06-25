@@ -52,6 +52,7 @@ import { SponsorRecentActivityPage } from "./components/SponsorRecentActivityPag
 import { SponsorProfilePage } from "./components/SponsorProfilePage";
 import { ProgramManagementPage } from "./components/ProgramManagementPage";
 import { ProgramAnalyticsPage } from "./components/ProgramAnalyticsPage";
+import { MarketplacePage } from "./components/MarketplacePage";
 import { ResponsibilityMatrixPage } from "./components/ResponsibilityMatrixPage";
 import { TrainingModule } from "./components/training/TrainingModule";
 import { NewsUpdates } from "./components/NewsUpdates";
@@ -175,6 +176,7 @@ type ViewState =
   | { type: "sponsorParticipants" }
   | { type: "sponsorParticipantDetail"; orgId: string }
   | { type: "programAnalytics" }
+  | { type: "marketplace" }
   | { type: "sponsorActivity" }
   | { type: "sponsorProfile" }
   | { type: "pendingActions" }
@@ -211,6 +213,7 @@ export type ActiveViewInfo =
   | { type: "sponsorParticipants"; name: "sponsorParticipants" }
   | { type: "sponsorParticipantDetail"; name: "sponsorParticipantDetail" }
   | { type: "programAnalytics"; name: "programAnalytics" }
+  | { type: "marketplace"; name: "marketplace" }
   | { type: "sponsorActivity"; name: "sponsorActivity" }
   | { type: "sponsorProfile"; name: "sponsorProfile" }
   | { type: "pendingActions"; name: "pendingActions" }
@@ -779,6 +782,7 @@ const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
     if (detailMatch?.[1]) return { type: "sponsorParticipantDetail", orgId: decodeURIComponent(detailMatch[1]) };
     if (path === "/sponsor/participants") return { type: "sponsorParticipants" };
     if (path === "/sponsor/program-analytics") return { type: "programAnalytics" };
+    if (path === "/sponsor/marketplace") return { type: "marketplace" };
     if (path === "/sponsor/activity") return { type: "sponsorActivity" };
     if (path === "/sponsor/profile") return { type: "sponsorProfile" };
     return { type: "pilotDashboard" };
@@ -788,6 +792,7 @@ const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
     if (nextView.type === "sponsorParticipants") return "/sponsor/participants";
     if (nextView.type === "sponsorParticipantDetail") return `/sponsor/participants/${encodeURIComponent(nextView.orgId)}`;
     if (nextView.type === "programAnalytics") return "/sponsor/program-analytics";
+    if (nextView.type === "marketplace") return "/sponsor/marketplace";
     if (nextView.type === "sponsorActivity") return "/sponsor/activity";
     if (nextView.type === "sponsorProfile") return "/sponsor/profile";
     return "/sponsor";
@@ -804,7 +809,7 @@ const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
 
   useEffect(() => {
     if (!isSponsorObserver || isSuperAdmin) return;
-    const allowed = ["pilotDashboard", "sponsorParticipants", "sponsorParticipantDetail", "programAnalytics", "sponsorActivity", "sponsorProfile"].includes(view.type);
+    const allowed = ["pilotDashboard", "sponsorParticipants", "sponsorParticipantDetail", "programAnalytics", "marketplace", "sponsorActivity", "sponsorProfile"].includes(view.type);
     if (!allowed) {
       setSponsorView(sponsorViewFromPath(), true);
     }
@@ -843,6 +848,7 @@ const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
     if (view.type === "sponsorParticipants") return { type: "sponsorParticipants", name: "sponsorParticipants" };
     if (view.type === "sponsorParticipantDetail") return { type: "sponsorParticipantDetail", name: "sponsorParticipantDetail" };
     if (view.type === "programAnalytics") return { type: "programAnalytics", name: "programAnalytics" };
+    if (view.type === "marketplace") return { type: "marketplace", name: "marketplace" };
     if (view.type === "sponsorActivity") return { type: "sponsorActivity", name: "sponsorActivity" };
     if (view.type === "sponsorProfile") return { type: "sponsorProfile", name: "sponsorProfile" };
     if (view.type === "pendingActions") return { type: "pendingActions", name: "pendingActions" };
@@ -960,6 +966,7 @@ const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
     if (view.type === "sponsorParticipants") return "Sponsor Participants";
     if (view.type === "sponsorParticipantDetail") return "Sponsor Participant Detail";
     if (view.type === "programAnalytics") return "Program Analytics";
+    if (view.type === "marketplace") return "CMMC Marketplace";
     if (view.type === "sponsorActivity") return "Sponsor Recent Activity";
     if (view.type === "sponsorProfile") return "Sponsor Profile";
     if (view.type === "programs") return "Programs";
@@ -1142,6 +1149,8 @@ const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
         return <SponsorParticipantDetailPage orgId={view.orgId} onBack={() => setSponsorView({ type: "sponsorParticipants" })} />;
       case "programAnalytics":
         return <ProgramAnalyticsPage isSuperAdmin={isSuperAdmin} />;
+      case "marketplace":
+        return <MarketplacePage isSuperAdmin={isSuperAdmin} />;
       case "sponsorActivity":
         return <SponsorRecentActivityPage />;
       case "sponsorProfile":
@@ -1479,6 +1488,7 @@ case "domain": {
     { label: "Active Orgs", onClick: () => setView({ type: "superAdmin" as const }) },
     { label: "PROGRAMS", onClick: () => setView({ type: "programs" as const }) },
     { label: "Program Analytics", onClick: () => setView({ type: "programAnalytics" as const }) },
+    { label: "Marketplace", onClick: () => setView({ type: "marketplace" as const }) },
     { label: "Sponsor Observers", onClick: () => setView({ type: "sponsorObservers" as const }) },
     { label: "Pending Actions", onClick: () => setView({ type: "pendingActions" as const }) },
     { label: "Activity Center", onClick: () => setView({ type: "activityCenter" as const }) },
@@ -1490,6 +1500,7 @@ case "domain": {
     const sponsorActiveView =
       view.type === "sponsorParticipants" || view.type === "sponsorParticipantDetail" ? "participants" :
       view.type === "programAnalytics" ? "analytics" :
+      view.type === "marketplace" ? "marketplace" :
       view.type === "sponsorActivity" ? "activity" :
       view.type === "sponsorProfile" ? "profile" :
       "dashboard";
@@ -1500,6 +1511,7 @@ case "domain": {
         onNavigate={(nextView) => {
           if (nextView === "participants") setSponsorView({ type: "sponsorParticipants" });
           else if (nextView === "analytics") setSponsorView({ type: "programAnalytics" });
+          else if (nextView === "marketplace") setSponsorView({ type: "marketplace" });
           else if (nextView === "activity") setSponsorView({ type: "sponsorActivity" });
           else if (nextView === "profile") setSponsorView({ type: "sponsorProfile" });
           else setSponsorView({ type: "pilotDashboard" });
@@ -1557,6 +1569,7 @@ onDiagnosticsClick={isSuperAdmin ? () => setIsDiagnosticsOpen(true) : undefined}
           onReadinessReportsClick={() => setView({ type: "readinessReports" })}
           onSystemSecurityPlanClick={() => setView({ type: "systemSecurityPlan" })}
           onPoamClick={() => setView({ type: "poam" })}
+          onMarketplaceClick={() => setView({ type: "marketplace" })}
           onResponsibilityMatrixClick={() => setView({ type: "responsibilityMatrix" })}
           onTrainingClick={() => setView({ type: "training" })}
           onNewsUpdatesClick={() => setView({ type: "newsUpdates" })}
