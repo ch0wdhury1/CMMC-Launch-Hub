@@ -65,6 +65,22 @@ export type MarketplaceReviewInput = {
   comment: string;
 };
 
+export type MarketplaceEngagement = {
+  id?: string;
+  vendorId: string;
+  vendorName: string;
+  vendorCategory?: string;
+  vendorSubcategories?: string[];
+  vendorCyberAbRoles?: string[];
+  engagementType: "CONSULTING" | "SOFTWARE" | "HARDWARE" | "TRAINING" | "ASSESSMENT" | "OTHER" | string;
+  status: "evaluating" | "active" | "completed" | "paused" | "cancelled" | string;
+  startDate?: string;
+  endDate?: string;
+  serviceDescription?: string;
+  createdAt?: any;
+  updatedAt?: any;
+};
+
 const apiBase = () => String(import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
 const isLocalDevHost = () => {
   if (typeof window === "undefined") return false;
@@ -133,4 +149,17 @@ export async function moderateMarketplaceReview(reviewId: string, status: "appro
     body: JSON.stringify({ reviewId, status }),
   });
   return payload.review;
+}
+
+export async function loadMarketplaceEngagements(): Promise<MarketplaceEngagement[]> {
+  const payload = await request("/api/marketplace/engagements");
+  return payload.engagements || [];
+}
+
+export async function saveMarketplaceEngagement(engagement: Partial<MarketplaceEngagement> & { vendorId: string }): Promise<MarketplaceEngagement> {
+  const payload = await request("/api/marketplace/engagement", {
+    method: "POST",
+    body: JSON.stringify(engagement),
+  });
+  return payload.engagement;
 }

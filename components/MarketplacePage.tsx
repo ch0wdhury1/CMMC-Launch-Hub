@@ -3,12 +3,15 @@ import { Briefcase, ExternalLink, MapPin, Search, Star, Store } from "lucide-rea
 import {
   loadAdminMarketplaceReviews,
   loadAdminMarketplaceVendors,
+  loadMarketplaceEngagements,
   loadMarketplaceReviews,
   loadMarketplaceVendors,
   MARKETPLACE_CATEGORIES,
   moderateMarketplaceReview,
   saveMarketplaceVendor,
+  saveMarketplaceEngagement,
   submitMarketplaceReview,
+  type MarketplaceEngagement,
   type MarketplaceReview,
   type MarketplaceReviewInput,
   type MarketplaceVendor,
@@ -57,9 +60,11 @@ const formatDate = (value: any) => {
 export const MarketplacePage: React.FC<Props> = ({ isSuperAdmin = false, canSubmitReviews = false }) => {
   const [vendors, setVendors] = useState<MarketplaceVendor[]>([]);
   const [adminReviews, setAdminReviews] = useState<MarketplaceReview[]>([]);
+  const [engagements, setEngagements] = useState<MarketplaceEngagement[]>([]);
   const [selectedVendor, setSelectedVendor] = useState<MarketplaceVendor | null>(null);
   const [editingVendor, setEditingVendor] = useState<MarketplaceVendor | null>(null);
   const [reviewingVendor, setReviewingVendor] = useState<MarketplaceVendor | null>(null);
+  const [engagingVendor, setEngagingVendor] = useState<MarketplaceVendor | null>(null);
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("");
   const [role, setRole] = useState("");
@@ -79,6 +84,7 @@ export const MarketplacePage: React.FC<Props> = ({ isSuperAdmin = false, canSubm
       const nextVendors = isSuperAdmin ? await loadAdminMarketplaceVendors() : await loadMarketplaceVendors();
       setVendors(nextVendors);
       if (isSuperAdmin) setAdminReviews(await loadAdminMarketplaceReviews());
+      if (canSubmitReviews) setEngagements(await loadMarketplaceEngagements());
     } catch (loadError) {
       console.error("[marketplace] load failed", loadError);
       setError(loadError instanceof Error ? loadError.message : "Marketplace is unavailable.");
@@ -89,7 +95,7 @@ export const MarketplacePage: React.FC<Props> = ({ isSuperAdmin = false, canSubm
 
   useEffect(() => {
     reload();
-  }, [isSuperAdmin]);
+  }, [isSuperAdmin, canSubmitReviews]);
 
   const roleOptions = useMemo(() => Array.from(new Set(vendors.flatMap(vendor => vendor.cyberAbRoles || []))).sort(), [vendors]);
   const stateOptions = useMemo(() => Array.from(new Set(vendors.map(vendor => vendor.state || "").filter(Boolean))).sort(), [vendors]);
@@ -117,6 +123,8 @@ export const MarketplacePage: React.FC<Props> = ({ isSuperAdmin = false, canSubm
       return true;
     });
   }, [category, featuredOnly, isSuperAdmin, programFilter, remoteOnly, role, search, stateFilter, vendors]);
+
+  const engagementByVendor = useMemo(() => new Map(engagements.map(engagement => [engagement.vendorId, engagement])), [engagements]);
 
   const updateEdit = (field: keyof MarketplaceVendor, value: any) => {
     setEditingVendor(current => current ? ({ ...current, [field]: value }) : current);
@@ -233,6 +241,7 @@ export const MarketplacePage: React.FC<Props> = ({ isSuperAdmin = false, canSubm
               <div className="mt-4 flex gap-2">
                 <button type="button" onClick={() => setSelectedVendor(vendor)} className="rounded border border-blue-200 px-3 py-1.5 text-sm font-semibold text-blue-700 hover:bg-blue-50">View Details</button>
                 {canSubmitReviews && vendor.status === "active" ? <button type="button" onClick={() => setReviewingVendor(vendor)} className="rounded border border-amber-200 px-3 py-1.5 text-sm font-semibold text-amber-700 hover:bg-amber-50">Submit Review</button> : null}
+                {canSubmitReviews && vendor.status === "active" ? <button type="button" onClick={() => setEngagingVendor(vendor)} className="rounded border border-emerald-200 px-3 py-1.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-50">{vendor.id && engagementByVendor.has(vendor.id) ? "Manage Engagement" : "Working With This Vendor"}</button> : null}
                 {isSuperAdmin ? <button type="button" onClick={() => setEditingVendor({ ...vendor })} className="rounded border px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-50">Edit</button> : null}
               </div>
             </article>
@@ -244,10 +253,19 @@ export const MarketplacePage: React.FC<Props> = ({ isSuperAdmin = false, canSubm
       {selectedVendor ? (
         <VendorDetail
           vendor={selectedVendor}
+          engagement={selectedVendor.id ? engagementByVendor.get(selectedVendor.id) : undefined}
           canSubmitReview={canSubmitReviews && selectedVendor.status === "active"}
           onSubmitReview={() => setReviewingVendor(selectedVendor)}
+          onManageEngagement={() => setEngagingVendor(selectedVendor)}
           onClose={() => setSelectedVendor(null)}
         />
+      ) : null}
+
+      {canSubmitReviews ? (
+        <MyVendorEngagements engagements={engagements} onManage={(engagement) => {
+          const vendor = vendors.find(item => item.id === engagement.vendorId);
+          if (vendor) setEngagingVendor(vendor);
+        }} />
       ) : null}
 
       {isSuperAdmin ? (
@@ -284,6 +302,20 @@ export const MarketplacePage: React.FC<Props> = ({ isSuperAdmin = false, canSubm
         />
       ) : null}
 
+      {engagingVendor ? (
+        <EngagementForm
+          vendor={engagingVendor}
+          engagement={engagingVendor.id ? engagementByVendor.get(engagingVendor.id) : undefined}
+          onCancel={() => setEngagingVendor(null)}
+          onSaved={async () => {
+            setEngagingVendor(null);
+            setMessage("Vendor engagement saved.");
+            await reload();
+          }}
+          onError={setError}
+        />
+      ) : null}
+
       {editingVendor ? (
         <VendorEditor
           vendor={editingVendor}
@@ -305,7 +337,7 @@ const DetailRow = ({ label, value }: { label: string; value: React.ReactNode }) 
   </div>
 );
 
-const VendorDetail = ({ vendor, canSubmitReview, onSubmitReview, onClose }: { vendor: MarketplaceVendor; canSubmitReview: boolean; onSubmitReview: () => void; onClose: () => void }) => {
+const VendorDetail = ({ vendor, engagement, canSubmitReview, onSubmitReview, onManageEngagement, onClose }: { vendor: MarketplaceVendor; engagement?: MarketplaceEngagement; canSubmitReview: boolean; onSubmitReview: () => void; onManageEngagement: () => void; onClose: () => void }) => {
   const [reviews, setReviews] = useState<MarketplaceReview[]>([]);
   const [loadingReviews, setLoadingReviews] = useState(true);
 
@@ -338,9 +370,15 @@ const VendorDetail = ({ vendor, canSubmitReview, onSubmitReview, onClose }: { ve
           </div>
           <div className="flex gap-2">
             {canSubmitReview ? <button type="button" onClick={onSubmitReview} className="rounded border border-amber-200 px-3 py-1 text-sm font-semibold text-amber-700 hover:bg-amber-50">Submit Review</button> : null}
+            {canSubmitReview ? <button type="button" onClick={onManageEngagement} className="rounded border border-emerald-200 px-3 py-1 text-sm font-semibold text-emerald-700 hover:bg-emerald-50">{engagement ? "Manage Engagement" : "Working With This Vendor"}</button> : null}
             <button type="button" onClick={onClose} className="rounded border px-3 py-1 text-sm font-semibold text-gray-700 hover:bg-gray-50">Close</button>
           </div>
         </div>
+        {engagement ? (
+          <div className="border-b bg-emerald-50 px-5 py-3 text-sm font-semibold text-emerald-800">
+            Used by your organization: {engagement.status}{engagement.status === "active" ? " active engagement" : ""}
+          </div>
+        ) : null}
         <div className="grid gap-5 p-5 md:grid-cols-2">
           <DetailRow label="Description" value={<p>{vendor.description}</p>} />
           <DetailRow label="Primary Category" value={vendor.primaryCategory} />
@@ -467,6 +505,93 @@ const MarketplaceReviewModeration = ({ reviews, onModerate, busy }: { reviews: M
     </div>
   </section>
 );
+
+const MyVendorEngagements = ({ engagements, onManage }: { engagements: MarketplaceEngagement[]; onManage: (engagement: MarketplaceEngagement) => void }) => (
+  <section className="rounded-lg border bg-white shadow-sm">
+    <div className="border-b p-4">
+      <h2 className="text-lg font-bold text-gray-900">My Vendor Engagements</h2>
+      <p className="mt-1 text-sm text-gray-600">Track vendors your organization is evaluating, using, or has completed work with.</p>
+    </div>
+    <div className="overflow-auto">
+      <table className="min-w-full text-left text-sm">
+        <thead className="bg-gray-50 text-xs uppercase text-gray-500">
+          <tr><th className="p-3">Vendor Name</th><th className="p-3">Engagement Type</th><th className="p-3">Status</th><th className="p-3">Start Date</th><th className="p-3">End Date</th><th className="p-3">Last Updated</th><th className="p-3">Manage</th></tr>
+        </thead>
+        <tbody>
+          {engagements.map(engagement => (
+            <tr key={engagement.id || engagement.vendorId} className="border-t">
+              <td className="p-3 font-semibold text-gray-900">{engagement.vendorName}</td>
+              <td className="p-3">{engagement.engagementType}</td>
+              <td className="p-3">{engagement.status}</td>
+              <td className="p-3">{engagement.startDate || "Not provided"}</td>
+              <td className="p-3">{engagement.endDate || "Not provided"}</td>
+              <td className="p-3">{formatDate(engagement.updatedAt)}</td>
+              <td className="p-3"><button type="button" onClick={() => onManage(engagement)} className="rounded border px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50">Manage</button></td>
+            </tr>
+          ))}
+          {!engagements.length ? <tr><td colSpan={7} className="p-5 text-sm text-gray-500">No vendor engagements yet.</td></tr> : null}
+        </tbody>
+      </table>
+    </div>
+  </section>
+);
+
+const EngagementForm = ({ vendor, engagement, onCancel, onSaved, onError }: { vendor: MarketplaceVendor; engagement?: MarketplaceEngagement; onCancel: () => void; onSaved: () => void; onError: (message: string) => void }) => {
+  const [draft, setDraft] = useState<Partial<MarketplaceEngagement>>({
+    vendorId: vendor.id || "",
+    engagementType: engagement?.engagementType || (vendor.primaryCategory as string) || "OTHER",
+    status: engagement?.status || "evaluating",
+    startDate: engagement?.startDate || "",
+    endDate: engagement?.endDate || "",
+    serviceDescription: engagement?.serviceDescription || "",
+  });
+  const [saving, setSaving] = useState(false);
+  const submit = async () => {
+    if (!vendor.id) return;
+    setSaving(true);
+    try {
+      await saveMarketplaceEngagement({ ...draft, vendorId: vendor.id });
+      onSaved();
+    } catch (error) {
+      onError(error instanceof Error ? error.message : "Unable to save engagement.");
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
+      <section className="w-full max-w-2xl rounded-lg bg-white shadow-xl">
+        <div className="border-b p-5">
+          <p className="text-xs font-semibold uppercase text-emerald-700">Organization vendor tracking</p>
+          <h2 className="text-2xl font-bold text-gray-900">{engagement ? "Manage Engagement" : "Working With This Vendor"}</h2>
+          <p className="mt-1 text-sm text-gray-600">{vendor.companyName}</p>
+        </div>
+        <div className="grid gap-4 p-5 md:grid-cols-2">
+          <Field label="Engagement Type">
+            <select value={draft.engagementType || "OTHER"} onChange={event => setDraft(current => ({ ...current, engagementType: event.target.value }))} className="w-full rounded border px-3 py-2 text-sm">
+              {["CONSULTING", "SOFTWARE", "HARDWARE", "TRAINING", "ASSESSMENT", "OTHER"].map(item => <option key={item} value={item}>{item}</option>)}
+            </select>
+          </Field>
+          <Field label="Status">
+            <select value={draft.status || "evaluating"} onChange={event => setDraft(current => ({ ...current, status: event.target.value }))} className="w-full rounded border px-3 py-2 text-sm">
+              {["evaluating", "active", "completed", "paused", "cancelled"].map(item => <option key={item} value={item}>{item}</option>)}
+            </select>
+          </Field>
+          <Field label="Start Date"><input type="date" value={draft.startDate || ""} onChange={event => setDraft(current => ({ ...current, startDate: event.target.value }))} className="w-full rounded border px-3 py-2 text-sm" /></Field>
+          <Field label="End Date"><input type="date" value={draft.endDate || ""} onChange={event => setDraft(current => ({ ...current, endDate: event.target.value }))} className="w-full rounded border px-3 py-2 text-sm" /></Field>
+          <label className="md:col-span-2">
+            <span className="text-xs font-semibold uppercase text-gray-500">Service Description</span>
+            <textarea value={draft.serviceDescription || ""} onChange={event => setDraft(current => ({ ...current, serviceDescription: event.target.value }))} className="mt-1 h-24 w-full rounded border px-3 py-2 text-sm" />
+          </label>
+        </div>
+        <div className="flex justify-end gap-2 border-t p-5">
+          <button type="button" onClick={onCancel} className="rounded border px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">Cancel</button>
+          <button type="button" onClick={submit} disabled={saving} className="rounded bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-50">Save Engagement</button>
+        </div>
+      </section>
+    </div>
+  );
+};
 
 type EditorProps = {
   vendor: MarketplaceVendor;

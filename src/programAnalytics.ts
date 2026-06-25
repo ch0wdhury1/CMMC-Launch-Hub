@@ -66,6 +66,12 @@ export type ProgramAnalyticsData = {
     averageReadinessPercent: number;
     l1Organizations: number;
     l2Organizations: number;
+    organizationsUsingVendors?: number;
+    totalVendorEngagements?: number;
+    activeVendorEngagements?: number;
+    softwareVendorsUsed?: number;
+    consultingProvidersUsed?: number;
+    trainingProvidersUsed?: number;
   };
   organizations: ProgramAnalyticsOrg[];
   recentActivity: ProgramAnalyticsActivity[];
@@ -73,6 +79,13 @@ export type ProgramAnalyticsData = {
     completionDistribution: Array<{ label: string; count: number }>;
     tierSplit: { l1: number; l2: number };
     reportsSummary: { ssp: number; poam: number; other: number };
+    topMarketplaceVendors?: Array<{
+      vendorId: string;
+      vendorName: string;
+      vendorCategory: string;
+      organizationsUsing: number;
+      activeEngagements: number;
+    }>;
   };
 };
 

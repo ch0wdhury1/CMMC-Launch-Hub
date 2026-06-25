@@ -146,6 +146,34 @@ export const SponsorParticipantDetailPage: React.FC<Props> = ({ orgId, onBack })
       </section>
 
       <section className="rounded-lg border bg-white shadow-sm">
+        <div className="border-b p-4">
+          <h2 className="text-lg font-bold text-gray-900">Marketplace Engagements</h2>
+          <p className="mt-1 text-sm text-gray-600">Sanitized vendor ecosystem summary. Pricing, contracts, private notes, files, and messages are not shown.</p>
+        </div>
+        <div className="overflow-auto">
+          <table className="min-w-full text-left text-sm">
+            <thead className="bg-gray-50 text-xs uppercase text-gray-500">
+              <tr><th className="p-3">Vendor Name</th><th className="p-3">Category</th><th className="p-3">Engagement Type</th><th className="p-3">Status</th><th className="p-3">Start Date</th><th className="p-3">End Date</th><th className="p-3">Participant Summary</th></tr>
+            </thead>
+            <tbody>
+              {(organization.marketplaceEngagements || []).map(engagement => (
+                <tr key={engagement.id || engagement.vendorId} className="border-t">
+                  <td className="p-3 font-semibold text-gray-900">{engagement.vendorName}</td>
+                  <td className="p-3">{engagement.vendorCategory || "Not provided"}</td>
+                  <td className="p-3">{engagement.engagementType}</td>
+                  <td className="p-3">{engagement.status}</td>
+                  <td className="p-3">{engagement.startDate || "Not provided"}</td>
+                  <td className="p-3">{engagement.endDate || "Not provided"}</td>
+                  <td className="p-3">{engagement.serviceDescription || "Not provided"}</td>
+                </tr>
+              ))}
+              {!(organization.marketplaceEngagements || []).length ? <tr><td colSpan={7} className="p-5 text-sm text-gray-500">No marketplace engagements recorded.</td></tr> : null}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="rounded-lg border bg-white shadow-sm">
         <div className="border-b p-4"><h2 className="text-lg font-bold text-gray-900">Recent Activity</h2></div>
         <div className="overflow-auto">
           <table className="min-w-full text-left text-sm">
@@ -177,4 +205,3 @@ export const SponsorParticipantDetailPage: React.FC<Props> = ({ orgId, onBack })
     </div>
   );
 };
-

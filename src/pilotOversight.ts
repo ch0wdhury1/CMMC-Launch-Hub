@@ -45,6 +45,17 @@ export type PilotOrgSummary = {
   primaryUserId?: string;
   overallReadinessPercent: number;
   domainReadiness: DomainReadinessSummary[];
+  marketplaceEngagements?: Array<{
+    id?: string;
+    vendorId: string;
+    vendorName: string;
+    vendorCategory?: string;
+    engagementType: string;
+    status: string;
+    startDate?: string;
+    endDate?: string;
+    serviceDescription?: string;
+  }>;
 };
 
 export type PilotOversightData = {

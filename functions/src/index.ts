@@ -2422,6 +2422,7 @@ app.get("/api/pilot/oversight", requireAuth, async (req: any, res) => {
       const assessment = await programAssessmentSummary(org.id, assessmentId);
       const orgReports = reportsByOrg.get(org.id) || [];
       const orgActivity = activityByOrg.get(org.id) || [];
+      const marketplaceEngagements = await loadOrgMarketplaceEngagements(org.id);
       const evidenceCount = Number(org.evidenceCount ?? org.readiness?.evidenceCount ?? evidenceEvents.filter((event: any) => event.orgId === org.id).length);
       return {
         id: org.id,
@@ -2451,6 +2452,7 @@ app.get("/api/pilot/oversight", requireAuth, async (req: any, res) => {
         primaryUserId: String(org.ownerUid || org.primaryUserId || ""),
         overallReadinessPercent: assessment.completionPercent,
         domainReadiness: assessment.domainReadiness,
+        marketplaceEngagements,
       };
     }));
 
@@ -2628,6 +2630,7 @@ const programAnalyticsHandler = async (req: any, res: any) => {
       const assessment = await programAssessmentSummary(org.id, assessmentId);
       const orgReports = reportsByOrg.get(org.id) || [];
       const orgActivity = activityByOrg.get(org.id) || [];
+      const marketplaceEngagements = await loadOrgMarketplaceEngagements(org.id);
       const evidenceCount = Number(org.evidenceCount ?? org.readiness?.evidenceCount ?? evidenceEvents.filter((event: any) => event.orgId === org.id).length);
       const sspGenerated = orgReports.some((event: any) => /ssp|system security plan/i.test(event.targetLabel || event.summary || ""));
       const poamGenerated = orgReports.some((event: any) => /poa&m|poam/i.test(event.targetLabel || event.summary || ""));
@@ -2659,6 +2662,7 @@ const programAnalyticsHandler = async (req: any, res: any) => {
         practicesRemaining: assessment.practicesRemaining,
         lastActivity,
         attentionFlag,
+        marketplaceEngagements,
       };
     }));
 
@@ -2686,6 +2690,33 @@ const programAnalyticsHandler = async (req: any, res: any) => {
       poam: organizations.filter(org => org.poamGenerated).length,
       other: organizations.reduce((sum, org) => sum + Math.max(0, org.reportsGenerated - Number(org.sspGenerated) - Number(org.poamGenerated)), 0),
     };
+    const allEngagements = organizations.flatMap((org: any) => (org.marketplaceEngagements || []).map((engagement: any) => ({...engagement, orgId: org.id})));
+    const activeEngagements = allEngagements.filter((engagement: any) => String(engagement.status || "").toLowerCase() === "active");
+    const topVendorMap = new Map<string, any>();
+    allEngagements.forEach((engagement: any) => {
+      const key = String(engagement.vendorId || engagement.vendorName || "");
+      if (!key) return;
+      const current = topVendorMap.get(key) || {
+        vendorId: engagement.vendorId,
+        vendorName: engagement.vendorName,
+        vendorCategory: engagement.vendorCategory,
+        orgIds: new Set<string>(),
+        activeEngagements: 0,
+      };
+      current.orgIds.add(engagement.orgId);
+      if (String(engagement.status || "").toLowerCase() === "active") current.activeEngagements += 1;
+      topVendorMap.set(key, current);
+    });
+    const topMarketplaceVendors = Array.from(topVendorMap.values())
+      .map(item => ({
+        vendorId: item.vendorId,
+        vendorName: item.vendorName,
+        vendorCategory: item.vendorCategory,
+        organizationsUsing: item.orgIds.size,
+        activeEngagements: item.activeEngagements,
+      }))
+      .sort((a, b) => b.organizationsUsing - a.organizationsUsing || b.activeEngagements - a.activeEngagements)
+      .slice(0, 10);
     return res.json({success: true, data: {
       programs: visiblePrograms,
       selectedProgram,
@@ -2706,6 +2737,12 @@ const programAnalyticsHandler = async (req: any, res: any) => {
         averageReadinessPercent: averageCompletionPercent,
         l1Organizations: organizations.filter(org => String(org.tier).toUpperCase() !== "COMM_L2").length,
         l2Organizations: organizations.filter(org => String(org.tier).toUpperCase() === "COMM_L2").length,
+        organizationsUsingVendors: new Set(allEngagements.map((engagement: any) => engagement.orgId)).size,
+        totalVendorEngagements: allEngagements.length,
+        activeVendorEngagements: activeEngagements.length,
+        softwareVendorsUsed: new Set(allEngagements.filter((engagement: any) => engagement.vendorCategory === "SOFTWARE").map((engagement: any) => engagement.vendorId || engagement.vendorName)).size,
+        consultingProvidersUsed: new Set(allEngagements.filter((engagement: any) => engagement.vendorCategory === "CONSULTING").map((engagement: any) => engagement.vendorId || engagement.vendorName)).size,
+        trainingProvidersUsed: new Set(allEngagements.filter((engagement: any) => engagement.vendorCategory === "TRAINING").map((engagement: any) => engagement.vendorId || engagement.vendorName)).size,
       },
       organizations: organizations.sort((a, b) => a.companyName.localeCompare(b.companyName)),
       recentActivity,
@@ -2718,6 +2755,7 @@ const programAnalyticsHandler = async (req: any, res: any) => {
         ],
         tierSplit: {l1: organizations.filter(org => String(org.tier).toUpperCase() !== "COMM_L2").length, l2: organizations.filter(org => String(org.tier).toUpperCase() === "COMM_L2").length},
         reportsSummary,
+        topMarketplaceVendors,
       },
     }});
   } catch (error) {
@@ -2804,6 +2842,32 @@ function sanitizeMarketplaceReview(docSnap: FirebaseFirestore.QueryDocumentSnaps
     base.moderatedBy = String(data.moderatedBy || "");
   }
   return base;
+}
+
+function sanitizeMarketplaceEngagement(docSnap: FirebaseFirestore.QueryDocumentSnapshot | FirebaseFirestore.DocumentSnapshot) {
+  const data = docSnap.data() || {};
+  return {
+    id: docSnap.id,
+    vendorId: String(data.vendorId || ""),
+    vendorName: String(data.vendorName || ""),
+    vendorCategory: String(data.vendorCategory || ""),
+    vendorSubcategories: cleanMarketplaceList(data.vendorSubcategories),
+    vendorCyberAbRoles: cleanMarketplaceList(data.vendorCyberAbRoles),
+    engagementType: String(data.engagementType || "OTHER"),
+    status: String(data.status || "evaluating"),
+    startDate: String(data.startDate || ""),
+    endDate: String(data.endDate || ""),
+    serviceDescription: String(data.serviceDescription || "").slice(0, 240),
+    updatedAt: data.updatedAt || null,
+    createdAt: data.createdAt || null,
+  };
+}
+
+async function loadOrgMarketplaceEngagements(orgId: string) {
+  if (!orgId || !isSafePathSegment(orgId)) return [];
+  const snapshot = await db.collection(`orgs/${orgId}/vendorEngagements`).limit(100).get();
+  return snapshot.docs.map(sanitizeMarketplaceEngagement)
+    .sort((a, b) => String(a.vendorName).localeCompare(String(b.vendorName)));
 }
 
 async function marketplaceReviewStats(vendorIds: string[]) {
@@ -2903,7 +2967,7 @@ const listAdminMarketplaceVendors = async (req: any, res: any) => {
   }
 };
 
-async function requireMarketplaceReviewer(uid: string) {
+async function requireMarketplaceReviewer(uid: string, requireOperationalRole = false) {
   const userSnap = await db.doc(`users/${uid}`).get();
   const user = userSnap.data() || {};
   const roles = user.roles || {};
@@ -2913,6 +2977,10 @@ async function requireMarketplaceReviewer(uid: string) {
   }
   if (roles.pilotObserver === true || roles.programObserver === true || roles.superAdmin === true) {
     return {allowed: false, errorMessage: "Sponsor Observers and SuperAdmins do not submit marketplace reviews", user, org: null, orgId};
+  }
+  const orgRole = String(roles.orgRole || user.orgRole || "");
+  if (requireOperationalRole && !["orgOwner", "orgAdmin", "contributor", "assessor"].includes(orgRole)) {
+    return {allowed: false, errorMessage: "Organization role cannot manage marketplace vendor records", user, org: null, orgId};
   }
   const orgSnap = await db.doc(`orgs/${orgId}`).get();
   if (!orgSnap.exists || String(orgSnap.data()?.status || "active").toLowerCase() !== "active") {
@@ -3051,6 +3119,60 @@ const moderateMarketplaceReview = async (req: any, res: any) => {
   }
 };
 
+const ENGAGEMENT_TYPES = new Set(["CONSULTING", "SOFTWARE", "HARDWARE", "TRAINING", "ASSESSMENT", "OTHER"]);
+const ENGAGEMENT_STATUSES = new Set(["evaluating", "active", "completed", "paused", "cancelled"]);
+
+const listMarketplaceEngagements = async (req: any, res: any) => {
+  try {
+    const reviewer = await requireMarketplaceReviewer(req.user.uid, true);
+    if (!reviewer.allowed) return res.status(403).json({success: false, errorMessage: reviewer.errorMessage});
+    const engagements = await loadOrgMarketplaceEngagements(reviewer.orgId);
+    return res.json({success: true, engagements});
+  } catch (error) {
+    console.error("Marketplace engagements load failed", error);
+    return res.status(500).json({success: false, errorMessage: "Unable to load vendor engagements"});
+  }
+};
+
+const saveMarketplaceEngagement = async (req: any, res: any) => {
+  try {
+    const reviewer = await requireMarketplaceReviewer(req.user.uid, true);
+    if (!reviewer.allowed) return res.status(403).json({success: false, errorMessage: reviewer.errorMessage});
+    const vendorId = String(req.body?.vendorId || "").trim();
+    if (!vendorId || !isSafePathSegment(vendorId)) throw new Error("Valid vendor id is required");
+    const vendorSnap = await db.doc(`marketplaceVendors/${vendorId}`).get();
+    if (!vendorSnap.exists || String(vendorSnap.data()?.status || "").toLowerCase() !== "active") throw new Error("Active vendor not found");
+    const vendor = sanitizeMarketplaceVendor(vendorSnap);
+    const engagementType = String(req.body?.engagementType || vendor.primaryCategory || "OTHER").trim().toUpperCase();
+    const status = String(req.body?.status || "evaluating").trim().toLowerCase();
+    if (!ENGAGEMENT_TYPES.has(engagementType)) throw new Error("Select a valid engagement type");
+    if (!ENGAGEMENT_STATUSES.has(status)) throw new Error("Select a valid engagement status");
+    const now = admin.firestore.FieldValue.serverTimestamp();
+    const ref = db.doc(`orgs/${reviewer.orgId}/vendorEngagements/${vendorId}`);
+    const existingSnap = await ref.get();
+    await ref.set({
+      vendorId,
+      vendorName: vendor.companyName,
+      vendorCategory: vendor.primaryCategory,
+      vendorSubcategories: vendor.subcategories || [],
+      vendorCyberAbRoles: vendor.cyberAbRoles || [],
+      engagementType,
+      status,
+      startDate: String(req.body?.startDate || "").trim().slice(0, 20),
+      endDate: String(req.body?.endDate || "").trim().slice(0, 20),
+      serviceDescription: String(req.body?.serviceDescription || "").trim().slice(0, 500),
+      ...(existingSnap.exists ? {} : {createdAt: now, createdBy: req.user.uid}),
+      updatedAt: now,
+      updatedBy: req.user.uid,
+    }, {merge: true});
+    const savedSnap = await ref.get();
+    return res.json({success: true, engagement: sanitizeMarketplaceEngagement(savedSnap)});
+  } catch (error) {
+    console.error("Marketplace engagement save failed", error);
+    return res.status(400).json({success: false, errorMessage: error instanceof Error ? error.message : "Unable to save vendor engagement"});
+  }
+};
+
 const saveMarketplaceVendor = async (req: any, res: any) => {
   try {
     if (!(await isSuperAdminUser(req.user.uid))) {
@@ -3100,6 +3222,12 @@ app.get("/api/api/admin/marketplace/reviews", requireAuth, listAdminMarketplaceR
 app.post("/api/admin/marketplace/review/moderate", requireAuth, moderateMarketplaceReview);
 app.post("/admin/marketplace/review/moderate", requireAuth, moderateMarketplaceReview);
 app.post("/api/api/admin/marketplace/review/moderate", requireAuth, moderateMarketplaceReview);
+app.get("/api/marketplace/engagements", requireAuth, listMarketplaceEngagements);
+app.get("/marketplace/engagements", requireAuth, listMarketplaceEngagements);
+app.get("/api/api/marketplace/engagements", requireAuth, listMarketplaceEngagements);
+app.post("/api/marketplace/engagement", requireAuth, saveMarketplaceEngagement);
+app.post("/marketplace/engagement", requireAuth, saveMarketplaceEngagement);
+app.post("/api/api/marketplace/engagement", requireAuth, saveMarketplaceEngagement);
 
 app.post("/api/admin/sponsor-observer", requireAuth, async (req: any, res) => {
   try {

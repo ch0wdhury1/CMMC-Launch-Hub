@@ -611,13 +611,6 @@ useEffect(() => {
               {!access.reporting.poam && <Lock className="h-3 w-3 ml-auto text-gray-400" />}
             </button>
 
-            <button
-              className={navClass(activeViewInfo?.type === "marketplace")}
-              onClick={onMarketplaceClick}
-            >
-              <Store className="ml-7 mr-2 h-4 w-4 text-gray-300" />
-              <span>Marketplace</span>
-            </button>
           </div>
         )}
       </div>
@@ -625,6 +618,14 @@ useEffect(() => {
       {/* Current Tier footer */}
       <div className="border-t border-gray-700 px-3 py-3 text-xs text-gray-300">
         <div className="mb-3 grid grid-cols-1 gap-1.5">
+          <button
+            type="button"
+            onClick={onMarketplaceClick}
+            className={`flex items-center rounded px-2 py-1.5 text-left hover:bg-gray-700/60 ${activeViewInfo?.type === "marketplace" ? "bg-blue-600/20 text-white ring-1 ring-blue-500/40" : "text-gray-200"}`}
+          >
+            <Store className="mr-2 h-3.5 w-3.5 text-blue-300" />
+            Marketplace
+          </button>
           <button
             type="button"
             onClick={onQuickStartGuideClick}

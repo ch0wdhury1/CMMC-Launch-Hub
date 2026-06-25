@@ -235,6 +235,12 @@ export const ProgramAnalyticsPage: React.FC<Props> = ({ isSuperAdmin = false }) 
         <KpiCard label="POA&M Generated" value={data.summary.poamGeneratedCount} icon={FileText} />
         <KpiCard label="Open POA&M Items" value={data.summary.openPoamItems} icon={FileText} />
         <KpiCard label="Last Activity" value={formatDate(data.summary.lastActivityDate)} icon={CalendarClock} />
+        <KpiCard label="Organizations Using Vendors" value={data.summary.organizationsUsingVendors || 0} icon={ShieldCheck} />
+        <KpiCard label="Total Vendor Engagements" value={data.summary.totalVendorEngagements || 0} icon={FileText} />
+        <KpiCard label="Active Vendor Engagements" value={data.summary.activeVendorEngagements || 0} icon={FileText} />
+        <KpiCard label="Software Vendors Used" value={data.summary.softwareVendorsUsed || 0} icon={FileText} />
+        <KpiCard label="Consulting Providers Used" value={data.summary.consultingProvidersUsed || 0} icon={FileText} />
+        <KpiCard label="Training Providers Used" value={data.summary.trainingProvidersUsed || 0} icon={FileText} />
       </section>
 
       <section className="grid gap-4 xl:grid-cols-3">
@@ -267,6 +273,30 @@ export const ProgramAnalyticsPage: React.FC<Props> = ({ isSuperAdmin = false }) 
             <div className="rounded border bg-gray-50 p-3"><div className="text-xs uppercase text-gray-500">SSP</div><strong>{data.charts.reportsSummary.ssp}</strong></div>
             <div className="rounded border bg-gray-50 p-3"><div className="text-xs uppercase text-gray-500">POA&M</div><strong>{data.charts.reportsSummary.poam}</strong></div>
           </div>
+        </div>
+      </section>
+
+      <section className="rounded-lg border bg-white shadow-sm">
+        <div className="border-b p-4">
+          <h2 className="text-lg font-bold text-gray-900">Top Marketplace Vendors Used</h2>
+        </div>
+        <div className="overflow-auto">
+          <table className="min-w-full text-left text-sm">
+            <thead className="bg-gray-50 text-xs uppercase text-gray-500">
+              <tr><th className="p-3">Vendor</th><th className="p-3">Category</th><th className="p-3">Organizations Using</th><th className="p-3">Active Engagements</th></tr>
+            </thead>
+            <tbody>
+              {(data.charts.topMarketplaceVendors || []).map(vendor => (
+                <tr key={vendor.vendorId || vendor.vendorName} className="border-t">
+                  <td className="p-3 font-semibold text-gray-900">{vendor.vendorName}</td>
+                  <td className="p-3">{vendor.vendorCategory || "Not provided"}</td>
+                  <td className="p-3">{vendor.organizationsUsing}</td>
+                  <td className="p-3">{vendor.activeEngagements}</td>
+                </tr>
+              ))}
+              {!(data.charts.topMarketplaceVendors || []).length ? <tr><td colSpan={4} className="p-5 text-sm text-gray-500">No marketplace engagement data available for this program.</td></tr> : null}
+            </tbody>
+          </table>
         </div>
       </section>
 
